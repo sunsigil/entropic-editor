@@ -65,7 +65,7 @@ class SpriteBank:
 		SpriteBank.mapping[path] = editor_sprite;
 	
 	def update():
-		sprites = AssetManager.get_assets("sprite") + AssetManager.get_assets("tinysprite");
+		sprites = AssetManager.get_assets("sprite");
 
 		for sprite in sprites:
 

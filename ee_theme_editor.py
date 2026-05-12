@@ -72,11 +72,19 @@ class ThemeEditor:
 				if imgui.is_mouse_down(0):
 					idx = self.wall_cursor[1] * 15 + self.wall_cursor[0];
 					self.theme["wall_map"][idx] = self.wall_brush;
-				self.wall_canvas.draw_rect_old(self.wall_cursor[0] * 16, self.wall_cursor[1] * 16, 16, 16, (255, 0, 0));
+				self.wall_canvas.draw_aabb(
+					(self.wall_cursor[0] * 16, self.wall_cursor[1] * 16,
+					self.wall_cursor[0] * 16 + 16, self.wall_cursor[1] * 16 + 16)
+					(255, 0, 0)
+				);
 			
 			window_rect = self.theme['window_rect']
 			if len(window_rect) == 4:
-				self.wall_canvas.draw_rect_old(window_rect[0], window_rect[1], window_rect[2], window_rect[3], (0, 0, 255));
+				self.wall_canvas.draw_aabb(
+					(window_rect[0], window_rect[1],
+					window_rect[0]+window_rect[2], window_rect[1]+window_rect[3]),
+					(0, 0, 255)
+				);
 
 			self.wall_canvas.render();
 
@@ -100,7 +108,11 @@ class ThemeEditor:
 
 			window_rect = self.theme['window_rect']
 			if len(window_rect) == 4:
-				self.wall_canvas.draw_rect_old(window_rect[0], window_rect[1], window_rect[2], window_rect[3], (0, 0, 255));
+				self.wall_canvas.draw_aabb(
+					(window_rect[0], window_rect[1],
+					window_rect[0]+window_rect[2], window_rect[1]+window_rect[3]),
+					(0, 0, 255)
+				);
 			
 			self.wall_canvas.render();
 		
@@ -134,7 +146,11 @@ class ThemeEditor:
 				if imgui.is_mouse_down(0):
 					idx = self.floor_cursor[1] * 15 + self.floor_cursor[0];
 					self.theme["floor_map"][idx] = self.floor_brush;
-				self.floor_canvas.draw_rect_old(self.floor_cursor[0] * 16, self.floor_cursor[1] * 16, 16, 16, (255, 0, 0));
+				self.floor_canvas.draw_aabb(
+					(self.floor_cursor[0] * 16, self.floor_cursor[1] * 16,
+	  				self.floor_cursor[0] * 16 + 16, self.floor_cursor[1] * 16 + 16),
+	  				(255, 0, 0)
+				);
 
 			self.floor_canvas.render();
 

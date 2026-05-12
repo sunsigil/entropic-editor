@@ -2,7 +2,14 @@ import OpenGL;
 OpenGL.FULL_LOGGING = True;
 from OpenGL.GL import *;
 from imgui_bundle import imgui;
-from ee_assets import AssetManager;
+import math;
+from enum import Enum;
+
+class Orientation(Enum):
+	EAST = 0
+	NORTH = 1
+	WEST = 2
+	SOUTH = 3
 
 def foldl(f, acc, xs):
 	if len(xs) == 0:
@@ -26,7 +33,7 @@ def make_texture(buffer, width, height):
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
 	return texture;
 
-def aabb_point_intersect(aabb, point):
+def aabb_contains_point(aabb, point):
 	x0, y0, x1, y1 = aabb;
 	x, y = point;
 	if x < x0 or x > x1:
@@ -47,17 +54,17 @@ def enforce_key(dict, key, default_value):
 def clamp(v, a, b):
 	return min(max(v, a), b);
 
-def aabb_contains(aabb_0, aabb_1):
+def aabb_contains_aabb(aabb_0, aabb_1):
 	x0, y0, x1, y1 = aabb_1;
 	a = x0, y0;
 	b = x1, y0;
 	c = x1, y1;
 	d = x0, y1;
 	return (
-		aabb_point_intersect(aabb_0, a) and
-		aabb_point_intersect(aabb_0, b) and
-		aabb_point_intersect(aabb_0, c) and
-		aabb_point_intersect(aabb_0, d)
+		aabb_contains_point(aabb_0, a) and
+		aabb_contains_point(aabb_0, b) and
+		aabb_contains_point(aabb_0, c) and
+		aabb_contains_point(aabb_0, d)
 	);
 
 def aabb_equals(a, b):
@@ -65,9 +72,6 @@ def aabb_equals(a, b):
 		if a[i] != b[i]:
 			return False;
 	return True;
-
-def value_with_effect(value, effect_expr):
-	return value;
 
 class EEID:
 	def __iter__(self):
@@ -79,40 +83,64 @@ class EEID:
 		self.eeid += 1;
 		return result;
 
-def imgui_selector(ident, candidates, value, name_f = lambda x: x):
-	if imgui.begin_combo(f"##{ident}", name_f(value)):
-		for candidate in candidates:
-			selected = candidate == value;
-			if imgui.selectable(name_f(candidate), selected)[0]:
-				value = candidate;
-			if selected:
-				imgui.set_item_default_focus();
-		imgui.end_combo();
-	return value;
+def aabb_point_dist(aabb, point):
+	sq_dist = 0;
+	for i in range(2):
+		v = point[i];
+		if v < aabb[i]:
+			sq_dist += (aabb[i] - v) * (aabb[i] - v);
+		if v > aabb[2+i]:
+			sq_dist += (v - aabb[2+i]) * (v - aabb[2+i]);
+	return math.sqrt(sq_dist);
 
-def imgui_asset_selector(ident, asset_type, asset):
-	return imgui_selector(
-		ident,
-		AssetManager.get_assets(asset_type), asset,
-		lambda x: x["name"] if x != None else "None"
-	);
+def cross2d(a, b):
+	return a[0]*b[1] - a[1]*b[0];
 
-def imgui_enum_selector(ident, enum_type, value):
-	return imgui_selector(
-		ident,
-		enum_type, value,
-		lambda x: x.name
-	);
+def is_left(a, b, c):
+	ab = (b[0]-a[0], b[1]-a[1]);
+	ac = (c[0]-a[0], c[1]-a[1]);
+	return cross2d(ab, ac) > 0;
 
-def imgui_aabb_xywh(ident, aabb):
+def aabb_closest_edge(aabb, point):
 	x0, y0, x1, y1 = aabb;
-	w, h = x1-x0, y1-y0;
-	x0, y0 = imgui.input_int2(f"X Y##{ident}", [int(x0), int(y0)])[1];
-	w, h = imgui.input_int2(f"W H##{ident}", [int(w), int(h)])[1];
-	return x0, y0, x0+w, y0+h;
+	x, y = point;
+	ne = is_left((x0, y0), (x1, y1), point);
+	nw = is_left((x0, y1), (x1, y0), point);
+	if ne and not nw:
+		return Orientation.WEST;
+	if ne and nw:
+		return Orientation.SOUTH;
+	if not ne and nw:
+		return Orientation.EAST;
+	return Orientation.NORTH;
 
-def imgui_aabb_xyxy(ident, aabb):
-	x0, y0, x1, y1 = aabb;
-	x0, y0 = imgui.input_int2(f"X0 Y0##{ident}", [int(x0), int(y0)])[1];
-	x1, y1 = imgui.input_int2(f"X1 Y1##{ident}", [int(x1), int(y1)])[1];
-	return x0, y0, x1, y1;
+def aabb_closest_point(aabb, point):
+	if not aabb_contains_point(aabb, point):
+		q = [0, 0];
+		for i in range(2):
+			v = point[i];
+			if v < aabb[i]:
+				v = aabb[i];
+			if v > aabb[2+i]:
+				v = aabb[2+i];
+			q[i] = v;
+		return q;
+	else:
+		edge = aabb_closest_edge(aabb, point);
+		match edge:
+			case Orientation.EAST:
+				return (aabb[2], point[1]);
+			case Orientation.NORTH:
+				return (point[0], aabb[1]);
+			case Orientation.WEST:
+				return (aabb[0], point[1]);
+			case Orientation.SOUTH:
+				return (point[0], aabb[3]);
+		return None;
+
+def point_point_dist(a, b):
+	ax, ay = a;
+	bx, by = b;
+	dx = bx - ax;
+	dy = by - ay;
+	return math.sqrt(dx*dx+dy*dy);

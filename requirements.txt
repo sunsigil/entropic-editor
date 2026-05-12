@@ -1,0 +1,5 @@
+pillow
+PyOpenGL
+glfw
+imgui-bundle
+qrcode

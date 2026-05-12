@@ -8,36 +8,39 @@ from ee_file_explorer import FileExplorer;
 
 class DocumentEditor:
 	_search_term = "";
-	_topmost_id = None;
-	
-	def _render_node(title, T, node, identifier):
-		identifier = str(identifier)+title;
+	_search_subset = [];
 
+	_delete_queue = [];
+	_duplicate_queue = [];
+	
+	def _render_node(title, T, node, entry_id):		
 		if isinstance(T, ee_types.Object):
-			imgui.push_id(identifier);
-			if imgui.tree_node(title):
+			object_open = imgui.tree_node(f"{title}####{entry_id}");
+			
+			if imgui.begin_popup_context_item():
+				if imgui.menu_item_simple("Delete"):
+					DocumentEditor._delete_queue.append(node);
+				if imgui.menu_item_simple("Duplicate"):
+					DocumentEditor._duplicate_queue.append(node);
+				imgui.end_popup();
+			
+			if object_open:
 				if AssetManager.active_document.type == "sprite":
 					SpritePreview.draw(node["name"]);
 				for e in T.elements:
 					if e.name in node:
 						if not e.get_attribute("read-only"):
-							node[e.name] = DocumentEditor._render_node(e.name, e.T, node[e.name], id(node));
+							node[e.name] = DocumentEditor._render_node(e.name, e.T, node[e.name], entry_id);
 				imgui.tree_pop();
-			imgui.pop_id();
-			DocumentEditor._topmost_id = identifier;
 			return node;
 		
 		elif isinstance(T, ee_types.List):
-			imgui.push_id(identifier);
 			if imgui.tree_node(title):
 				for i in range(len(node)):
-					imgui.push_id(i);
-					node[i] = DocumentEditor._render_node(f"{title}[{i}]", T.T, node[i], id(node));
-					imgui.pop_id();
+					node[i] = DocumentEditor._render_node(f"{title}[{i}]", T.T, node[i], entry_id);
 				imgui.tree_pop();
 				if imgui.button("+"):
 					node.append(T.T.prototype());
-			imgui.pop_id();
 			return node;
 		
 		elif isinstance(T, ee_types.Asset):
@@ -50,10 +53,10 @@ class DocumentEditor:
 			
 			match T.name:
 				case "sprite":
-					_, result = imgui.input_text(f"##{identifier}", node);
+					_, result = imgui.input_text(f"##{title}", node);
 					imgui.same_line();
 					spexp = ToolWindowRegistry.lookup(SpriteExplorer);
-					if imgui.button(f"...##{identifier}") and not spexp.is_open():
+					if imgui.button(f"...##{title}") and not spexp.is_open():
 						spexp.open();
 						spexp.get().configure(node);
 					if spexp.is_open() and spexp.get().is_targeting(node):
@@ -62,36 +65,36 @@ class DocumentEditor:
 					return result;
 				
 				case "proc":
-					_, result = imgui.input_text(f"##{identifier}", str(node));
+					_, result = imgui.input_text(f"##{title}", str(node));
 					return result;
 				
 				case _:
 					if T.name in AssetManager.types():
 						result = node;
-						if imgui.begin_combo(f"##{identifier}", node):
+						if imgui.begin_combo(f"##{title}", node):
 							assets = AssetManager.get_assets(T.name).copy();
 							assets.append(None);
 							for asset in assets:
-								name = asset["name"] if asset != None else "##";
+								name = asset["name"] if asset != None else "";
 								selected = result == name;
-								if imgui.selectable(name, selected)[0]:
+								if imgui.selectable(f"{name}##{title}", selected)[0]:
 									result = name
 								if selected:
 									imgui.set_item_default_focus();
 							imgui.end_combo();
 						return result;
 					else:
-						_, result = imgui.input_text(f"##{identifier}", str(node));
+						_, result = imgui.input_text(f"##{title}", str(node));
 						return result;
 		
 		elif isinstance(T, ee_types.File):
 			imgui.text(title);
 			imgui.same_line();
 
-			_, result = imgui.input_text(f"##{identifier}", str(node));
+			_, result = imgui.input_text(f"##{title}", str(node));
 			imgui.same_line();
 			fexp = ToolWindowRegistry.lookup(FileExplorer);
-			if imgui.button(f"...##{identifier}") and not fexp.is_open():
+			if imgui.button(f"...##{title}") and not fexp.is_open():
 				fexp.open();
 				fexp.get().configure(node, AssetManager.active_document.directory, T.pattern);
 			if fexp.is_open() and fexp.get().is_targeting(node):
@@ -104,7 +107,7 @@ class DocumentEditor:
 			imgui.same_line();
 
 			result = node;
-			if imgui.begin_combo(f"##{identifier}", result):
+			if imgui.begin_combo(f"##{title}", result):
 				for item in T.values:
 					selected = result == item;
 					if imgui.selectable(item, selected)[0]:
@@ -114,39 +117,52 @@ class DocumentEditor:
 				imgui.end_combo();
 			return result;
 
+		elif isinstance(T, ee_types.Flags):
+			imgui.text(title);
+
+			result = node;
+			for value in T.values:
+				_, included = imgui.checkbox(value, value in result);
+				if included and not value in result:
+					result.append(value);
+				elif not included and value in result:
+					result.remove(value);
+			return result;
+
 		elif isinstance(T, ee_types.Primitive):
 			imgui.text(title);
 			imgui.same_line();
-
+			
 			match type(T):
 				case ee_types.Int:
-					_, result = imgui.input_int(f"##{identifier}", int(node));
+					_, result = imgui.input_int(f"##{title}", int(node));
 					return result;
 				case ee_types.Float:
-					_, result = imgui.input_float(f"##{identifier}", float(node));
+					_, result = imgui.input_float(f"##{title}", float(node));
 					return result;
 				case ee_types.Bool:
-					return imgui.checkbox(f"##{identifier}", bool(node))[1];
+					return imgui.checkbox(f"##{title}", bool(node))[1];
 				case ee_types.String:
-					_, result = imgui.input_text(f"##{identifier}", str(node));
+					_, result = imgui.input_text(f"##{title}", str(node));
 					return result;
-
-	def _context_popup(doc : AssetDocument, idx):
-		if imgui.begin_popup_context_item(DocumentEditor._topmost_id):
-			if imgui.menu_item_simple("Delete"):
-				doc.delete_entry(idx);
-			if imgui.menu_item_simple("Duplicate"):
-				doc.duplicate_entry(idx);
-			imgui.end_popup();
 	
 	def render(doc : AssetDocument):
-		_, DocumentEditor._search_term = imgui.input_text("Search", DocumentEditor._search_term);
-		subset = list(filter(lambda e: len(DocumentEditor._search_term) == 0 or DocumentEditor._search_term in e["name"], doc.instances));
+		search_changed, DocumentEditor._search_term = imgui.input_text("Search", DocumentEditor._search_term);
+		if search_changed:
+			DocumentEditor._search_subset = list(filter(lambda e: DocumentEditor._search_term in e["name"], doc.instances));
+		working_set = DocumentEditor._search_subset if len(DocumentEditor._search_term) > 0 else doc.instances;
 
-		for (idx, entry) in enumerate(doc.instances):
-			if entry in subset:
-				root = doc.typist.root();
-				name = DocumentHelper.get_name(doc, idx);
-				number = DocumentHelper.get_number(doc, idx);
-				DocumentEditor._render_node(f"{name} {number}####{id(entry)}", root.T, entry, id(entry));
-				DocumentEditor._context_popup(doc, idx);
+		for entry in working_set:
+			root = doc.typist.root();
+
+			name = DocumentHelper.get_name(entry);
+			number = DocumentHelper.get_number(entry);
+			DocumentEditor._render_node(f"{name} {number}", root.T, entry, str(id(entry)));
+
+		while len(DocumentEditor._duplicate_queue) > 0:
+			x = DocumentEditor._duplicate_queue.pop(0);
+			AssetManager.active_document.duplicate_entry(x);
+		while len(DocumentEditor._delete_queue) > 0:
+			x = DocumentEditor._delete_queue.pop(0);
+			AssetManager.active_document.delete_entry(x);
+		

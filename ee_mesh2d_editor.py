@@ -199,7 +199,7 @@ class Mesh2DEditor:
 			for y in range(0, self.canvas.height, self.grid_dist):
 				for x in range(0, self.canvas.width, self.grid_dist):
 					self.canvas.draw_pixel(x, y, (128, 128, 128));
-			self.canvas.draw_rect_old(0, 0, self.canvas.width, self.canvas.height, (128, 128, 128));
+			self.canvas.draw_aabb(0, 0, self.canvas.width, self.canvas.height, (128, 128, 128));
 		
 		for [v0, v1] in self.polyline:
 			self.canvas.draw_line(v0.x, v0.y, v1.x, v1.y, (255, 255, 255));

@@ -44,17 +44,16 @@ class AssetDocument:
 			new["id"] = self.take_free_id();
 		self.instances.append(new);
 	
-	def duplicate_entry(self, idx):
-		new = copy.deepcopy(self.instances[idx]);
+	def duplicate_entry(self, entry):
+		new = copy.deepcopy(entry);
 		if "id" in new:
 			new["id"] = self.take_free_id();
 		self.instances.append(new);
 	
-	def delete_entry(self, idx):
-		entry = self.instances[idx];
+	def delete_entry(self, entry):
 		if "id" in entry:
 			self.id_set.remove(entry["id"]);
-		del self.instances[idx];
+		self.instances.remove(entry);
 	
 	def refresh(self):
 		for i in range(len(self.instances)):
@@ -69,8 +68,7 @@ class AssetDocument:
 			file.close();
 
 class DocumentHelper:
-	def get_name(doc, idx):
-		node = doc.instances[idx];
+	def get_name(node):
 		if "name" in node:
 			return node["name"];
 		elif "path" in node:
@@ -79,30 +77,16 @@ class DocumentHelper:
 			return node["id"];
 		return str(id(node));
 
-	def get_number(doc, idx):
-		node = doc.instances[idx];
+	def get_number(node):
 		if "id" in node:
 			return node["id"];
 		return id(node);
 
-	def get_rank(doc, idx):
-		node = doc.instances[idx];
-		data = doc.type_helper.collect(node);
-		for (path, value) in data:
-			element = doc.typist.search(path);
-			if element.get_attribute("rank"):
-				return value;
-		return 0;
-
-	def _sort_by(doc, f):
-		sorted_instances = [node for (idx, node) in sorted(enumerate(doc.instances), key = lambda x: f(doc, x[0]))];
-		doc.instances = sorted_instances;
 	def sort_by_name(doc):
-		DocumentHelper._sort_by(doc, DocumentHelper.get_name);
+		doc.instances.sort(key=DocumentHelper.get_name);
+	
 	def sort_by_number(doc):
-		DocumentHelper._sort_by(doc, DocumentHelper.get_number);
-	def sort_by_rank(doc):
-		DocumentHelper._sort_by(doc, DocumentHelper.get_rank);
+		doc.instances.sort(key=DocumentHelper.get_name);
 
 class AssetManager:
 	directories = [];
@@ -131,15 +115,18 @@ class AssetManager:
 		return name in [document.type for document in AssetManager.documents];
 
 	def get_document(name):
-		return next(document for document in AssetManager.documents if document.type == name);
+		return next((document for document in AssetManager.documents if document.type == name), None);
 
 	def get_assets(asset_type):
-		return next(document.instances for document in AssetManager.documents if document.type == asset_type);
+		return next((document.instances for document in AssetManager.documents if document.type == asset_type), None);
 
 	def search(asset_type, asset_name):
-		try:
-			return next(asset for asset in AssetManager.get_assets(asset_type) if asset["name"] == asset_name);
-		except:
+		return next((asset for asset in AssetManager.get_assets(asset_type) if asset["name"] == asset_name), None);
+
+	def get_first(asset_type):
+		assets = AssetManager.get_assets(asset_type);
+		if assets == None or len(assets) == 0:
 			return None;
+		return assets[0];
 
 	

@@ -6,6 +6,7 @@ from ee_canvas import Canvas, CanvasGrid, CanvasIO;
 from ee_assets import *;
 from ee_sprites import SpriteBank, EditorSprite;
 from ee_input import InputManager;
+from ee_imgui import *;
 
 class RecipeEditor:
 	def __init__(self):	

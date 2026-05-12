@@ -45,6 +45,8 @@ class ToolWindow:
 		self.size = imgui.get_window_size();
 		imgui.end();
 		if not open:
+			if callable(getattr(self.instance, "on_close", None)):
+				self.instance.on_close();
 			self.instance = None;
 	
 

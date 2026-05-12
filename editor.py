@@ -16,9 +16,9 @@ from ee_tool_window import ToolWindow, ToolWindowRegistry;
 from ee_scene_editor import SceneEditor;
 from ee_sprites import SpriteBank;
 from ee_input import InputManager;
-from ee_prop_editor import PropEditor;
-from ee_dialogue import DialogueGraph, DialogueEditor;
-from ee_recipes import RecipeEditor;
+from ee_prototype_editor import PrototypeEditor;
+from ee_dialogue_editor import DialogueGraph, DialogueEditor;
+from ee_recipe_editor import RecipeEditor;
 from ee_qr_encoder import QREncoder;
 from ee_file_explorer import FileExplorer;
 from ee_sprite_explorer import SpriteExplorer;
@@ -26,6 +26,9 @@ from ee_mesh2d_editor import Mesh2DEditor;
 from ee_theme_editor import ThemeEditor;
 from ee_anim_viewer import AnimationViewer;
 from ee_document_editor import DocumentEditor;
+from ee_notice_editor import NoticeEditor;
+from ee_output_understander import OutputUnderstander;
+from ee_palette_viewer import PaletteViewer;
 
 if __name__ == "__main__":
 	args = sys.argv[1:];
@@ -39,9 +42,10 @@ if __name__ == "__main__":
 	ee_context.create_context(env, 1920, 1080);
 
 	AssetManager.initialize([
-		env["game_path"]/"sprites",
-		env["game_path"]/"meshes",
-		env["game_path"]/"data"
+		env["game_path"]/"assets/sprites",
+		env["game_path"]/"assets/meshes",
+		env["game_path"]/"assets/data",
+		env["game_path"]/"assets/scripts"
 	]);
 	InputManager.initialize(ee_context.glfw_handle, ee_context.imgui_impl);
 
@@ -77,10 +81,13 @@ if __name__ == "__main__":
 	ToolWindowRegistry.register(ToolWindow(Mesh2DEditor, "Mesh2DEditor", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(ThemeEditor, "Theme Editor", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(AnimationViewer, "Animation Viewer", flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(SceneEditor, "Scene Editor", size=(1280, 720), flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(PropEditor, "Prop Editor", flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(SceneEditor, "Scene Editor", size=(1280, 860), flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(PrototypeEditor, "Prototype Editor", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(DialogueGraph, "Dialogue Graph", size=(1280, 720), flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(RecipeEditor, "Recipe Editor", flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(NoticeEditor, "Notice Editor", flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(OutputUnderstander, "Output Understander", flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(PaletteViewer, "Palette Viewer", flags=tool_flags));
 
 	while ee_context.alive():
 		ee_context.begin_frame();
@@ -106,9 +113,11 @@ if __name__ == "__main__":
 						selected = document == AssetManager.active_document;
 						title = document.path.relative_to(env["game_path"]);
 						if imgui.menu_item_simple(str(title), selected = selected):
+							if AssetManager.active_document != None:
+								AssetManager.active_document.save();
 							AssetManager.active_document = document;
 					imgui.end_menu();
-				if imgui.menu_item_simple("Save"):
+				if imgui.menu_item_simple("Save All"):
 					for document in AssetManager.documents:
 						print(f"Saving {document.path}!");
 						document.save();

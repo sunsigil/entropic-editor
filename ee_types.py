@@ -63,7 +63,7 @@ class Flags(Type):
 		values = [v for v in values if len(v) > 0];
 		self.values = values;
 	def prototype(self) -> str:
-		return self.values[0];
+		return [];
 	def validate(self, value) -> bool:
 		for v in value:
 			if not v in self.values:
