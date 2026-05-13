@@ -2,18 +2,44 @@ from pathlib import Path;
 from imgui_bundle import imgui;
 from ee_cowtools import foldl;
 import os;
+from ee_assets import AssetManager;
+import copy;
 
 class FileExplorer:
+	last = None;
+
 	def __init__(self):
 		self.target = None;
+		self.anchor = None;
+		self.glob = None;
+		self.current = None;
+
+		self.search = "";
+		self.type = None;
+		self.filter_unused = False;
+	
 		self.result = None;
 	
-	def configure(self, target, anchor, glob):
+	def configure(self, target, anchor, glob, type=None):
+		refresh = FileExplorer.last == None or anchor != FileExplorer.last.anchor;
+
 		self.target = target;
 		self.anchor = Path(anchor);
 		self.glob = glob;
-		self.current = self.anchor;
+		self.type = type;
 
+		if refresh:
+			self.current = self.anchor;
+			self.search = "";
+			self.filter_unused = False;
+		else:
+			self.current = FileExplorer.last.current;
+			self.search = FileExplorer.last.search;
+			self.filter_unused = FileExplorer.last.filter_unused;
+	
+	def __del__(self):
+		FileExplorer.last = copy.copy(self);
+	
 	def draw(self):
 		listings = [self.current.parent.absolute()];
 		for entry in self.current.iterdir():
@@ -23,6 +49,20 @@ class FileExplorer:
 		for entry in self.current.glob(self.glob):
 			if not entry in listings:
 				listings.append(entry);
+		
+		_, self.search = imgui.input_text("Search", self.search);
+		if len(self.search) > 0:
+			listings = list(filter(lambda x: self.search in str(x.name), listings));
+		
+		if self.type != None:
+			assets = AssetManager.get_assets("sprite");
+			if len(assets) > 0 and "path" in assets[0]:
+				_, self.filter_unused = imgui.checkbox("Unused", self.filter_unused);
+				if self.filter_unused:
+					paths = [x["path"] for x in assets];
+					unused = [x for x in listings if not str(Path(os.path.relpath(x.absolute(), self.anchor.absolute()))) in paths];
+					listings = unused;
+
 		listings.sort();
 		
 		for item in listings:
@@ -31,6 +71,7 @@ class FileExplorer:
 			if imgui.menu_item_simple(name):
 				if item.is_dir():
 					self.current = item;
+					self.search = "";
 				else:
 					self.result = Path(os.path.relpath(item.absolute(), self.anchor.absolute()));
 	

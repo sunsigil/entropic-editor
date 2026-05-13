@@ -21,9 +21,8 @@ class PrototypeEditor:
 			self.tile_size
 		);
 
-		self.canvas_manipulator = CanvasManipulator(self.canvas_io);
-		self.canvas_manipulator.click_callback = self.click_callback;
-		self.canvas_manipulator.drag_callback = self.drag_callback;
+		self.event_queue = [];
+		self.canvas_manipulator = CanvasManipulator(self.canvas_io, self.event_queue);
 	
 		self.manip_map = {};
 		self.selection_context = {};
@@ -38,7 +37,7 @@ class PrototypeEditor:
 			self.canvas_manipulator.clear();
 			self.manip_map = {};
 			for box in self.prototype["boxes"]:
-				eeid = self.canvas_manipulator.register(box["aabb"]);
+				eeid = self.canvas_manipulator.register_shape(box["aabb"]);
 				self.manip_map[eeid] = id(box);
 	
 	def search_manip_map(self, eeid):
@@ -49,55 +48,6 @@ class PrototypeEditor:
 			if id(box) == py_id:
 				return box;
 		return None;
-	
-	def click_callback(self, click: CanvasManipClick):
-		if click.eeid == None:
-			self.selection_context = {};
-			return;
-	
-		self.selection_context = {
-			"mode" : click,
-			"eeid": click.eeid
-		};
-	
-	def drag_callback(self, drag: CanvasManipDrag):
-		if drag.eeid == None:
-			self.selection_context = {};
-			return;
-	
-		match drag.signal:
-			case CanvasManipDrag.Signal.START:	
-				box = self.search_manip_map(drag.eeid);
-				edge = aabb_closest_edge(box["aabb"], drag.point);
-				self.selection_context = {
-					"mode": "drag",
-					"eeid": drag.eeid,
-					"box": box,
-					"edge": edge
-				}
-
-			case CanvasManipDrag.Signal.TICK:
-				point = self.canvas_grid.snap_point(drag.point);
-				box = self.selection_context["box"];
-				edge = self.selection_context["edge"];
-				x0, y0, x1, y1 = box["aabb"];
-				match edge:
-					case Orientation.EAST:
-						x1 = point[0];
-					case Orientation.NORTH:
-						y0 = point[1];
-					case Orientation.WEST:
-						x0 = point[0];
-					case Orientation.SOUTH:
-						y1 = point[1];
-				if x1 - x0 > 0 and y1 - y0 > 0:
-					box["aabb"] = int(x0), int(y0), int(x1), int(y1);
-					manip_shape = self.canvas_manipulator.get(drag.eeid);
-					manip_shape.update(box["aabb"]);
-			
-			case CanvasManipDrag.Signal.END:
-				self.selection_context = {};
-				pass;
 	
 	def gui_draw_selector(self):
 		prototype_last = self.prototype;
@@ -160,3 +110,53 @@ class PrototypeEditor:
 
 		self.canvas_io.tick();
 		self.canvas_manipulator.tick();
+
+		while len(self.event_queue) > 0:
+			event = self.event_queue.pop(0);
+			
+			if isinstance(event, CanvasManipClick):
+				if event.eeid == None:
+					self.selection_context = {};
+				else:
+					self.selection_context = {
+						"mode" : "click",
+						"eeid": event.eeid
+					};
+			
+			if isinstance(event, CanvasManipDrag):
+				if event.eeid == None:
+					self.selection_context = {};
+					return;
+			
+				match event.signal:
+					case CanvasManipDrag.Signal.START:	
+						box = self.search_manip_map(event.eeid);
+						edge = aabb_closest_edge(box["aabb"], event.point);
+						self.selection_context = {
+							"mode": "drag",
+							"eeid": event.eeid,
+							"box": box,
+							"edge": edge
+						}
+
+					case CanvasManipDrag.Signal.TICK:
+						point = self.canvas_grid.snap_point(event.point);
+						box = self.selection_context["box"];
+						edge = self.selection_context["edge"];
+						x0, y0, x1, y1 = box["aabb"];
+						match edge:
+							case Orientation.EAST:
+								x1 = point[0];
+							case Orientation.NORTH:
+								y0 = point[1];
+							case Orientation.WEST:
+								x0 = point[0];
+							case Orientation.SOUTH:
+								y1 = point[1];
+						if x1 - x0 > 0 and y1 - y0 > 0:
+							box["aabb"] = int(x0), int(y0), int(x1), int(y1);
+							manip_shape = self.canvas_manipulator.get_shape(event.eeid);
+							manip_shape.update(box["aabb"]);
+					
+					case CanvasManipDrag.Signal.END:
+						self.selection_context = {};

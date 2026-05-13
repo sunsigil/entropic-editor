@@ -96,6 +96,10 @@ def aabb_point_dist(aabb, point):
 def cross2d(a, b):
 	return a[0]*b[1] - a[1]*b[0];
 
+def mag2d(v):
+	x, y = v;
+	return math.sqrt(x*x+y*y);
+
 def is_left(a, b, c):
 	ab = (b[0]-a[0], b[1]-a[1]);
 	ac = (c[0]-a[0], c[1]-a[1]);
@@ -144,3 +148,14 @@ def point_point_dist(a, b):
 	dx = bx - ax;
 	dy = by - ay;
 	return math.sqrt(dx*dx+dy*dy);
+
+def aabb_point_sdf(aabb, point):
+	x0, y0, x1, y1 = aabb;
+	x, y = point;
+	dx = max([x0 - x, x - x1]);
+	dy = max([y0 - y, y - y1]);
+	out_dx = max(dx, 0);
+	out_dy = max(dy, 0);
+	out_d = mag2d((out_dx, out_dy));
+	in_d = min(max([dx, dy]), 0);
+	return out_d + in_d;

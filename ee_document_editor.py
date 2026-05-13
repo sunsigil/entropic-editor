@@ -96,7 +96,7 @@ class DocumentEditor:
 			fexp = ToolWindowRegistry.lookup(FileExplorer);
 			if imgui.button(f"...##{title}") and not fexp.is_open():
 				fexp.open();
-				fexp.get().configure(node, AssetManager.active_document.directory, T.pattern);
+				fexp.get().configure(node, AssetManager.active_document.directory, T.pattern, "sprite" if AssetManager.active_document.type == "sprite" else None);
 			if fexp.is_open() and fexp.get().is_targeting(node):
 				harvest = fexp.get_result();
 				result = harvest if harvest != None else result;

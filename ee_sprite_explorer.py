@@ -1,26 +1,43 @@
 from imgui_bundle import imgui;
 from ee_assets import AssetManager;
-from ee_sprites import SpritePreview;
+from ee_sprites import SpritePreview, SpriteBank;
+import math;
 
 class SpriteExplorer:
 	def __init__(self):
 		self.target = None;
 		self.result = None;
+		self.search = "";
 	
 	def configure(self, target):
 		self.target = target;
 
 	def draw(self):
 		listings = [s["name"] for s in AssetManager.get_assets("sprite")];
+
+		search_changed, self.search = imgui.input_text("Search", self.search);
+		if len(self.search) > 0:
+			listings = list(filter(lambda x: self.search in x, listings));
 		listings.sort();
 		
-		for item in listings:
-			imgui.begin_group();
-			SpritePreview.draw_thumbnail(item, 48);
-			imgui.same_line();
-			if imgui.menu_item_simple(item):
-				self.result = item;
-			imgui.end_group();
+		wdw_w = imgui.get_content_region_avail().x/1.25;
+		sprite_w = 64;
+		cols = int(wdw_w // sprite_w);
+		rows = int(math.ceil(len(listings) / cols));
+	
+		i = 0;
+		for r in range(rows):
+			for c in range(cols):
+				if i < len(listings):
+					imgui.begin_group();
+					sprite = SpriteBank.get(listings[i]);
+					if imgui.image_button(f"##{id(i)}", sprite.frame_textures[0], (64, 64)):
+						self.result = listings[i];
+					imgui.text(listings[i][:min(10, len(listings[i]))]);
+					imgui.end_group();
+					imgui.same_line();
+				i += 1;
+			imgui.new_line();
 		
 	def is_targeting(self, target):
 		return target == self.target;
