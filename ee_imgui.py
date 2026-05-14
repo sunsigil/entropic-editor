@@ -5,8 +5,22 @@ from imgui_bundle import imgui;
 from ee_assets import AssetManager;
 from ee_tool_window import ToolWindowRegistry;
 from ee_file_explorer import FileExplorer;
+from ee_asset_explorer import AssetExplorer;
 import ee_context;
 from enum import Enum;
+
+def imgui_aabb_xywh(ident, aabb):
+	x0, y0, x1, y1 = aabb;
+	w, h = x1-x0, y1-y0;
+	x0, y0 = imgui.input_int2(f"X Y##{ident}", [int(x0), int(y0)])[1];
+	w, h = imgui.input_int2(f"W H##{ident}", [int(w), int(h)])[1];
+	return x0, y0, x0+w, y0+h;
+
+def imgui_aabb_xyxy(ident, aabb):
+	x0, y0, x1, y1 = aabb;
+	x0, y0 = imgui.input_int2(f"X0 Y0##{ident}", [int(x0), int(y0)])[1];
+	x1, y1 = imgui.input_int2(f"X1 Y1##{ident}", [int(x1), int(y1)])[1];
+	return x0, y0, x1, y1;
 
 def imgui_selector(ident, candidates, value, name_f = lambda x: x):
 	if imgui.begin_combo(f"##{ident}", str(name_f(value))):
@@ -42,19 +56,6 @@ def imgui_enum_selector(ident, enum_type, value):
 		lambda x: x.name
 	);
 
-def imgui_aabb_xywh(ident, aabb):
-	x0, y0, x1, y1 = aabb;
-	w, h = x1-x0, y1-y0;
-	x0, y0 = imgui.input_int2(f"X Y##{ident}", [int(x0), int(y0)])[1];
-	w, h = imgui.input_int2(f"W H##{ident}", [int(w), int(h)])[1];
-	return x0, y0, x0+w, y0+h;
-
-def imgui_aabb_xyxy(ident, aabb):
-	x0, y0, x1, y1 = aabb;
-	x0, y0 = imgui.input_int2(f"X0 Y0##{ident}", [int(x0), int(y0)])[1];
-	x1, y1 = imgui.input_int2(f"X1 Y1##{ident}", [int(x1), int(y1)])[1];
-	return x0, y0, x1, y1;
-
 def imgui_path_input(ident, value, glob):
 	_, result = imgui.input_text(f"##{ident}", str(value));
 	imgui.same_line();
@@ -66,3 +67,25 @@ def imgui_path_input(ident, value, glob):
 		harvest = fexp.get_result();
 		result = harvest if harvest != None else result;
 	return result;
+
+def imgui_asset_input(ident, type, value):
+	_, result = imgui.input_text(f"##{ident}", str(value));
+	imgui.same_line();
+	explorer = ToolWindowRegistry.lookup(AssetExplorer);
+	if imgui.button(f"...##{ident}") and not explorer.is_open():
+		explorer.open();
+		explorer.get().configure(value, type);
+	if explorer.is_open() and explorer.get().is_targeting(value):
+		harvest = explorer.get_result();
+		result = harvest if harvest != None else result;
+	return result;
+
+def imgui_begin_column(ident, w):
+	imgui.begin_child(
+		str(ident),
+		imgui.ImVec2(w, imgui.get_content_region_avail().y),
+		0, 0
+	);
+def imgui_end_column():
+	imgui.end_child();
+	imgui.same_line();

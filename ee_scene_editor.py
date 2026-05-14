@@ -24,6 +24,8 @@ class CanvasConfig:
 	def __init__(self):
 		self.show_grid = False;
 		self.show_walls = True;
+		self.show_boxes = False;
+		self.snap_to_grid = True;
 
 class CreateEntityEvent:
 	def __init__(self, source=None):
@@ -71,6 +73,7 @@ class TilemapEditor:
 		if self.tilemap != None:
 			self._clean();
 		self.tilemap = self.parent.scene["tilemap"];
+		self.event_queue.clear();
 	
 	def gui_draw_palette(self):
 		if self.tilemap == None:
@@ -154,6 +157,9 @@ class WallEditor:
 	def on_load_scene(self):
 		self.walls = self.parent.scene["walls"];
 		self.canvas_manip.clear();
+		self.manip_map.clear();
+		self.event_queue.clear();
+		self.context.clear();
 	
 	def gui_draw_walls(self):
 		if self.walls == None:
@@ -254,7 +260,8 @@ class SceneEditor:
 		self.scene = scene;
 		if scene != None:
 			self.event_queue.clear();
-			self.selection_context = {};
+			self.selection_context.clear();
+			self.canvas_manip.clear();
 			self.manip_map.clear();
 		self.tilemap_editor.on_load_scene();
 		self.wall_editor.on_load_scene();
@@ -309,7 +316,10 @@ class SceneEditor:
 							entity = self.selection_context["entity"];
 							point = event.point;
 							delta = self.selection_context["delta"];
-							entity["position"] = point[0] + delta[0], point[1] + delta[1];
+							position = point[0] + delta[0], point[1] + delta[1];
+							if self.canvas_config.snap_to_grid:
+								position = self.canvas_grid.snap_point(position);
+							entity["position"] = position;
 			
 			if isinstance(event, CreateEntityEvent):
 				entity = {
@@ -389,8 +399,10 @@ class SceneEditor:
 			
 			_, entity["name"] = imgui.input_text("Name", entity["name"]);
 			
-			proto_names = [x["name"] for x in AssetManager.get_assets("prototype")] + [None];
-			entity["prototype"] = imgui_selector(id(entity["prototype"]), proto_names, entity["prototype"]);
+			entity["prototype"] = imgui_asset_input(id(entity["prototype"]), "prototype", entity["prototype"]);
+
+			if len(entity["prototype"]) > 0 and len(entity["name"]) <= 0:
+				entity["name"] = entity["prototype"];
 
 			imgui.tree_pop();
 	
@@ -413,7 +425,7 @@ class SceneEditor:
 		self.scene["background"] = [int(r*255), int(g*255), int(b*255)];
 
 		palette = self.scene["tilemap"]["palette"];
-		self.scene["tilemap"]["palette"] = imgui_asset_name_selector(id(self.scene["tilemap"]["palette"]), "sprite", self.scene["tilemap"]["palette"]);
+		self.scene["tilemap"]["palette"] = imgui_asset_input(id(self.scene["tilemap"]["palette"]), "sprite", self.scene["tilemap"]["palette"]);
 		if self.scene["tilemap"]["palette"] != palette:
 			self.tilemap_editor.clamp();
 	
@@ -421,6 +433,15 @@ class SceneEditor:
 		x, y = entity["position"];
 		sprite = self.get_entity_sprite(entity);
 		self.canvas.draw_image(x, y, sprite.frame_images[0]);
+
+		if self.canvas_config.show_boxes:
+			prototype = AssetManager.search("prototype", entity["prototype"]);
+			if prototype != None:
+				for box in prototype["boxes"]:
+					colour = (255, 0, 0) if box["type"] == "blocker" else (0, 255, 0);
+					x0, y0, x1, y1 = box["aabb"];
+					x0, y0, x1, y1 = x0+x, y0+y, x1+x, y1+y;
+					self.canvas.draw_aabb((x0, y0, x1, y1), colour);
 
 		if (
 			"entity" in self.selection_context and 
@@ -437,6 +458,16 @@ class SceneEditor:
 				tile["position"][0], tile["position"][1],
 				sprite.frame_images[frame_idx]
 			);
+
+		if self.edit_mode == EditMode.TILEMAP:
+			cursor = self.canvas_io.get_cursor();
+			grid_cursor = self.canvas_grid.snap_point(cursor);
+			x0, y0 = grid_cursor;
+			x1, y1 = x0+16, y0+16;
+			self.canvas.draw_aabb(
+				(x0, y0, x1, y1),
+				(255, 255, 255),
+			);
 	
 	def canvas_draw_walls(self):
 		for wall in self.scene["walls"]:
@@ -449,15 +480,22 @@ class SceneEditor:
 		_, self.canvas_config.show_grid = imgui.checkbox("Show grid", self.canvas_config.show_grid);
 		imgui.same_line();
 		_, self.canvas_config.show_walls = imgui.checkbox("Show walls", self.canvas_config.show_walls);
+		imgui.same_line();
+		_, self.canvas_config.show_boxes = imgui.checkbox("Show boxes", self.canvas_config.show_boxes);
+		imgui.same_line();
+		imgui.set_next_item_width(64);
+		_, self.canvas_grid.size = imgui.slider_int("Grid size", round(self.canvas_grid.size / 2) * 2, 2, 16);
+		imgui.same_line();
+		_, self.canvas_config.snap_to_grid = imgui.checkbox("Snap to grid", self.canvas_config.snap_to_grid);
 
 		r, g, b = self.scene["background"];
 		self.canvas.clear((r, g, b));
 
-		self.canvas_draw_tilemap();
-
-		if self.canvas_config.show_grid:
+		if self.canvas_config.show_grid and self.canvas_grid.size >= 4:
 			self.canvas_grid.draw_lines((64, 64, 64));
-			self.canvas.draw_guides((255, 255, 255));
+		self.canvas.draw_guides((255, 255, 255));
+		
+		self.canvas_draw_tilemap();
 		
 		for entity in self.scene["entities"]:
 			self.canvas_draw_entity(entity);

@@ -31,7 +31,6 @@ class AnimationViewer:
 		self.canvas.clear((128, 128, 128));
 		draw_x = self.canvas.width/2;
 		draw_y = self.canvas.height/2;
-		self.canvas.draw_flags = Canvas.DrawFlags.CENTER_X | Canvas.DrawFlags.CENTER_Y;
 		self.canvas.draw_image(draw_x, draw_y, frames[self.frame]);
 		if self.show_AABB:
 			self.canvas.draw_aabb((draw_x, draw_y, draw_x+preview.frame_width, draw_y+preview.frame_height), (255, 0, 0));

@@ -3,8 +3,9 @@ from ee_assets import AssetManager, AssetDocument, DocumentHelper;
 from ee_sprites import SpritePreview;
 import ee_types;
 from ee_tool_window import ToolWindow, ToolWindowRegistry;
-from ee_sprite_explorer import SpriteExplorer;
+from ee_asset_explorer import AssetExplorer;
 from ee_file_explorer import FileExplorer;
+from ee_imgui import *;
 
 class DocumentEditor:
 	_search_term = "";
@@ -44,48 +45,17 @@ class DocumentEditor:
 			return node;
 		
 		elif isinstance(T, ee_types.Asset):
-			match T.name:
-				case "sprite":
-					SpritePreview.draw(node);
+			if T.name == "sprite":
+				SpritePreview.draw(node);
 
 			imgui.text(title);
 			imgui.same_line();
 			
-			match T.name:
-				case "sprite":
-					_, result = imgui.input_text(f"##{title}", node);
-					imgui.same_line();
-					spexp = ToolWindowRegistry.lookup(SpriteExplorer);
-					if imgui.button(f"...##{title}") and not spexp.is_open():
-						spexp.open();
-						spexp.get().configure(node);
-					if spexp.is_open() and spexp.get().is_targeting(node):
-						harvest = spexp.get_result();
-						result = harvest if harvest != None else result;
-					return result;
-				
-				case "proc":
-					_, result = imgui.input_text(f"##{title}", str(node));
-					return result;
-				
-				case _:
-					if T.name in AssetManager.types():
-						result = node;
-						if imgui.begin_combo(f"##{title}", node):
-							assets = AssetManager.get_assets(T.name).copy();
-							assets.append(None);
-							for asset in assets:
-								name = asset["name"] if asset != None else "";
-								selected = result == name;
-								if imgui.selectable(f"{name}##{title}", selected)[0]:
-									result = name
-								if selected:
-									imgui.set_item_default_focus();
-							imgui.end_combo();
-						return result;
-					else:
-						_, result = imgui.input_text(f"##{title}", str(node));
-						return result;
+			if T.name in AssetManager.types():
+				return imgui_asset_input(f"##{title}", T.name, node);
+			else:
+				_, result = imgui.input_text(f"##{title}", str(node));
+				return result;
 		
 		elif isinstance(T, ee_types.File):
 			imgui.text(title);
@@ -93,12 +63,12 @@ class DocumentEditor:
 
 			_, result = imgui.input_text(f"##{title}", str(node));
 			imgui.same_line();
-			fexp = ToolWindowRegistry.lookup(FileExplorer);
-			if imgui.button(f"...##{title}") and not fexp.is_open():
-				fexp.open();
-				fexp.get().configure(node, AssetManager.active_document.directory, T.pattern, "sprite" if AssetManager.active_document.type == "sprite" else None);
-			if fexp.is_open() and fexp.get().is_targeting(node):
-				harvest = fexp.get_result();
+			explorer = ToolWindowRegistry.lookup(FileExplorer);
+			if imgui.button(f"...##{title}") and not explorer.is_open():
+				explorer.open();
+				explorer.get().configure(node, AssetManager.active_document.directory, T.pattern, "sprite" if AssetManager.active_document.type == "sprite" else None);
+			if explorer.is_open() and explorer.get().is_targeting(node):
+				harvest = explorer.get_result();
 				result = harvest if harvest != None else result;
 			return result;
 

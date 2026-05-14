@@ -120,8 +120,6 @@ class CanvasGrid:
 	def __init__(self, canvas, size):
 		self.canvas = canvas;
 		self.size = int(size);
-		self.rows = self.canvas.height // self.size;
-		self.columns = self.canvas.width // self.size;
 
 	def transform_point(self, point):
 		x, y = point;
@@ -184,9 +182,10 @@ class CanvasManipRect:
 		self.aabb = (x0, y0, x1, y1);
 
 class CanvasManipClick:
-	def __init__(self, eeid, point):
+	def __init__(self, eeid, point, distance=None):
 		self.eeid = eeid;
 		self.point = point;
+		self.distance = distance;
 
 class CanvasManipDrag:
 	class Signal(Enum):
@@ -218,11 +217,14 @@ class CanvasManipulator:
 		return None;
 
 	def _get_by_point(self, point):
+		min_dist = math.inf;
+		min_shape = None;
 		for shape in self.shapes:
 			dist = shape.distance(point);
-			if dist <= 2:
-				return shape;
-		return None;
+			if dist <= 2 and abs(dist) < min_dist:
+				min_dist = abs(dist);
+				min_shape = shape;
+		return min_shape;
 
 	def clear(self):
 		self.shapes = [];
@@ -261,21 +263,22 @@ class CanvasManipulator:
 				self.clicked_point = cursor;
 				shape = self._get_by_point(cursor);
 				eeid = shape.eeid if shape != None else None;
-				self.event_queue.append(CanvasManipClick(eeid, cursor));
+				distance = aabb_point_sdf(shape.aabb, self.clicked_point) if shape != None else None;
+				self.event_queue.append(CanvasManipClick(eeid, cursor, distance));
 				self.clicked_eeid = eeid;
 		
-			if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT):
-				if self.drag_started:	
-					self.event_queue.append(CanvasManipDrag(self.clicked_eeid, CanvasManipDrag.Signal.TICK, cursor));
-				elif self.clicked_point != None:
+			if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT) and self.clicked_point != None:
+				shape = self._get_by_eeid(self.clicked_eeid);
+				distance = aabb_point_sdf(shape.aabb, self.clicked_point) if shape != None else None;
+
+				if not self.drag_started:
 					movement = point_point_dist(cursor, self.clicked_point);
 					if movement >= 2:
-						distance = None;
-						if self.clicked_eeid != None:
-								shape = self._get_by_eeid(self.clicked_eeid);
-								distance = aabb_point_sdf(shape.aabb, cursor);
 						self.event_queue.append(CanvasManipDrag(self.clicked_eeid, CanvasManipDrag.Signal.START, self.clicked_point, distance));
 						self.drag_started = True;
+				else:
+					self.event_queue.append(CanvasManipDrag(self.clicked_eeid, CanvasManipDrag.Signal.TICK, cursor, distance));
+					
 		
 		
 

@@ -7,7 +7,7 @@ from ee_cowtools import *;
 from ee_assets import *;
 from ee_canvas import Canvas;
 
-class QREncoder:
+class EnDeCoder:
 	def __init__(self):
 		self.qr_data = "";
 		self.qr_code = None;

@@ -3,19 +3,20 @@ from ee_assets import AssetManager;
 from ee_sprites import SpritePreview, SpriteBank;
 import math;
 
-class SpriteExplorer:
+class AssetExplorer:
 	def __init__(self):
 		self.target = None;
 		self.result = None;
 		self.search = "";
 	
-	def configure(self, target):
+	def configure(self, target, type):
 		self.target = target;
+		self.type = type;
 
 	def draw(self):
-		listings = [s["name"] for s in AssetManager.get_assets("sprite")];
+		listings = [s["name"] for s in AssetManager.get_assets(self.type)];
 
-		search_changed, self.search = imgui.input_text("Search", self.search);
+		_, self.search = imgui.input_text("Search", self.search);
 		if len(self.search) > 0:
 			listings = list(filter(lambda x: self.search in x, listings));
 		listings.sort();
@@ -30,7 +31,9 @@ class SpriteExplorer:
 			for c in range(cols):
 				if i < len(listings):
 					imgui.begin_group();
-					sprite = SpriteBank.get(listings[i]);
+					asset = AssetManager.search(self.type, listings[i]);
+					sprite_name = listings[i] if self.type == "sprite" else (asset["sprite"] if "sprite" in asset else "");
+					sprite = SpriteBank.get(sprite_name);
 					if imgui.image_button(f"##{id(i)}", sprite.frame_textures[0], (64, 64)):
 						self.result = listings[i];
 					imgui.text(listings[i][:min(10, len(listings[i]))]);

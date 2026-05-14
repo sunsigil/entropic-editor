@@ -93,7 +93,7 @@ class PaletteViewer:
 		cols = min(N, 16);
 		rows = math.ceil(N / cols);
 		canvas = Canvas(cols * self.tile_size, rows * self.tile_size, 1);
-		canvas_grid = CanvasGrid(canvas, (0, 0), self.tile_size);
+		canvas_grid = CanvasGrid(canvas, self.tile_size);
 		return (canvas, canvas_grid);
 
 	def acquire_view(self):

@@ -19,16 +19,17 @@ from ee_input import InputManager;
 from ee_prototype_editor import PrototypeEditor;
 from ee_dialogue_editor import DialogueGraph, DialogueEditor;
 from ee_recipe_editor import RecipeEditor;
-from ee_qr_encoder import QREncoder;
+from ee_qr_encoder import EnDeCoder;
 from ee_file_explorer import FileExplorer;
-from ee_sprite_explorer import SpriteExplorer;
 from ee_mesh2d_editor import Mesh2DEditor;
-from ee_theme_editor import ThemeEditor;
-from ee_anim_viewer import AnimationViewer;
 from ee_document_editor import DocumentEditor;
-from ee_notice_editor import NoticeEditor;
-from ee_output_understander import OutputUnderstander;
 from ee_palette_viewer import PaletteViewer;
+from ee_asset_explorer import AssetExplorer;
+
+#from ee_theme_editor import ThemeEditor;
+#from ee_anim_viewer import AnimationViewer;
+#from ee_notice_editor import NoticeEditor;
+#from ee_output_understander import OutputUnderstander;
 
 if __name__ == "__main__":
 	args = sys.argv[1:];
@@ -74,20 +75,23 @@ if __name__ == "__main__":
 				imgui.WindowFlags_.no_collapse,
 	];
 
-	ToolWindowRegistry.register(ToolWindow(QREncoder, "QR Encoder", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(FileExplorer, "File Explorer", flags=tool_flags, hidden=True));
-	ToolWindowRegistry.register(ToolWindow(SpriteExplorer, "Sprite Explorer", flags=tool_flags, hidden=True));
-	ToolWindowRegistry.register(ToolWindow(DialogueEditor, "Dialogue Editor", size=(1000, 600), flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(Mesh2DEditor, "Mesh2DEditor", flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(ThemeEditor, "Theme Editor", flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(AnimationViewer, "Animation Viewer", flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(AssetExplorer, "Asset Explorer", flags=tool_flags, hidden=True));
+
+	ToolWindowRegistry.register(ToolWindow(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(SceneEditor, "Scene Editor", size=(1280, 860), flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(PrototypeEditor, "Prototype Editor", flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(DialogueEditor, "Dialogue Editor", size=(1000, 600), flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(DialogueGraph, "Dialogue Graph", size=(1280, 720), flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(RecipeEditor, "Recipe Editor", flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(NoticeEditor, "Notice Editor", flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(OutputUnderstander, "Output Understander", flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(Mesh2DEditor, "Mesh2DEditor", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(PaletteViewer, "Palette Viewer", flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(EnDeCoder, "EnDeCoder", flags=tool_flags));
+
+	#ToolWindowRegistry.register(ToolWindow(ThemeEditor, "Theme Editor", flags=tool_flags));
+	#ToolWindowRegistry.register(ToolWindow(AnimationViewer, "Animation Viewer", flags=tool_flags));	
+	#ToolWindowRegistry.register(ToolWindow(NoticeEditor, "Notice Editor", flags=tool_flags));
+	#oolWindowRegistry.register(ToolWindow(OutputUnderstander, "Output Understander", flags=tool_flags));
+	
 
 	while ee_context.alive():
 		ee_context.begin_frame();

@@ -37,11 +37,17 @@ class AssetDocument:
 		self.id_set.add(M+1);
 		return M+1;
 	
-	def spawn_entry(self):
+	def spawn_entry(self, source=None):
 		new = self.type_helper.prototype();
+
 		new["name"] = f"new_{self.type}";
 		if "id" in new:
 			new["id"] = self.take_free_id();
+		
+		if source != None:
+			for k,v in source.items():
+				new[k] = copy.deepcopy(v);
+
 		self.instances.append(new);
 	
 	def duplicate_entry(self, entry):

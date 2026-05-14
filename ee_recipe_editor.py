@@ -14,7 +14,7 @@ class RecipeEditor:
 		self.canvas_size = (self.cell_size * 3, self.cell_size * 3);
 		self.canvas = Canvas(self.canvas_size[0], self.canvas_size[1], 2);
 		self.canvas_io = CanvasIO(self.canvas);
-		self.canvas_grid = CanvasGrid(self.canvas, (0, 0), self.cell_size);
+		self.canvas_grid = CanvasGrid(self.canvas, self.cell_size);
 	
 		self.recipe = None;
 		self.input_coords = None;
