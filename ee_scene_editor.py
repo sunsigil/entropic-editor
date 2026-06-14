@@ -1,5 +1,6 @@
 from imgui_bundle import imgui;
 import glfw;
+import csv;
 
 from ee_cowtools import *;
 from ee_canvas import *;
@@ -15,7 +16,8 @@ class EditMode(Enum):
 	ENTITIES = 0,
 	TILEMAP = 1,
 	WALLS = 2,
-	TEXTS = 3
+	TEXTS = 3,
+	PROPERTIES = 4
 
 class CanvasConfig:
 	def __init__(self):
@@ -69,18 +71,35 @@ class TilemapEditor:
 		self.selected_frame = 0;
 		self.event_queue = [];
 	
+	def _type(self):
+		return self.tilemap["type"];
+	def _data(self):
+		match self._type():
+			case "sparse":
+				return self.tilemap["sparse"];
+			case "dense":
+				return self.tilemap["dense"];
+	
 	def _spatial_search(self, position):
-		x, y = self.parent.canvas_grid.snap_point(position);
-		tile = next((t for t in self.tilemap["tiles"] if t["position"][0] == x and t["position"][1] == y), None);
-		return tile;
+		match self._type():
+			case "sparse":
+				x, y = self.parent.canvas_grid.snap_point(position);
+				tile = next((t for t in self._data() if t["position"][0] == x and t["position"][1] == y), None);
+				return tile;
+			case "dense":
+				x, y = self.parent.canvas_grid.snap_point(position);
+				idx = y * self._data()["columns"] + x;
+				return self._data()["frame_indices"][idx] != 0;
 
 	def _is_occupied(self, position):
 		return self._spatial_search(position) != None;
 
 	def _clean(self):
-		for tile in self.tilemap["tiles"]:
-			if not self._spatial_search(tile["position"]) is tile:
-				self.parent.event_queue.append(DeleteTileEvent(tile));
+		match self._type():
+			case "sparse":
+				for tile in self._data():
+					if not self._spatial_search(tile["position"]) is tile:
+						self.parent.event_queue.append(DeleteTileEvent(tile));
 	
 	def on_load_scene(self):
 		if self.tilemap != None:
@@ -91,64 +110,94 @@ class TilemapEditor:
 	def gui_draw_palette(self):
 		if self.tilemap == None:
 			return;
+	
+		self.tilemap["palette"] = imgui_asset_name_selector("palette", "sprite", self.tilemap["palette"]);
 		if self.tilemap["palette"] == "":
 			return;
-	
-		sprite = SpriteBank.get(self.tilemap["palette"]);
-		wdw_w = imgui.get_content_region_avail().x;
-		cols = int(wdw_w // 72);
-		rows = int(math.ceil(sprite.frame_count / cols));
 
-		i = 0;
-		for r in range(rows):
-			for c in range(cols):
-				if i < sprite.frame_count:
-					tint = (0.5, 0.5, 0.5, 1) if i == self.selected_frame else (1, 1, 1, 1);
-					if imgui.image_button(f"##{id(i)}", sprite.frame_textures[i], (64, 64), tint_col=tint):
-						self.selected_frame = i;
-					imgui.same_line();
-				i += 1;
-			imgui.new_line();
+		match self._type():
+			case "sparse":
+				sprite = SpriteBank.get(self.tilemap["palette"]);
+				wdw_w = imgui.get_content_region_avail().x;
+				cols = int(wdw_w // 72);
+				rows = int(math.ceil(sprite.frame_count / cols));
+
+				i = 0;
+				for r in range(rows):
+					for c in range(cols):
+						if i < sprite.frame_count:
+							tint = (0.5, 0.5, 0.5, 1) if i == self.selected_frame else (1, 1, 1, 1);
+							if imgui.image_button(f"##{id(i)}", imgui.ImTextureRef(sprite.frame_textures[i]), (64, 64), tint_col=tint):
+								self.selected_frame = i;
+							imgui.same_line();
+						i += 1;
+					imgui.new_line();
+			case "dense":
+				explorer = ToolWindowRegistry.lookup(FileExplorer);
+				if imgui.button(f"...") and not explorer.is_open():
+					explorer.open();
+					explorer.get().configure(self._data()["csv"], "assets", "*.csv");
+				if explorer.is_open() and explorer.get().is_targeting(self._data()["csv"]):
+					harvest = explorer.get_result();
+					if harvest != None:
+						self._data()["csv"] = str(Path("assets")/harvest);
+						with open(self._data()["csv"]) as file:
+							reader = csv.reader(file);
+							self._data()["frame_indices"] = [];
+							rows = 0;
+							for row in reader:
+								for col in row:
+									self._data()["frame_indices"].append(int(col));
+								rows += 1;
+							self._data()["rows"] = rows;
+							self._data()["columns"] = len(self._data()["frame_indices"])//rows;
+				
+				_, self._data()["position"] = imgui.input_int2("Position", self._data()["position"]);
 	
 	def handle_events(self):
 		while len(self.event_queue) > 0:
 			event = self.event_queue.pop(0);
 
 			if isinstance(event, CreateTileEvent):
-				self.tilemap["tiles"].append(
+				self.tilemap["sparse"].append(
 					{
 						"position": list(event.position),
 						"frame_idx": event.frame_idx
 					}
 				);
 			if isinstance(event, DeleteTileEvent):
-				self.tilemap["tiles"].remove(event.tile);
-
-	def tick(self):
-		if self.tilemap == None:
-			return;
-		if self.tilemap["palette"] == "":
-			return;
+				self.tilemap["sparse"].remove(event.tile);
 	
-		sprite = SpriteBank.get(self.tilemap["palette"]);
-		self.selected_frame = clamp(self.selected_frame, 0, sprite.frame_count-1);
+	def tick_sparse(self):
+		palette = SpriteBank.get(self.tilemap["palette"]);
+		self.selected_frame = clamp(self.selected_frame, 0, palette.frame_count-1);
 
 		if self.parent.canvas_io.cursor_in_bounds():
 			if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT):
 				cursor = self.parent.canvas_io.get_cursor();
 				tile_cursor = self.parent.canvas_grid.snap_point(cursor);
 				if InputManager.is_held(glfw.KEY_LEFT_SHIFT):
-					for idx, tile in enumerate(self.tilemap["tiles"]):
+					for idx, tile in enumerate(self.tilemap["sparse"]):
 						tx, ty = self.parent.canvas_grid.snap_point(tile["position"]);
 						cx, cy = tile_cursor;
 						if int(tx) == int(cx) and int(ty) == int(cy):
-							self.event_queue.append(DeleteTileEvent(self.tilemap["tiles"][idx]));
+							self.event_queue.append(DeleteTileEvent(self.tilemap["sparse"][idx]));
 				elif self.selected_frame != None:
 					existing = self._spatial_search(tile_cursor);
 					if existing == None:
 						self.event_queue.append(CreateTileEvent(tile_cursor, self.selected_frame));
 					else:
 						existing["frame_idx"] = self.selected_frame;
+
+	def tick(self):
+		if self.tilemap == None:
+			return;
+		if self.tilemap["palette"] == "":
+			return;
+
+		match self._type():
+			case "sparse":
+				self.tick_sparse();
 	
 		self.handle_events();
 
@@ -193,6 +242,9 @@ class WallEditor:
 					if imgui.menu_item_simple("Delete"):
 						self.event_queue.append(DeleteWallEvent(wall));
 						imgui.close_current_popup();
+					if imgui.menu_item_simple("Duplicate"):
+						self.event_queue.append(CreateWallEvent(list(wall)));
+						imgui.close_current_popup();
 					imgui.end_popup();
 
 				if node_open:
@@ -212,19 +264,20 @@ class WallEditor:
 			case Orientation.SOUTH:
 				y1 = point[1];
 		if x1 - x0 > 0 and y1 - y0 > 0:
-			wall[0] = x0;
-			wall[1] = y0;
-			wall[2] = x1;
-			wall[3] = y1;
+			wall[0] = int(x0);
+			wall[1] = int(y0);
+			wall[2] = int(x1);
+			wall[3] = int(y1);
 	
 	def move_wall(self, wall, point):
 		x0, y0, x1, y1 = wall;
 		w, h = x1-x0, y1-y0;
 		x, y = point;
-		wall[0] = x;
-		wall[1] = y;
-		wall[2] = x+w;
-		wall[3] = y+h;
+		wall[0] = int(x);
+		wall[1] = int(y);
+		wall[2] = int(x+w);
+		wall[3] = int(y+h);
+
 	
 	def handle_events(self):
 		while len(self.event_queue) > 0:
@@ -447,6 +500,23 @@ class SceneEditor:
 							if self.canvas_config.snap_to_grid:
 								position = self.canvas_grid.snap_point(position);
 							entity["position"] = position;
+				else:
+					match event.signal:
+						case CanvasManipDrag.Signal.START:
+							self.selection_context["origin"] = self.canvas.origin;
+							x, y = event.point;
+							self.selection_context["point"] = self.canvas._transform(x, y);
+						case CanvasManipDrag.Signal.TICK:
+							ox, oy = self.selection_context["origin"];
+							x0, y0 = self.selection_context["point"];
+
+							x1, y1 = event.point;
+							x1, y1 =  self.canvas._transform(x1, y1);
+							dx, dy = x1-x0, y1-y0;
+							self.canvas.origin = ox+dx, oy+dy;
+							
+							self.selection_context["origin"] = self.canvas.origin;
+							self.selection_context["point"] = x1, y1;
 			
 			if isinstance(event, CreateEntityEvent):
 				self.scene["entities"].append(event.entity);
@@ -496,6 +566,11 @@ class SceneEditor:
 			if first[data["key"]] != i:
 				trash.append(data);
 		process_trash(entity["script_data"], trash);
+
+		def make_value(type):
+			match type:
+				case "vec2": return [0, 0];
+				case _: return ee_types.construct_type(signature["type"]).prototype();
 	
 		# Add missing signatures
 		for signature in signatures:
@@ -507,7 +582,7 @@ class SceneEditor:
 				entity["script_data"].append({
 					"key": signature["key"],
 					"type": signature["type"],
-					"value": ee_types.construct_type(signature["type"]).prototype()
+					"value": make_value(signature["type"])
 				});
 
 	def select_entity(self, entity):
@@ -591,6 +666,8 @@ class SceneEditor:
 								_, data["value"] = imgui.input_int(data["key"], data["value"]);
 							case "string":
 								_, data["value"] = imgui.input_text(data["key"], data["value"]);
+							case "vec2":
+								_, data["value"] = imgui.input_int2(data["key"], data["value"]);
 							case _:
 								if AssetManager.has_type(data["type"]):
 									data["value"] = imgui_asset_input("value", data["type"], data["value"]);
@@ -622,14 +699,15 @@ class SceneEditor:
 			imgui.tree_pop();
 	
 	def gui_draw_properties_editor(self):
-		r, g, b = self.scene["background"];
-		_, (r, g, b) = imgui.color_edit3("Background", (r/255, g/255, b/255));
-		self.scene["background"] = [int(r*255), int(g*255), int(b*255)];
+		_, self.scene["has_background"] = imgui.checkbox("Has background", self.scene["has_background"]);
+		if self.scene["has_background"]:
+			r, g, b = self.scene["background"];
+			_, (r, g, b) = imgui.color_edit3("Background", (r/255, g/255, b/255));
+			self.scene["background"] = [int(r*255), int(g*255), int(b*255)];
 
-		palette = self.scene["tilemap"]["palette"];
-		self.scene["tilemap"]["palette"] = imgui_asset_input(id(self.scene["tilemap"]["palette"]), "sprite", self.scene["tilemap"]["palette"]);
-		if self.scene["tilemap"]["palette"] != palette:
-			self.tilemap_editor.clamp();
+		_, self.scene["has_bounds"] = imgui.checkbox("Has bounds", self.scene["has_bounds"]);
+		if self.scene["has_bounds"]:
+			_, self.scene["bounds"] = imgui.input_int4("Bounds", self.scene["bounds"]);
 	
 	def canvas_draw_entity(self, entity):
 		x, y = entity["position"];
@@ -654,27 +732,49 @@ class SceneEditor:
 			self.canvas.draw_aabb(aabb, (255, 255, 255));
 	
 	def canvas_draw_tilemap(self):
-		for tile in self.scene["tilemap"]["tiles"]:
-			sprite = SpriteBank.get(self.scene["tilemap"]["palette"]);
-			frame_idx = clamp(tile["frame_idx"], 0, sprite.frame_count-1);
-			self.canvas.draw_image(
-				tile["position"][0], tile["position"][1],
-				sprite.frame_images[frame_idx]
-			);
+		tm = self.scene["tilemap"];
+		palette = SpriteBank.get(tm["palette"]);
 
-		if self.edit_mode == EditMode.TILEMAP:
-			cursor = self.canvas_io.get_cursor();
-			grid_cursor = self.canvas_grid.snap_point(cursor);
-			x0, y0 = grid_cursor;
-			x1, y1 = x0+16, y0+16;
-			self.canvas.draw_aabb(
-				(x0, y0, x1, y1),
-				(255, 255, 255),
-			);
+		match tm["type"]:
+			case "sparse":
+				for tile in tm["sparse"]:
+					
+					frame_idx = clamp(tile["frame_idx"], 0, palette.frame_count-1);
+					self.canvas.draw_image(
+						tile["position"][0], tile["position"][1],
+						palette.frame_images[frame_idx]
+					);
+
+				if self.edit_mode == EditMode.TILEMAP:
+					cursor = self.canvas_io.get_cursor();
+					grid_cursor = self.canvas_grid.snap_point(cursor);
+					x0, y0 = grid_cursor;
+					x1, y1 = x0+16, y0+16;
+					self.canvas.draw_aabb(
+						(x0, y0, x1, y1),
+						(255, 255, 255),
+					);
+			case "dense":
+				x0, y0 = tm["dense"]["position"];
+				w = tm["dense"]["columns"];
+				for row in range(tm["dense"]["rows"]):
+					y = y0 + row * 16;
+					for col in range(tm["dense"]["columns"]):
+						x = x0 + col * 16;
+						frame_idx = tm["dense"]["frame_indices"][row * w + col]-1;
+						if frame_idx >= 0:
+							frame_idx = clamp(frame_idx, 0, palette.frame_count-1);
+							self.canvas.draw_image(
+								x, y,
+								palette.frame_images[frame_idx]
+							);
 	
-	def canvas_draw_walls(self):
-		for wall in self.scene["walls"]:
+	def canvas_draw_bounds(self):
+		if self.scene["has_bounds"]:
+			self.canvas.draw_aabb(self.scene["bounds"], (128, 0, 0), False);
+		for idx, wall in enumerate(self.scene["walls"]):
 			self.canvas.draw_aabb(wall, (255, 0, 0), False);
+			self.canvas.draw_text(wall[:2], f"Wall {idx}", 8, (255, 255, 255));
 	
 	def canvas_draw_texts(self):
 		for text in self.scene["texts"]:
@@ -735,7 +835,11 @@ class SceneEditor:
 			self.canvas_draw_texts();
 		
 		if self.canvas_config.show_walls:
-			self.canvas_draw_walls();
+			self.canvas_draw_bounds();
+		
+		if InputManager.is_held(glfw.KEY_LEFT_SHIFT) and self.canvas_io.cursor_in_bounds():
+			x, y = self.canvas_io.get_cursor();
+			self.canvas.draw_text((x, y), f"({int(x)}, {int(y)})", 16, (255, 255, 255));
 
 		self.canvas.render();
 	
@@ -782,6 +886,14 @@ class SceneEditor:
 				);
 				self.text_editor.gui_draw_texts();
 				imgui.end_child();
+			case EditMode.PROPERTIES:
+				imgui.begin_child(
+					"Properties Window",
+					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
+					0, 0
+				);
+				self.gui_draw_properties_editor();
+				imgui.end_child();
 
 		imgui.same_line();
 		imgui.begin_child(
@@ -790,26 +902,17 @@ class SceneEditor:
 			0, 0
 		);
 
-		if imgui.begin_tab_bar("Scene Tabs"):
-
-			if imgui.begin_tab_item("Scene")[0]:
-				self.canvas_io.tick();
-				self.gui_draw_canvas();
-				match self.edit_mode:
-					case EditMode.ENTITIES:
-						self.canvas_manip.tick();
-					case EditMode.TILEMAP:
-						self.tilemap_editor.tick();
-					case EditMode.WALLS:
-						self.wall_editor.tick();
-					case EditMode.TEXTS:
-						self.text_editor.tick();
-				imgui.end_tab_item();
-			
-			if imgui.begin_tab_item("Properties")[0]:
-				self.gui_draw_properties_editor();
-				imgui.end_tab_item();
-			imgui.end_tab_bar();
+		self.canvas_io.tick();
+		self.gui_draw_canvas();
+		match self.edit_mode:
+			case EditMode.ENTITIES:
+				self.canvas_manip.tick();
+			case EditMode.TILEMAP:
+				self.tilemap_editor.tick();
+			case EditMode.WALLS:
+				self.wall_editor.tick();
+			case EditMode.TEXTS:
+				self.text_editor.tick();
 		
 		imgui.end_child();
 		

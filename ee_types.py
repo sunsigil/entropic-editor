@@ -336,8 +336,9 @@ class TypeReader:
 			return True;
 		return False;
 
-	def compare(self, type):
-		return self._compare(self.root().T, type);
+	def __eq__(self, value):
+		return self._compare(self.root().T, value);
+
 
 	def _construct_type(self, expr) -> Type:
 		if isinstance(expr, list):
@@ -411,7 +412,7 @@ class TypeHelper:
 		if not isinstance(T, Object):
 			if isinstance(T, List):
 				for child in node:
-					self._rectify(instance, child, T.T);
+					self._rectify(instance, child, T.T);					
 			return;
 
 		for e in T.elements:

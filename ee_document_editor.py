@@ -27,7 +27,7 @@ class DocumentEditor:
 		if isinstance(T, ee_types.Object):
 			object_open = imgui.tree_node(f"{title}####{entry_id}");
 			DocumentEditor._type_tooltip_here(T);
-			if AssetManager.active_document.type_reader.compare(T):
+			if T == AssetManager.active_document.type_reader.root().T:
 				if imgui.begin_popup_context_item():
 					if imgui.menu_item_simple("Delete"):
 						DocumentEditor._delete_queue.append(node);
@@ -128,16 +128,13 @@ class DocumentEditor:
 			
 			match type(T):
 				case ee_types.Int:
-					_, result = imgui.input_int(f"##{title}", int(node));
-					return result;
+					return int(imgui.input_int(f"##{title}", int(node))[1]);
 				case ee_types.Float:
-					_, result = imgui.input_float(f"##{title}", float(node));
-					return result;
+					return float(imgui.input_float(f"##{title}", float(node))[1]);
 				case ee_types.Bool:
-					return imgui.checkbox(f"##{title}", bool(node))[1];
+					return bool(imgui.checkbox(f"##{title}", bool(node))[1]);
 				case ee_types.String:
-					_, result = imgui.input_text(f"##{title}", str(node));
-					return result;
+					return str(imgui.input_text(f"##{title}", str(node))[1]);
 				case ee_types.Colour:
 					r, g, b = node;
 					_, (r, g, b) = imgui.color_edit3(f"##{title}", (r/255, g/255, b/255));
