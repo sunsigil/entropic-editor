@@ -80,10 +80,12 @@ def imgui_asset_input(ident, type, value):
 		result = harvest if harvest != None else result;
 	return result;
 
-def imgui_begin_column(ident, w):
+def imgui_begin_column(ident, w=None):
+	if w == None:
+		w = imgui.get_content_region_avail().x;
 	imgui.begin_child(
 		str(ident),
-		imgui.ImVec2(w, imgui.get_content_region_avail().y),
+		imgui.ImVec2(w, imgui.get_window_height()),
 		0, 0
 	);
 def imgui_end_column():

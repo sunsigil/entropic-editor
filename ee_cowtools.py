@@ -159,3 +159,8 @@ def aabb_point_sdf(aabb, point):
 	out_d = mag2d((out_dx, out_dy));
 	in_d = min(max([dx, dy]), 0);
 	return out_d + in_d;
+
+def process_trash(collection, trash):
+	while len(trash) > 0:
+		t = trash.pop();
+		collection.remove(t);

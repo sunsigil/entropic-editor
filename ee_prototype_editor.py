@@ -175,12 +175,30 @@ class PrototypeEditor:
 		self.gui_draw_selector();
 		imgui_end_column();
 
-		imgui_begin_column("scene_window", imgui.get_content_region_avail().x);
+		imgui_begin_column("scene_window");
 
 		self.gui_draw_canvas();
 
 		self.prototype["sprite"] = imgui_asset_input("sprite", "sprite", self.prototype["sprite"]);
-		self.prototype["script"] = imgui_asset_input("script", "script", self.prototype["script"]);
+		_, self.prototype["animated"] = imgui.checkbox("Animated", self.prototype["animated"]);
+
+		scripts_open = imgui.tree_node("Scripts");
+		if imgui.begin_popup_context_item():
+			if imgui.menu_item_simple("New script"):
+				self.prototype["scripts"].append("");
+			imgui.end_popup();
+		if scripts_open:
+			trash = [];
+			for i in range(len(self.prototype["scripts"])):
+				self.prototype["scripts"][i] = imgui_asset_input(f"script##{i}", "script", self.prototype["scripts"][i]);
+				if imgui.begin_popup_context_item():
+					if imgui.menu_item_simple("Delete"):
+						trash.append(i);
+					imgui.end_popup();
+			while len(trash) > 0:
+				i = trash.pop();
+				del self.prototype["scripts"][i];
+			imgui.tree_pop();
 
 		boxes_open = imgui.tree_node("Boxes");
 		if imgui.begin_popup_context_item():

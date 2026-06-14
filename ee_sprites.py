@@ -39,6 +39,9 @@ class EditorSprite:
 		self.raw_width = self.raw_image.width;
 		self.raw_height = self.raw_image.height;
 
+		if _is_image_black(self.raw_image):
+			self.raw_image = _invert_black(self.raw_image);
+
 		self.frame_count = max(frames, 1);
 		self.frame_width = self.raw_width;
 		self.frame_height = self.raw_height // self.frame_count;
@@ -51,8 +54,6 @@ class EditorSprite:
 		for (idx, frame) in enumerate(self.frame_images):
 			xy = (idx * self.frame_width, 0);
 			self.preview_image.paste(frame, xy);
-		if _is_image_black(self.preview_image):
-			self.preview_image = _invert_black(self.preview_image);
 		self.preview_texture = make_texture(self.preview_image.tobytes(), self.preview_width, self.preview_height);
 
 class SpriteBank:
@@ -91,11 +92,13 @@ class SpriteBank:
 		return SpriteBank.mapping[name];
 
 class SpritePreview:
-	def draw(name, path=None, frames=None):
+	def draw(name, path=None, frames=None, **kwargs):
 		sprite = SpriteBank.get(name, path, frames);
-		imgui.image(sprite.preview_texture, (sprite.preview_width * 2, sprite.preview_height * 2));
+		imgui.image(imgui.ImTextureRef(sprite.preview_texture), imgui.ImVec2(sprite.preview_width * 2, sprite.preview_height * 2));
+		if "show_dimensions" in kwargs and kwargs["show_dimensions"]:
+			imgui.text(f"{sprite.frame_width}x{sprite.frame_height}");
 
 	def draw_thumbnail(name, size):
 		sprite = SpriteBank.get(name);
 		aspect = sprite.frame_width / sprite.frame_height;
-		imgui.image(sprite.frame_textures[0], (aspect * size, size));
+		imgui.image(imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(aspect * size, size));

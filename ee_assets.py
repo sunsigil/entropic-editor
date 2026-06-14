@@ -2,7 +2,6 @@ from pathlib import Path;
 import json;
 import ee_types;
 import copy;
-import shutil;
 
 #########################################################
 ## DOCUMENT MODEL
@@ -16,18 +15,20 @@ class AssetDocument:
 		file.close();
 		
 		keys = self.data.keys();
-		self.type = next(k for k in keys if k != "instances");
-		self.typist = ee_types.Typist(self.type, self.data[self.type]);
-		self.type_helper = ee_types.TypeHelper(self.typist);
+		self.type_name = next(k for k in keys if k != "instances");
+		self.type_reader = ee_types.TypeReader(self.type_name, self.data[self.type_name]);
+		self.type_helper = ee_types.TypeHelper(self.type_reader);
 		self.instances = self.data["instances"];
 	
 		self.id_set = set();
-		if "id" in self.typist.root().T.keys():
+		if "id" in self.type_reader.root().T.keys():
 			for entry in self.instances:
 				self.id_set.add(entry["id"]);
 	
+		self.refresh();
+	
 	def take_free_id(self):
-		M = max(self.id_set);
+		M = max(self.id_set) if len(self.id_set) > 0 else 0;
 		i = 0;
 		while i <= M:
 			if not i in self.id_set:
@@ -40,7 +41,7 @@ class AssetDocument:
 	def spawn_entry(self, source=None):
 		new = self.type_helper.prototype();
 
-		new["name"] = f"new_{self.type}";
+		new["name"] = f"new_{self.type_name}";
 		if "id" in new:
 			new["id"] = self.take_free_id();
 		
@@ -66,7 +67,7 @@ class AssetDocument:
 			self.type_helper.rectify(self.instances[i]);
 	
 	def save(self):
-		if self.type in self.data and "instances" in self.data:
+		if self.type_name in self.data and "instances" in self.data:
 			file = open(self.path, "w");
 			file.seek(0);
 			file.truncate();
@@ -115,16 +116,16 @@ class AssetManager:
 						print(f"[AssetManager] Failed to load {filepath}!\n\t({e})");
 	
 	def types():
-		return [document.type for document in AssetManager.documents];
+		return [document.type_name for document in AssetManager.documents];
 
 	def has_type(name):
-		return name in [document.type for document in AssetManager.documents];
+		return name in [document.type_name for document in AssetManager.documents];
 
 	def get_document(name):
-		return next((document for document in AssetManager.documents if document.type == name), None);
+		return next((document for document in AssetManager.documents if document.type_name == name), None);
 
 	def get_assets(asset_type):
-		return next((document.instances for document in AssetManager.documents if document.type == asset_type), None);
+		return next((document.instances for document in AssetManager.documents if document.type_name == asset_type), None);
 
 	def search(asset_type, asset_name):
 		return next((asset for asset in AssetManager.get_assets(asset_type) if asset["name"] == asset_name), None);

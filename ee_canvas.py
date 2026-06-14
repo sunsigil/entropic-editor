@@ -78,7 +78,7 @@ class Canvas:
 		self.position = imgui.get_cursor_screen_pos();
 		glBindTexture(GL_TEXTURE_2D, self.texture);
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, self.width, self.height, GL_RGBA, GL_UNSIGNED_BYTE, self.image.tobytes());
-		imgui.image(self.texture, (self.width * self.scale, self.height * self.scale));
+		imgui.image(imgui.ImTextureRef(self.texture), imgui.ImVec2(self.width * self.scale, self.height * self.scale));
 
 class CanvasIO:
 	def __init__(self, canvas):

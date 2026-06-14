@@ -73,7 +73,7 @@ class RecipeEditor:
 			display_height = self.cell_size * self.canvas.scale;
 			scale_factor = display_height / true_height;
 			display_width = sprite.frame_width * scale_factor;
-			imgui.image(sprite.frame_textures[0], (display_width, display_height));
+			imgui.image(imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(display_width, display_height));
 
 			imgui.same_line();
 			imgui.set_next_item_width(self.canvas_size[0] * self.canvas.scale - display_width);

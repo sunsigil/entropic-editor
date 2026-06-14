@@ -42,6 +42,20 @@ class String(Primitive):
 		return isinstance(value, str);
 	def __repr__(self):
 		return "String";
+class Colour(Primitive):
+	def prototype(self) -> list[int]:
+		return [255, 255, 255];
+	def validate(self, value) -> bool:
+		return isinstance(value, list[int]) and len(value) == 3;
+	def __repr__(self):
+		return "Colour";
+class Any(Primitive):
+	def prototype(self):
+		return None;
+	def validate(self, value) -> bool:
+		return True;
+	def __repr__(self):
+		return "Any";
 
 class Enum(Type):
 	def __init__(self, expression):
@@ -187,8 +201,51 @@ class Element:
 
 	def validate(self, value) -> bool:
 		return self.T.validate(value);
+
+def construct_type(expr) -> Type:
+	if isinstance(expr, list):
+		return List(construct_type(expr[0]));
+
+	if isinstance(expr, dict):
+		elements = [];
+		for name in expr:
+			element_expr = expr[name];
+			element = construct_element(name, element_expr);
+			elements.append(element);
+		return Object(elements);
+
+	if isinstance(expr, str):
+		match expr:
+			case "int":
+				return Int();
+			case "float":
+				return Float();
+			case "bool":
+				return Bool();
+			case "string":
+				return String();
+			case "colour":
+				return Colour();
+			case "any":
+				return Any();
+
+		if re.match(r"enum\(([A-z0-9_]+)+(\,+\s*[A-z0-9_]+)*\)", expr):
+			return Enum(expr);
+		if re.match(r"flags\(([A-z0-9_]+)+(\,+\s*[A-z0-9_]+)*\)", expr):
+			return Flags(expr);
+
+		if re.match(r"\*.[A-z]+", expr):
+			return File(expr);
+
+	return Asset(expr);
+
+def construct_element(name, expr) -> Element:
+	T = construct_type(expr["type"]);
+	attributes = expr["attributes"] if "attributes" in expr else [];
+	conditions = expr["conditions"] if "conditions" in expr else [];
+	return Element(name, T, attributes, conditions);
 			
-class Typist:
+class TypeReader:
 	def root(self):
 		return self._root;
 
@@ -256,15 +313,41 @@ class Typist:
 		self._get_all_paths(self._root, "/", paths);
 		return paths;
 
+	def _compare(self, a, b):
+		if type(a) == type(b):
+			if isinstance(a, Object):
+				if len(a.elements) != len(b.elements):
+					return False;
+				equal = True;
+				for i in range(len(a.elements)):
+					equal &= self._compare(a.elements[i].T, b.elements[i].T);
+				return equal;
+			elif isinstance(a, List):
+				return self._compare(a.T, b.T);
+			elif isinstance(a, Asset):
+				return a.name == b.name;
+			elif isinstance(a, File):
+				return a.pattern == b.pattern;
+			elif isinstance(a, Flags) or isinstance(a, Enum):
+				equal = True;
+				for i in range(len(a.values)):
+					equal &= a.values[i] == b.values[i];
+				return equal;
+			return True;
+		return False;
+
+	def compare(self, type):
+		return self._compare(self.root().T, type);
+
 	def _construct_type(self, expr) -> Type:
 		if isinstance(expr, list):
-			return List(self._construct_type(expr[0]));
+			return List(construct_type(expr[0]));
 	
 		if isinstance(expr, dict):
 			elements = [];
 			for name in expr:
 				element_expr = expr[name];
-				element = self._construct_element(name, element_expr);
+				element = construct_element(name, element_expr);
 				elements.append(element);
 			return Object(elements);
 	
@@ -277,6 +360,10 @@ class Typist:
 				return Bool();
 			if expr == "string":
 				return String();
+			if expr == "colour":
+				return Colour();
+			if expr == "any":
+				return Any();
 
 			if re.match(r"enum\(([A-z]+)+(\,+\s*[A-z]+)*\)", expr):
 				return Enum(expr);
@@ -289,18 +376,18 @@ class Typist:
 		return Asset(expr);
 
 	def _construct_element(self, name, expr) -> Element:
-		T = self._construct_type(expr["type"]);
+		T = construct_type(expr["type"]);
 		attributes = expr["attributes"] if "attributes" in expr else [];
 		conditions = expr["conditions"] if "conditions" in expr else [];
 		return Element(name, T, attributes, conditions);
 
 	def __init__(self, name, expr):
-		self._root = self._construct_element(name, expr);
+		self._root = construct_element(name, expr);
 		self.path = [self._root];
 
 class TypeHelper:
-	def __init__(self, typist):
-		self.typist = typist;
+	def __init__(self, type_reader):
+		self.type_reader = type_reader;
 	
 	def _search(self, instance, path):
 		path_tokens = re.split(r"/", path);
@@ -308,6 +395,8 @@ class TypeHelper:
 		node = instance;
 		while path_tokens != []:
 			next_key = path_tokens.pop(0);
+			if not next_key in node:
+				return None;
 			node = node[next_key];
 		return node;
 
@@ -317,15 +406,6 @@ class TypeHelper:
 		for condition in conditions:
 			evaluation &= self._search(instance, condition["key"]) == condition["value"];
 		return evaluation;
-
-	def delete(self, instance, path):
-		path_tokens = re.split(r"/", path);
-		path_tokens = [t for t in path_tokens if t != ""];
-		node = instance;
-		while len(path_tokens) > 1:
-			next_key = path_tokens.pop(0);
-			node = node[next_key];
-		del node[path_tokens[0]];
 	
 	def _rectify(self, instance, node, T):
 		if not isinstance(T, Object):
@@ -355,22 +435,17 @@ class TypeHelper:
 	
 		for e in T.elements:
 			if e.name in node:
-				self._rectify(instance, node[e.name], e.T);		
+				self._rectify(instance, node[e.name], e.T);
 
 	def prototype(self, path="/", inner=False):
-		root = self.typist.search(path);
+		root = self.type_reader.search(path);
 		return root.prototype(inner);
 
 	def validate(self, instance) -> bool:
-		root = self.typist.search("/");
+		root = self.type_reader.search("/");
 		return root.validate(instance);
 
 	def rectify(self, instance):
-		root = self.typist.search("/");
+		root = self.type_reader.search("/");
 		self._rectify(instance, instance, root.T);
 
-	def collect(self, instance):
-		paths = self.typist.get_all_paths();
-		values = [self._search(instance, p) for p in paths];
-		paths = [p for (idx, p) in enumerate(paths) if values[idx] != None];
-		return [(p, values[idx]) for (idx, p) in enumerate(paths)];

@@ -38,3 +38,18 @@ class InputManager:
 
 	def is_released(key):
 		return InputManager._glfw_io[key][1] and not InputManager._glfw_io[key][0];
+
+	def is_command(keys):
+		if not InputManager.is_held(glfw.KEY_LEFT_SUPER):
+			return;
+		if isinstance(keys, list):
+			for idx, key in enumerate(keys):
+				if idx == len(keys)-1:
+					if not InputManager.is_pressed(key):
+						return False;
+				else:
+					if not InputManager.is_held(key):
+						return False;
+		if not InputManager.is_pressed(keys):
+			return False;
+		return True;

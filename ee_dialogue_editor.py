@@ -77,7 +77,7 @@ class GraphNode:
 			if imgui.button(f"-##edge{idx}"):
 				trash.append(idx);
 			imgui.same_line();
-			if edge["proc"] == "":
+			if edge["script"] == "":
 				imgui.set_next_item_width((len(edge["text"])+1) * 8);
 				_, edge["text"] = imgui.input_text(f"##edge{idx}", edge["text"]);
 				imgui.same_line();
@@ -91,7 +91,7 @@ class GraphNode:
 		imgui.dummy((max_line_width, 0));
 		imgui.same_line();
 		if imgui.button("+##edge"):
-			self.asset["edges"].append({"text" : "", "proc" : "", "node" : ""});
+			self.asset["edges"].append({"text" : "", "script" : "", "node" : ""});
 		for idx in trash:
 			del self.asset["edges"][idx];
 		imgui.end_group();
@@ -183,10 +183,11 @@ class DialogueGraph:
 			imgui.end_combo();
 		imgui.same_line();
 		if imgui.button(f"+##{id(self.node_buffer)}"):
-			forest = make_verdant(self.node_buffer);
-			for tree in forest:
-				if not tree in self.node_assets:
-					self.node_assets.append(tree);
+			if self.node_buffer != None:
+				forest = make_verdant(self.node_buffer);
+				for tree in forest:
+					if not tree in self.node_assets:
+						self.node_assets.append(tree);
 
 		trash = []
 		for node in self.node_assets:
@@ -208,7 +209,7 @@ class DialogueGraph:
 		for node in registry.nodes:
 			node.draw();
 			for (idx, edge) in enumerate(node.asset["edges"]):
-				if edge["node"] != "" and edge["proc"] == "":
+				if edge["node"] != "" and edge["script"] == "":
 					next_node = registry.search_by_name(edge["node"]);
 					if next_node != None:
 						registry.register_link(next(lid), node.out_pin_ids[idx], next_node.in_pin_id);
@@ -293,9 +294,9 @@ class DialogueEditor:
 									imgui.set_item_default_focus();
 							imgui.end_combo();
 						
-						imgui.text(f"proc");
+						imgui.text(f"script");
 						imgui.same_line();
-						_, edge["proc"] = imgui.input_text("##", str(edge["proc"]));
+						_, edge["script"] = imgui.input_text("##", str(edge["script"]));
 
 						imgui.tree_pop();
 					imgui.pop_id();

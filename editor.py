@@ -25,6 +25,7 @@ from ee_mesh2d_editor import Mesh2DEditor;
 from ee_document_editor import DocumentEditor;
 from ee_palette_viewer import PaletteViewer;
 from ee_asset_explorer import AssetExplorer;
+from ee_glyph_explorer import GlyphExplorer;
 
 #from ee_theme_editor import ThemeEditor;
 #from ee_anim_viewer import AnimationViewer;
@@ -43,10 +44,12 @@ if __name__ == "__main__":
 	ee_context.create_context(env, 1920, 1080);
 
 	AssetManager.initialize([
+		env["game_path"]/"assets",
 		env["game_path"]/"assets/sprites",
 		env["game_path"]/"assets/meshes",
 		env["game_path"]/"assets/data",
-		env["game_path"]/"assets/scripts"
+		env["game_path"]/"assets/scripts",
+		env["game_path"]/"assets/palettes"
 	]);
 	InputManager.initialize(ee_context.glfw_handle, ee_context.imgui_impl);
 
@@ -83,9 +86,10 @@ if __name__ == "__main__":
 	ToolWindowRegistry.register(ToolWindow(DialogueEditor, "Dialogue Editor", size=(1000, 600), flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(DialogueGraph, "Dialogue Graph", size=(1280, 720), flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(RecipeEditor, "Recipe Editor", flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(Mesh2DEditor, "Mesh2DEditor", flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(Mesh2DEditor, "Mesh2D Editor", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(PaletteViewer, "Palette Viewer", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(EnDeCoder, "EnDeCoder", flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
 
 	#ToolWindowRegistry.register(ToolWindow(ThemeEditor, "Theme Editor", flags=tool_flags));
 	#ToolWindowRegistry.register(ToolWindow(AnimationViewer, "Animation Viewer", flags=tool_flags));	
@@ -152,7 +156,7 @@ if __name__ == "__main__":
 		if AssetManager.active_document == None:
 			imgui.set_scroll_x(0);
 			imgui.set_scroll_y(0);
-			imgui.image(splash_tex, (splash_img.width, splash_img.height));
+			imgui.image(imgui.ImTextureRef(splash_tex), imgui.ImVec2(splash_img.width, splash_img.height));
 		else:
 			DocumentEditor.render(AssetManager.active_document);
 		

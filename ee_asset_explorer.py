@@ -12,6 +12,10 @@ class AssetExplorer:
 	def configure(self, target, type):
 		self.target = target;
 		self.type = type;
+	
+	def _is_private(self, x):
+		asset = AssetManager.search(self.type, x);
+		return "private" in asset and asset["private"];
 
 	def draw(self):
 		listings = [s["name"] for s in AssetManager.get_assets(self.type)];
@@ -19,6 +23,9 @@ class AssetExplorer:
 		_, self.search = imgui.input_text("Search", self.search);
 		if len(self.search) > 0:
 			listings = list(filter(lambda x: self.search in x, listings));
+		
+		listings = [x for x in listings if not self._is_private(x)];
+
 		listings.sort();
 		
 		wdw_w = imgui.get_content_region_avail().x/1.25;
@@ -31,12 +38,15 @@ class AssetExplorer:
 			for c in range(cols):
 				if i < len(listings):
 					imgui.begin_group();
+
 					asset = AssetManager.search(self.type, listings[i]);
 					sprite_name = listings[i] if self.type == "sprite" else (asset["sprite"] if "sprite" in asset else "");
 					sprite = SpriteBank.get(sprite_name);
-					if imgui.image_button(f"##{id(i)}", sprite.frame_textures[0], (64, 64)):
+
+					if imgui.image_button(f"##{id(i)}", imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(64, 64)):
 						self.result = listings[i];
 					imgui.text(listings[i][:min(10, len(listings[i]))]);
+
 					imgui.end_group();
 					imgui.same_line();
 				i += 1;
