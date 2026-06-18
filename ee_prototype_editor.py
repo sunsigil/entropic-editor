@@ -62,7 +62,7 @@ class PrototypeEditor:
 			self.canvas_manipulator.clear();
 			self.manip_map = {};
 			for box in self.prototype["boxes"]:
-				eeid = self.canvas_manipulator.register_shape(box["aabb"]);
+				eeid = self.canvas_manipulator.register_aabb(box["aabb"]);
 				self.manip_map[eeid] = id(box);
 	
 	def __init__(self):
@@ -81,6 +81,7 @@ class PrototypeEditor:
 		self.selection_context = {};
 
 		self.prototype_spawner = None;
+		self.draw_grid = True;
 
 		self._load_prototype(AssetManager.get_first("prototype"));
 	
@@ -154,15 +155,28 @@ class PrototypeEditor:
 					self.canvas.draw_line(x0, my, x0-16, my, colour);
 	
 	def gui_draw_canvas(self):
+		self.draw_grid = imgui.checkbox("Draw grid", self.draw_grid)[1];
+		imgui.same_line();
 		imgui.set_next_item_width(64);
 		_, self.canvas_grid.size = imgui.slider_int("Grid size", round(self.canvas_grid.size / 2) * 2, 2, 16);
 
 		self.canvas.clear((128, 128, 128));
-		self.canvas_grid.draw_lines((64, 64, 64));
+		if self.draw_grid:
+			self.canvas_grid.draw_lines((64, 64, 64));
 
 		if self.prototype != None:
 			sprite = SpriteBank.get(self.prototype["sprite"]);
 			self.canvas.draw_image(0, 0, sprite.frame_images[0]);
+
+			y = sprite.frame_height+self.prototype["y_sort_offset"];
+			w = self.canvas.width;
+			self.canvas.draw_line(-w, y, w, y, (255, 255, 0));
+
+			if self.prototype["override_prompt_position"]:
+				x, y = self.prototype["prompt_position"];
+				self.canvas.draw_line(x-4, y, x+4, y, (255, 255, 0));
+				self.canvas.draw_line(x, y-4, x, y+4, (255, 255, 0));
+
 			self.canvas_draw_boxes();
 	
 		self.canvas.render();
@@ -180,7 +194,12 @@ class PrototypeEditor:
 		self.gui_draw_canvas();
 
 		self.prototype["sprite"] = imgui_asset_input("sprite", "sprite", self.prototype["sprite"]);
-		_, self.prototype["animated"] = imgui.checkbox("Animated", self.prototype["animated"]);
+		_, self.prototype["y_sort_offset"] = imgui.input_int("Y Sort Offset", self.prototype["y_sort_offset"]);
+		_, self.prototype["override_prompt_position"] = imgui.checkbox("Override prompt position", self.prototype["override_prompt_position"]);
+		if self.prototype["override_prompt_position"]:
+			imgui.same_line();
+			x, y = self.prototype["prompt_position"];
+			_, self.prototype["prompt_position"] = imgui.input_int2("Prompt position", [int(x), int(y)]);
 
 		scripts_open = imgui.tree_node("Scripts");
 		if imgui.begin_popup_context_item():
@@ -191,7 +210,7 @@ class PrototypeEditor:
 			trash = [];
 			for i in range(len(self.prototype["scripts"])):
 				self.prototype["scripts"][i] = imgui_asset_input(f"script##{i}", "script", self.prototype["scripts"][i]);
-				if imgui.begin_popup_context_item():
+				if ContextHelper.request(i):
 					if imgui.menu_item_simple("Delete"):
 						trash.append(i);
 					imgui.end_popup();
@@ -216,6 +235,16 @@ class PrototypeEditor:
 				});
 			imgui.end_popup();
 		
+		for box in self.prototype["boxes"]:
+			if not box["aabb"] in self.manip_map.values():
+				eeid = self.canvas_manipulator.register_aabb(box["aabb"]);
+				self.manip_map[eeid] = id(box);
+		for eeid in self.manip_map:
+			box = self.search_manip_map(eeid);
+			if box != None:
+				shape = self.canvas_manipulator.get_shape(eeid);
+				shape.update(box["aabb"]);
+		
 		if boxes_open:
 			self.gui_draw_boxes();
 			imgui.tree_pop();
@@ -234,6 +263,9 @@ class PrototypeEditor:
 						"mode" : "click",
 						"eeid": event.eeid
 					};
+
+				if InputManager.is_held(glfw.KEY_LEFT_SHIFT) and self.prototype["override_prompt_position"]:
+					self.prototype["prompt_position"] = event.point;
 			
 			if isinstance(event, CanvasManipDrag):
 				if event.eeid == None:

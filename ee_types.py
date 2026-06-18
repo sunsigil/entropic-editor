@@ -3,6 +3,7 @@
 import abc;
 import re;
 import glob;
+import pathlib;
 
 class Type(abc.ABC):
 	@abc.abstractmethod
@@ -110,10 +111,8 @@ class Asset(Type):
 class List(Type):
 	def __init__(self, T):
 		self.T = T;
-	def prototype(self, fixed_length=False) -> list:
-		if fixed_length != False:
-			return [self.T.prototype() for i in range(fixed_length)];
-		elif isinstance(self.T, List):
+	def prototype(self) -> list:
+		if isinstance(self.T, List):
 			return [self.T.prototype()];
 		else:
 			return [];
@@ -129,7 +128,10 @@ class List(Type):
 
 class Object(Type):
 	def __init__(self, elements):
-		self.elements = elements;
+		self.elements : list[Element] = elements;
+	
+	def __repr__(self):
+		return f"Object({", ".join([str(e.T) for e in self.elements])})";
 	
 	def prototype(self) -> dict:
 		instance = {};
@@ -156,23 +158,15 @@ class Object(Type):
 
 		return True;
 
-	def __repr__(self):
-		return f"Object({", ".join([str(e.T) for e in self.elements])})";
-
-	def keys(self) -> list[str]:
-		return [e.name for e in self.elements];
-
 class Element:
 	def __init__(self, name, T, attributes = [], conditions = []):
 		self.name = name;
 		self.T = T;
 		self.attributes = attributes;
 		self.conditions = conditions;
+	
 	def __repr__(self):
 		return f"Element({self.name}, {self.T})";
-
-	def get_type(self) -> Type:
-		return self.T;
 
 	def get_attribute(self, attribute) -> bool:
 		if attribute in self.attributes:
@@ -180,27 +174,37 @@ class Element:
 		for a in self.attributes:
 			if isinstance(a, dict) and attribute in a:
 				return a[attribute];
-		return False;
+		return None;
 
-	def prototype(self, inner=False):
-		T = self.T;
+	def prototype(self):
+		default_value = self.get_attribute("default-value");
+		if default_value != None:
+			return default_value;
 
-		if inner:
-			while isinstance(T, List):
-				T = T.T;
-		else:
-			default_value = self.get_attribute("default-value");
-			if default_value != False:
-				return default_value;
-		
-			if isinstance(T, List):
-				fixed_length = self.get_attribute("fixed-length");
-				return T.prototype(fixed_length);
-	
-		return T.prototype();
+		fixed_length = self.get_attribute("fixed-length");
+		if fixed_length != None and isinstance(self.T, List):
+			return [self.T.T.prototype() for i in range(fixed_length)];
+
+		return self.T.prototype();
 
 	def validate(self, value) -> bool:
 		return self.T.validate(value);
+
+	def search(self, path):
+		if isinstance(path, str):
+			path = pathlib.PurePosixPath(path);
+		if isinstance(path, pathlib.PurePosixPath):
+			path = [x for x in list(path.parts) if x != "."];
+		if len(path) == 0:
+			return self;
+		
+		part = path.pop(0);
+		if isinstance(self.T, Object):
+			for child in self.T.elements:
+				if child.name == part:
+					return child.search(path);
+		
+		return None;
 
 def construct_type(expr) -> Type:
 	if isinstance(expr, list):
@@ -239,214 +243,128 @@ def construct_type(expr) -> Type:
 
 	return Asset(expr);
 
+def compare_types(a, b):
+	if type(a) == type(b):
+		if isinstance(a, Object):
+			if len(a.elements) != len(b.elements):
+				return False;
+			equal = True;
+			for i in range(len(a.elements)):
+				equal &= compare_types(a.elements[i].T, b.elements[i].T);
+			return equal;
+	
+		elif isinstance(a, List):
+			return compare_types(a.T, b.T);
+	
+		elif isinstance(a, Asset):
+			return a.name == b.name;
+	
+		elif isinstance(a, File):
+			return a.pattern == b.pattern;
+	
+		elif isinstance(a, Flags) or isinstance(a, Enum):
+			equal = True;
+			for i in range(len(a.values)):
+				equal &= a.values[i] == b.values[i];
+			return equal;
+		return True;
+
+	return False;
+
 def construct_element(name, expr) -> Element:
 	T = construct_type(expr["type"]);
 	attributes = expr["attributes"] if "attributes" in expr else [];
 	conditions = expr["conditions"] if "conditions" in expr else [];
 	return Element(name, T, attributes, conditions);
-			
-class TypeReader:
-	def root(self):
-		return self._root;
 
-	def _search(self, element, path_tokens) -> Element:
-		if path_tokens == []:
-			return element;
-		token = path_tokens[0];
-		T = element.T;
-		while isinstance(T, List):
-			T = T.T;
-		if isinstance(T, Object):
-			next_element = next(e for e in T.elements if e.name == token);
-			return self._search(next_element, path_tokens[1:]);
-
-	def search(self, path_str) -> Element:
-		path_tokens = re.split(r"/", path_str);
-		path_tokens = [t for t in path_tokens if t != ""];
-		return self._search(self._root, path_tokens);
-
-	def head(self) -> Element:
-		return self.path[-1];
-
-	def _push(self, key):
-		T = self.head().T;
-		while isinstance(T, List):
-			T = T.T;
-		matches = [e for e in T.elements if e.name == key];
-		self.path.append(matches[0]);
+class TNode:	
+	def __init__(self, parent: TNode, enode: Element, inode):
+		self.parent = parent;
+		self.update(enode, inode);
 	
-	def _pop(self):
-		self.path.pop(-1);
-	
-	def _reset(self):
-		self.path = [self._root];
-	
-	def _navigate(self, path_tokens):
-		if path_tokens == []:
-			return self.head();
-		next = path_tokens[0];
-		self._push(next);
-		self._navigate(path_tokens[1:]);
+	def update(self, enode: Element, inode):
+		self.enode = enode;
+		self.inode = inode;
+		self.children = {};
+		if isinstance(self.enode.T, Object):
+			for child in self.enode.T.elements:
+				self.children[child.name] = TNode(
+					self,
+					child,
+					self.inode[child.name] if self.inode != None and child.name in self.inode else None
+				);
 
-	def navigate(self, path_str):
-		is_abs_path = re.match(r"\/([A-z]+\/?)*", path_str);
-		if is_abs_path:
-			self._reset();
-		path_tokens = re.split(r"/", path_str);
-		path_tokens = [t for t in path_tokens if t != ""];
-		self._navigate(path_tokens);
-	
-	def get_path(self) -> str:
-		path_str = "/";
-		for p in self.path:
-			path_str += f"{p.name}/";
-		return path_str;
+	def search(self, path):
+		if isinstance(path, str):
+			path = path.strip();
+			if path[0] == "/":
+				root = self;
+				while root.parent != None:
+					root = root.parent;
+				return root.search(path[1:]);
+			else:
+				path = pathlib.PurePosixPath(path);
+		if isinstance(path, pathlib.PurePosixPath):
+			path = [x for x in list(path.parts) if x != "."];
+		if len(path) == 0:
+			return self;
 
-	def _get_all_paths(self, element, accumulator, tracker):
-		tracker.append(accumulator);
-		if isinstance(element.T, Object):
-			for e in element.T.elements:
-				self._get_all_paths(e, accumulator + f"{e.name}/", tracker);
-	
-	def get_all_paths(self):
-		paths = [];
-		self._get_all_paths(self._root, "/", paths);
-		return paths;
+		part = path.pop(0);
+		if part == "..":
+			if self.parent != None:
+				return self.parent.search(path);
+			return None;
 
-	def _compare(self, a, b):
-		if type(a) == type(b):
-			if isinstance(a, Object):
-				if len(a.elements) != len(b.elements):
-					return False;
-				equal = True;
-				for i in range(len(a.elements)):
-					equal &= self._compare(a.elements[i].T, b.elements[i].T);
-				return equal;
-			elif isinstance(a, List):
-				return self._compare(a.T, b.T);
-			elif isinstance(a, Asset):
-				return a.name == b.name;
-			elif isinstance(a, File):
-				return a.pattern == b.pattern;
-			elif isinstance(a, Flags) or isinstance(a, Enum):
-				equal = True;
-				for i in range(len(a.values)):
-					equal &= a.values[i] == b.values[i];
-				return equal;
-			return True;
-		return False;
-
-	def __eq__(self, value):
-		return self._compare(self.root().T, value);
-
-
-	def _construct_type(self, expr) -> Type:
-		if isinstance(expr, list):
-			return List(construct_type(expr[0]));
-	
-		if isinstance(expr, dict):
-			elements = [];
-			for name in expr:
-				element_expr = expr[name];
-				element = construct_element(name, element_expr);
-				elements.append(element);
-			return Object(elements);
-	
-		if isinstance(expr, str):
-			if expr == "int":
-				return Int();
-			if expr == "float":
-				return Float();
-			if expr == "bool":
-				return Bool();
-			if expr == "string":
-				return String();
-			if expr == "colour":
-				return Colour();
-			if expr == "any":
-				return Any();
-
-			if re.match(r"enum\(([A-z]+)+(\,+\s*[A-z]+)*\)", expr):
-				return Enum(expr);
-			if re.match(r"flags\(([A-z]+)+(\,+\s*[A-z]+)*\)", expr):
-				return Flags(expr);
-
-			if re.match(r"\*.[A-z]+", expr):
-				return File(expr);
-
-		return Asset(expr);
-
-	def _construct_element(self, name, expr) -> Element:
-		T = construct_type(expr["type"]);
-		attributes = expr["attributes"] if "attributes" in expr else [];
-		conditions = expr["conditions"] if "conditions" in expr else [];
-		return Element(name, T, attributes, conditions);
-
-	def __init__(self, name, expr):
-		self._root = construct_element(name, expr);
-		self.path = [self._root];
+		if part in self.children:
+			return self.children[part].search(path);
+		
+		return None;
 
 class TypeHelper:
-	def __init__(self, type_reader):
-		self.type_reader = type_reader;
+	def __init__(self, name, expr):
+		self.abstract_tree = construct_element(name, expr);
 	
-	def _search(self, instance, path):
-		path_tokens = re.split(r"/", path);
-		path_tokens = [t for t in path_tokens if t != ""];
-		node = instance;
-		while path_tokens != []:
-			next_key = path_tokens.pop(0);
-			if not next_key in node:
-				return None;
-			node = node[next_key];
-		return node;
+	def search(self, path):
+		return self.abstract_tree.search(path);
 
-	def _evaluate_conditions(self, instance, element) -> bool:
-		conditions = element.conditions;
+	def _evaluate_conditions(self, tnode) -> bool:
+		conditions = tnode.enode.conditions;
 		evaluation = True;
 		for condition in conditions:
-			evaluation &= self._search(instance, condition["key"]) == condition["value"];
+			crux = tnode.search(condition["key"]);
+			evaluation &= crux != None and crux.inode == condition["value"];
 		return evaluation;
 	
-	def _rectify(self, instance, node, T):
-		if not isinstance(T, Object):
-			if isinstance(T, List):
-				for child in node:
-					self._rectify(instance, child, T.T);					
+	def _rectify(self, tnode):
+		if not isinstance(tnode.enode.T, Object):
 			return;
-
-		for e in T.elements:
-			if not e.name in node:
-				node[e.name] = e.prototype();
-		
+	
+		# Exclusion pass
+		canon_keys = [name for name in tnode.children];
 		violations = [];
-		for e in T.elements:
-			if not self._evaluate_conditions(instance, e):
-				violations.append(e.name);
-		for key in violations:
-			del node[key];
-
-		violations = [];
-		canon_keys = [e.name for e in T.elements];
-		for key in node:
+		for key in tnode.inode:
 			if not key in canon_keys:
 				violations.append(key);
 		for key in violations:
-			del node[key];
+			del tnode.inode[key];
+
+		# Requirement pass
+		for name,child in tnode.children.items():
+			if child.inode == None:
+				child.update(child.enode, child.enode.prototype());
+
+		# Propagation pass
+		for name,child in tnode.children.items():
+			self._rectify(child);
 	
-		for e in T.elements:
-			if e.name in node:
-				self._rectify(instance, node[e.name], e.T);
-
-	def prototype(self, path="/", inner=False):
-		root = self.type_reader.search(path);
-		return root.prototype(inner);
-
-	def validate(self, instance) -> bool:
-		root = self.type_reader.search("/");
-		return root.validate(instance);
+		# Conditions pass
+		violations = [];
+		for name,child in tnode.children.items():
+			if not self._evaluate_conditions(child):
+				violations.append(name);
+		for name in violations:
+			del tnode.children[name];
 
 	def rectify(self, instance):
-		root = self.type_reader.search("/");
-		self._rectify(instance, instance, root.T);
+		self._rectify(TNode(None, self.abstract_tree, instance));
 

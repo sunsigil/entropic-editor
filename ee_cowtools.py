@@ -4,6 +4,8 @@ from OpenGL.GL import *;
 from imgui_bundle import imgui;
 import math;
 from enum import Enum;
+import copy;
+import numpy as np;
 
 class Orientation(Enum):
 	EAST = 0
@@ -96,9 +98,16 @@ def aabb_point_dist(aabb, point):
 def cross2d(a, b):
 	return a[0]*b[1] - a[1]*b[0];
 
-def mag2d(v):
-	x, y = v;
-	return math.sqrt(x*x+y*y);
+def dot(a, b):
+	if len(a) != len(b):
+		return None;
+	result = 0;
+	for i in range(len(a)):
+		result += a[i]*b[i];
+	return result;
+
+def magnitude(v):
+	return math.sqrt(dot(v, v));
 
 def is_left(a, b, c):
 	ab = (b[0]-a[0], b[1]-a[1]);
@@ -117,6 +126,17 @@ def aabb_closest_edge(aabb, point):
 	if not ne and nw:
 		return Orientation.EAST;
 	return Orientation.NORTH;
+
+def segment_closest_end(segment, point):
+	a, b = segment;
+	a = np.array(segment[0]);
+	b = np.array(segment[1]);
+	p = np.array(point);
+	da = np.linalg.norm(p-a);
+	db = np.linalg.norm(p-b);
+	if db < da:
+		return 1;
+	return 0;
 
 def aabb_closest_point(aabb, point):
 	if not aabb_contains_point(aabb, point):
@@ -156,11 +176,87 @@ def aabb_point_sdf(aabb, point):
 	dy = max([y0 - y, y - y1]);
 	out_dx = max(dx, 0);
 	out_dy = max(dy, 0);
-	out_d = mag2d((out_dx, out_dy));
+	out_d = magnitude((out_dx, out_dy));
 	in_d = min(max([dx, dy]), 0);
 	return out_d + in_d;
+
+def segment_point_sdf(segment, point):
+	a = np.array(segment[0]);
+	b = np.array(segment[1]);
+	p = np.array(point);
+	h = min(1, max(0, np.dot(p-a, b-a)/ np.dot(b-a, b-a)));
+	return np.linalg.norm(p-a-(b-a)*h);
 
 def process_trash(collection, trash):
 	while len(trash) > 0:
 		t = trash.pop();
 		collection.remove(t);
+
+def shape_aabb(aabb, edge, point):
+	aabb = copy.copy(aabb);
+
+	x0, y0, x1, y1 = aabb;
+	match edge:
+		case Orientation.EAST:
+			x1 = point[0];
+		case Orientation.NORTH:
+			y0 = point[1];
+		case Orientation.WEST:
+			x0 = point[0];
+		case Orientation.SOUTH:
+			y1 = point[1];
+	if x1 - x0 > 0 and y1 - y0 > 0:
+		aabb = x0, y0, x1, y1;
+	
+	return aabb;
+
+def relocate_aabb(aabb, point):
+	aabb = copy.copy(aabb);
+
+	x0, y0, x1, y1 = aabb;
+	w, h = x1-x0, y1-y0;
+	x, y = point;
+
+	return x, y, x+w, y+h;
+
+def shape_segment(segment, end, point):
+	segment = copy.copy(segment);
+
+	a, b = segment;
+	x0, y0 = a;
+	x1, y1 = b;
+
+	match end:
+		case 0:
+			x0, y0 = point;
+		case 1:
+			x1, y1 = point;
+	if x0 != x1 or y0 != y1:
+		a = x0, y0;
+		b = x1, y1;
+		segment = a, b;
+	
+	return segment;
+
+def relocate_segment(segment, point):
+	segment = copy.copy(segment);
+
+	(x0, y0), (x1, y1) = segment;
+	dx, dy = x1-x0, y1-y0;
+	x, y = point;
+
+	a = x, y;
+	b = x+dx, y+dy;
+	return a, b;
+
+def lstcopy(dst, src, deep=False):
+	N = min(len(src), len(dst));
+	for i in range(N):
+		if deep:
+			dst[i] = copy.deepcopy(src[i]);
+		else:
+			dst[i] = src[i];
+
+def lstapply(lst, f):
+	for i in range(len(lst)):
+		lst[i] = f(lst[i]);

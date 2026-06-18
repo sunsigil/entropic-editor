@@ -16,12 +16,11 @@ class AssetDocument:
 		
 		keys = self.data.keys();
 		self.type_name = next(k for k in keys if k != "instances");
-		self.type_reader = ee_types.TypeReader(self.type_name, self.data[self.type_name]);
-		self.type_helper = ee_types.TypeHelper(self.type_reader);
+		self.type_helper = ee_types.TypeHelper(self.type_name, self.data[self.type_name]);
 		self.instances = self.data["instances"];
 	
 		self.id_set = set();
-		if "id" in self.type_reader.root().T.keys():
+		if self.type_helper.search("id") != None:
 			for entry in self.instances:
 				self.id_set.add(entry["id"]);
 	
@@ -39,7 +38,7 @@ class AssetDocument:
 		return M+1;
 	
 	def spawn_entry(self, source=None):
-		new = self.type_helper.prototype();
+		new = self.type_helper.abstract_tree.prototype();
 
 		new["name"] = f"new_{self.type_name}";
 		if "id" in new:
@@ -108,12 +107,12 @@ class AssetManager:
 			for filepath in directory.iterdir():
 				ext = filepath.suffix;
 				if ext == ".json":
-					try:
-						document = AssetDocument(filepath);
-						AssetManager.documents.append(document);
-						print(f"[AssetManager] Loaded {filepath}");
-					except Exception as e:
-						print(f"[AssetManager] Failed to load {filepath}!\n\t({e})");
+					#try:
+					document = AssetDocument(filepath);
+					AssetManager.documents.append(document);
+					print(f"[AssetManager] Loaded {filepath}");
+					# Exception as e:
+						#print(f"[AssetManager] Failed to load {filepath}!\n\t({e})");
 	
 	def types():
 		return [document.type_name for document in AssetManager.documents];
@@ -121,7 +120,7 @@ class AssetManager:
 	def has_type(name):
 		return name in [document.type_name for document in AssetManager.documents];
 
-	def get_document(name):
+	def get_document(name) -> AssetDocument:
 		return next((document for document in AssetManager.documents if document.type_name == name), None);
 
 	def get_assets(asset_type):

@@ -15,18 +15,18 @@ class FileExplorer:
 		self.current = None;
 
 		self.search = "";
-		self.type = None;
+		self.asset_type = None;
 		self.filter_unused = False;
 	
 		self.result = None;
 	
-	def configure(self, target, anchor, glob, type=None):
+	def configure(self, target, anchor, glob, asset_type=None):
 		refresh = FileExplorer.last == None or anchor != FileExplorer.last.anchor;
 
 		self.target = target;
 		self.anchor = Path(anchor);
 		self.glob = glob;
-		self.type = type;
+		self.asset_type = asset_type;
 
 		if refresh:
 			self.current = self.anchor;
@@ -54,7 +54,7 @@ class FileExplorer:
 		if len(self.search) > 0:
 			listings = list(filter(lambda x: self.search in str(x.name), listings));
 		
-		if self.type != None:
+		if self.asset_type != None:
 			assets = AssetManager.get_assets("sprite");
 			if len(assets) > 0 and "path" in assets[0]:
 				_, self.filter_unused = imgui.checkbox("Unused", self.filter_unused);

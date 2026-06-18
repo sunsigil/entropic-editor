@@ -181,6 +181,18 @@ class CanvasManipRect:
 		x0, y0, x1, y1 = aabb;
 		self.aabb = (x0, y0, x1, y1);
 
+class CanvasManipSegment:
+	def __init__(self, eeid, segment):
+		self.segment = segment;
+		self.eeid = eeid;
+
+	def distance(self, point):
+		# SDF radius of 4
+		return segment_point_sdf(self.segment, point)-4;
+
+	def update(self, segment):
+		self.segment = segment;
+
 class CanvasManipClick:
 	def __init__(self, eeid, point, distance=None):
 		self.eeid = eeid;
@@ -234,14 +246,28 @@ class CanvasManipulator:
 		self.clicked_eeid = None;
 		self.drag_started = False;
 
-	def register_shape(self, aabb):
+	def register_aabb(self, aabb):
 		eeid = next(self.eeid);
 		shape = CanvasManipRect(eeid, aabb);
 		self.shapes.append(shape);
 		return eeid;
 
+	def register_segment(self, segment):
+		eeid = next(self.eeid);
+		shape = CanvasManipSegment(eeid, segment);
+		self.shapes.append(shape);
+		return eeid;
+
 	def get_shape(self, eeid):
 		return self._get_by_eeid(eeid);
+
+	def delete_shape(self, eeid):
+		trash = [];
+		for shape in self.shapes:
+			if shape.eeid == eeid:
+				trash.append(shape);
+		for t in trash:
+			self.shapes.remove(t);
 
 	def tick(self):
 		cursor = self.canvas_io.in_bounds_cursor();
@@ -263,13 +289,13 @@ class CanvasManipulator:
 				self.clicked_point = cursor;
 				shape = self._get_by_point(cursor);
 				eeid = shape.eeid if shape != None else None;
-				distance = aabb_point_sdf(shape.aabb, self.clicked_point) if shape != None else None;
+				distance = shape.distance(self.clicked_point) if shape != None else None;
 				self.event_queue.append(CanvasManipClick(eeid, cursor, distance));
 				self.clicked_eeid = eeid;
 		
 			if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT) and self.clicked_point != None:
 				shape = self._get_by_eeid(self.clicked_eeid);
-				distance = aabb_point_sdf(shape.aabb, self.clicked_point) if shape != None else None;
+				distance = shape.distance(self.clicked_point) if shape != None else None;
 
 				if not self.drag_started:
 					movement = point_point_dist(cursor, self.clicked_point);

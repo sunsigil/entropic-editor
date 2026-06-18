@@ -158,6 +158,7 @@ if __name__ == "__main__":
 			imgui.set_scroll_y(0);
 			imgui.image(imgui.ImTextureRef(splash_tex), imgui.ImVec2(splash_img.width, splash_img.height));
 		else:
+			AssetManager.active_document.refresh();
 			DocumentEditor.render(AssetManager.active_document);
 		
 		for tool in ToolWindowRegistry.all():
