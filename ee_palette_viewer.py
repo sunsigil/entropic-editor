@@ -119,14 +119,14 @@ class PaletteViewer:
 				self.palette = palette;
 	
 	def draw(self):
-		imgui_begin_column("selector", imgui.get_content_region_avail().x * 0.1);
+		eegui_begin_column("selector", imgui.get_content_region_avail().x * 0.1);
 		palette_last = self.palette;
 		self.gui_draw_selector();
 		if self.palette != palette_last:
 			self.cursor = 0;
-		imgui_end_column();
+		eegui_end_column();
 
-		imgui_begin_column("views", self.max_cols * self.tile_size * 1.1);
+		eegui_begin_column("views", self.max_cols * self.tile_size * 1.1);
 		if self.palette != None:
 			pipeline = PalettePipeline(self.palette);
 
@@ -146,9 +146,9 @@ class PaletteViewer:
 				self.release_view(view);
 		
 			self.cursor = clamp(self.cursor, 0, len(self.palette["colours"])-1);
-		imgui_end_column();
+		eegui_end_column();
 
-		imgui_begin_column("edit", imgui.get_content_region_avail().x);
+		eegui_begin_column("edit", imgui.get_content_region_avail().x);
 		if self.palette != None:
 			if len(self.palette["colours"]) > 0:
 				colour = self.palette["colours"][self.cursor];
@@ -175,7 +175,7 @@ class PaletteViewer:
 		
 			if InputManager.is_command(glfw.KEY_C):
 				self.clipboard = copy.copy(colour);
-		imgui_end_column();
+		eegui_end_column();
 
 			
 				

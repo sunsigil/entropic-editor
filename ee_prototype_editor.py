@@ -185,11 +185,11 @@ class PrototypeEditor:
 	
 	def draw(self):
 
-		imgui_begin_column("prototype_window", imgui.get_content_region_avail().x * 0.15);
+		eegui_begin_column("prototype_window", imgui.get_content_region_avail().x * 0.15);
 		self.gui_draw_selector();
-		imgui_end_column();
+		eegui_end_column();
 
-		imgui_begin_column("scene_window");
+		eegui_begin_column("scene_window");
 
 		self.gui_draw_canvas();
 
@@ -249,7 +249,7 @@ class PrototypeEditor:
 			self.gui_draw_boxes();
 			imgui.tree_pop();
 		
-		imgui_end_column();
+		eegui_end_column();
 		imgui.new_line();
 
 		while len(self.event_queue) > 0:

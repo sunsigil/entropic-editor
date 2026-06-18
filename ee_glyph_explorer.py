@@ -25,13 +25,13 @@ class GlyphExplorer:
 		self.key = list(self.filters.keys())[0];
 
 	def draw(self):
-		imgui_begin_column("filter_window", imgui.get_content_region_avail().x * 0.15);
+		eegui_begin_column("filter_window", imgui.get_content_region_avail().x * 0.15);
 		for filter in self.filters:
 			if imgui.menu_item(filter, "", p_selected = self.key == filter)[0]:
 				self.key = filter;
-		imgui_end_column();
+		eegui_end_column();
 
-		imgui_begin_column("glyph_window");
+		eegui_begin_column("glyph_window");
 		count = 0;
 		for i in range(0, 128):
 			if self.filters[self.key](str(chr(i))):
@@ -44,4 +44,4 @@ class GlyphExplorer:
 					imgui.new_line();
 					count = 0;
 		imgui.new_line();
-		imgui_end_column();
+		eegui_end_column();

@@ -9,10 +9,26 @@ from ee_imgui import *;
 import copy;
 
 class DocumentEditor:
-	def render(doc : AssetDocument):
-		for instance in doc.instances:
+	show_typetip = False;
+
+	search_term = "";
+	search_cache = [];
+
+	def draw(doc : AssetDocument):
+		_, DocumentEditor.show_typetip = imgui.checkbox("Show typetip", DocumentEditor.show_typetip);
+
+		search_refresh, DocumentEditor.search_term = imgui.input_text("Search", DocumentEditor.search_term);
+		if search_refresh:
+			DocumentEditor.search_term = DocumentEditor.search_term.strip();
+			DocumentEditor.search_cache = [];
+			for instance in doc.instances:
+				if "name" in instance and DocumentEditor.search_term in instance["name"]:
+					DocumentEditor.search_cache.append(instance);
+		
+		working_list = DocumentEditor.search_cache if len(DocumentEditor.search_cache) > 0 else doc.instances;
+		for instance in working_list:
 			eegui_typed_input(
-				id(instance),
+				f"{instance["name"]}####{id(instance)}" if "name" in instance else id(instance),
 				doc.type_helper.abstract_tree.T, instance,
-				pretty=True
+				previews=True, tooltip=DocumentEditor.show_typetip
 			);
