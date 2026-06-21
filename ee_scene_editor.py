@@ -927,7 +927,7 @@ class SceneEditor:
 		if self.canvas_config.show_walls:
 			self.canvas_draw_walls();
 		
-		if InputManager.is_held(glfw.KEY_LEFT_SHIFT) and self.canvas_io.cursor_in_bounds():
+		if InputManager.is_held(glfw.KEY_LEFT_SHIFT) and self.canvas_io.is_cursor_in_bounds():
 			x, y = self.canvas_io.get_cursor();
 			self.canvas.draw_text((x, y), f"({int(x)}, {int(y)})", 16, (255, 255, 255));
 

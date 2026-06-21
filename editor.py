@@ -132,19 +132,6 @@ if __name__ == "__main__":
 				if imgui.menu_item_simple("Close", enabled=AssetManager.active_document != None):
 					AssetManager.active_document = None;
 				imgui.end_menu();
-
-			if imgui.begin_menu("Assets", enabled=AssetManager.active_document != None):
-				if imgui.begin_menu("Sort", enabled=AssetManager.active_document != None):
-					if imgui.menu_item_simple("Name"):
-						DocumentHelper.sort_by_name(AssetManager.active_document);
-					if imgui.menu_item_simple("Number"):
-						DocumentHelper.sort_by_number(AssetManager.active_document);
-					if imgui.menu_item_simple("Rank"):
-						DocumentHelper.sort_by_rank(AssetManager.active_document);
-					imgui.end_menu();
-				if imgui.menu_item_simple("New"):
-					AssetManager.active_document.spawn_entry();
-				imgui.end_menu();
 			
 			if imgui.begin_menu("Tools"):
 				for tool in ToolWindowRegistry.all():

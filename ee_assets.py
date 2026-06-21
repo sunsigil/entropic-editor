@@ -73,27 +73,6 @@ class AssetDocument:
 			file.write(json.dumps(self.data, indent=4));
 			file.close();
 
-class DocumentHelper:
-	def get_name(node):
-		if "name" in node:
-			return node["name"];
-		elif "path" in node:
-			return node["path"];
-		elif "id" in node:
-			return node["id"];
-		return str(id(node));
-
-	def get_number(node):
-		if "id" in node:
-			return node["id"];
-		return id(node);
-
-	def sort_by_name(doc):
-		doc.instances.sort(key=DocumentHelper.get_name);
-	
-	def sort_by_number(doc):
-		doc.instances.sort(key=DocumentHelper.get_name);
-
 class AssetManager:
 	directories = [];
 	documents = [];
@@ -107,13 +86,18 @@ class AssetManager:
 			for filepath in directory.iterdir():
 				ext = filepath.suffix;
 				if ext == ".json":
-					#try:
-					document = AssetDocument(filepath);
-					AssetManager.documents.append(document);
-					print(f"[AssetManager] Loaded {filepath}");
-					# Exception as e:
-						#print(f"[AssetManager] Failed to load {filepath}!\n\t({e})");
-	
+					safe = False;
+					if safe:
+						try:
+							document = AssetDocument(filepath);
+							AssetManager.documents.append(document);
+							print(f"[AssetManager] Loaded {filepath}");
+						except Exception as e:
+							print(f"[AssetManager] Failed to load {filepath}!\n\t({e})");
+					else:
+						document = AssetDocument(filepath);
+						AssetManager.documents.append(document);
+						print(f"[AssetManager] Loaded {filepath}");
 	def types():
 		return [document.type_name for document in AssetManager.documents];
 

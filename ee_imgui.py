@@ -144,7 +144,7 @@ def eegui_input_file(gui_id, value, pattern, directory=None, asset_type=None):
 
 # Special Data
 
-def eegui_input_assset(gui_id, value, asset_type):
+def eegui_input_asset(gui_id, value, asset_type):
 	value = eegui_input_string(gui_id, value);
 
 	imgui.same_line();
@@ -214,7 +214,7 @@ def eegui_typed_input(gui_id, T, value, previews=False, tooltip=False):
 			match T.name:
 				case "sprite":
 					ee_sprites.SpritePreview.draw(value);
-		value = eegui_input_assset(gui_id, value, T.name);
+		value = eegui_input_asset(gui_id, value, T.name);
 	
 	if isinstance(T, ee_types.File):
 		if previews:
@@ -248,8 +248,11 @@ def eegui_input_aabb(gui_id, value, mode="xyxy"):
 	match mode:
 		case "xyxy":
 			x0, y0, x1, y1 = value;
+			imgui.begin_group();
 			x0, y0 = imgui.input_int2(f"X0 Y0##{gui_id}", [int(x0), int(y0)])[1];
 			x1, y1 = imgui.input_int2(f"X1 Y1##{gui_id}", [int(x1), int(y1)])[1];
+			imgui.end_group();
+			EEGUIContextMenu.ping(gui_id);
 			return x0, y0, x1, y1;
 		case "xywh":
 			x0, y0, x1, y1 = value;
@@ -257,6 +260,11 @@ def eegui_input_aabb(gui_id, value, mode="xyxy"):
 			x0, y0 = imgui.input_int2(f"X Y##{gui_id}", [int(x0), int(y0)])[1];
 			w, h = imgui.input_int2(f"W H##{gui_id}", [int(w), int(h)])[1];
 			return x0, y0, x0+w, y0+h;
+	return value;
+
+def eegui_input_vec2(gui_id, value):
+	value = imgui.input_int2(gui_id, [int(value[0]), int(value[1])])[1];
+	EEGUIContextMenu.ping(gui_id);
 	return value;
 
 # Layout

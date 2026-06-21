@@ -8,6 +8,7 @@ from ee_assets import *;
 from ee_sprites import SpriteBank;
 from ee_input import InputManager;
 from ee_imgui import *;
+from ee_geometry import *;
 
 class PrototypeSpawner:
 	def __init__(self):
@@ -33,7 +34,7 @@ class PrototypeSpawner:
 		imgui.set_next_window_size(self.size);
 		_, open = imgui.begin("Create prototype", not self.finished);
 
-		self.prototype["sprite"] = imgui_asset_input("new_sprite", "sprite", self.prototype["sprite"]);
+		self.prototype["sprite"] == eegui_input_asset("sprite", self.prototype["sprite"], "sprite");
 	
 		if AssetManager.search("sprite", self.prototype["sprite"]) != None and imgui.button("Create"):
 			self.autofill();
@@ -58,12 +59,8 @@ class PrototypeEditor:
 		if prototype != None:
 			sprite = SpriteBank.get(self.prototype["sprite"]);
 			self.canvas.origin = (128-sprite.frame_width//2, 128-sprite.frame_height//2);
-
-			self.canvas_manipulator.clear();
-			self.manip_map = {};
-			for box in self.prototype["boxes"]:
-				eeid = self.canvas_manipulator.register_aabb(box["aabb"]);
-				self.manip_map[eeid] = id(box);
+			self.canvas_manip.clear();
+			self.manip_registry = CanvasManipRegistry();
 	
 	def __init__(self):
 		self.canvas_size = (256, 256);
@@ -76,23 +73,14 @@ class PrototypeEditor:
 		);
 
 		self.event_queue = [];
-		self.canvas_manipulator = CanvasManipulator(self.canvas_io, self.event_queue);
-		self.manip_map = {};
+		self.canvas_manip = CanvasManipulator(self.canvas_io, self.event_queue);
+		self.manip_registry = CanvasManipRegistry();
 		self.selection_context = {};
 
 		self.prototype_spawner = None;
 		self.draw_grid = True;
 
 		self._load_prototype(AssetManager.get_first("prototype"));
-	
-	def search_manip_map(self, eeid):
-		if self.prototype == None:
-			return None;
-		py_id = self.manip_map[eeid];
-		for box in self.prototype["boxes"]:
-			if id(box) == py_id:
-				return box;
-		return None;
 	
 	def gui_draw_selector(self):
 		protoypes = sorted(AssetManager.get_assets("prototype"), key=lambda x: x["name"]);
@@ -118,23 +106,63 @@ class PrototypeEditor:
 				self.prototype_spawner = None;
 	
 	def gui_draw_boxes(self):
-		trash = [];
-		for i, box in enumerate(self.prototype["boxes"]):
-			node_open = imgui.tree_node(f"{box["type"].title()} {i}##{id(box)}");
+		boxes_open = imgui.tree_node("Boxes");
+		if imgui.begin_popup_context_item():
+			if imgui.menu_item_simple("New blocker"):
+				self.prototype["boxes"].append({
+					"aabb": [0, 0, 16, 16],
+					"orientation": "none",
+					"type": "blocker"
+				});
+			if imgui.menu_item_simple("New trigger"):
+				self.prototype["boxes"].append({
+					"aabb": [0, 0, 16, 16],
+					"orientation": "south",
+					"type": "trigger"
+				});
+			imgui.end_popup();
+		
+		if boxes_open:
+			trash = [];
 
-			if imgui.begin_popup_context_item(str(id(box))):
-				if imgui.menu_item_simple("Delete"):
-					trash.append(box);
-					imgui.close_current_popup();
-				imgui.end_popup();
+			for i, box in enumerate(self.prototype["boxes"]):
+				node_open = imgui.tree_node(f"{box["type"].title()} {i}");
+				if imgui.begin_popup_context_item():
+					if imgui.menu_item_simple("Delete"):
+						trash.append(box);
+						imgui.close_current_popup();
+					imgui.end_popup();
 
-			if node_open:
-				box["type"] = imgui_selector(id(box["type"]), ["trigger", "blocker"], box["type"]);
-				box["orientation"] = imgui_selector(id(box["orientation"]), ["none", "north", "east", "south", "west"], box["orientation"]);
-				_, box["aabb"] = imgui.input_int4("AABB", box["aabb"]);
-				imgui.tree_pop();
-		for box in trash:
-			self.prototype["boxes"].remove(box);
+				if node_open:
+					box["type"] = eegui_selector("Type", box["type"], ["trigger", "blocker"]);
+					box["orientation"] = eegui_selector("Orientation", box["orientation"], ["none", "north", "east", "south", "west"]);
+					box["aabb"] = eegui_input_aabb("AABB", box["aabb"]);
+					imgui.tree_pop();
+
+			process_trash(self.prototype["boxes"], trash);
+
+			imgui.tree_pop();
+	
+	def gui_draw_scripts(self):
+		scripts_open = imgui.tree_node("Scripts");
+		if imgui.begin_popup_context_item():
+			if imgui.menu_item_simple("New script"):
+				self.prototype["scripts"].append("");
+			imgui.end_popup();
+		
+		if scripts_open:
+			trash = [];
+			for i in range(len(self.prototype["scripts"])):
+				self.prototype["scripts"][i] = eegui_input_asset(f"Script {i}", self.prototype["scripts"][i], "script");
+				if EEGUIContextMenu.begin(f"Script {i}"):
+					if imgui.menu_item_simple("Delete"):
+						trash.append(i);
+					imgui.end_popup();
+			
+			while len(trash) > 0:
+				i = trash.pop();
+				del self.prototype["scripts"][i];
+			imgui.tree_pop();
 	
 	def canvas_draw_boxes(self):
 		for box in self.prototype["boxes"]:
@@ -181,7 +209,23 @@ class PrototypeEditor:
 	
 		self.canvas.render();
 		self.canvas_io.tick();
-		self.canvas_manipulator.tick();
+		self.canvas_manip.tick();
+	
+	def synchronize_manip(self):
+		paths = [];
+		for i in range(len(self.prototype["boxes"])):
+			paths.append(f"boxes/{i}");
+		paths.append("prompt_position");
+
+		def make_shape(path):
+			if "boxes" in path:
+				return CanvasManipRect(get_by_path(self.prototype, path+"/aabb"));
+			elif "position" in path:
+				return CanvasManipPoint(get_by_path(self.prototype, path));
+		shapes = [make_shape(x) for x in paths];
+		
+		self.manip_registry.update(paths, shapes);
+		self.canvas_manip.synchronize(self.manip_registry);
 	
 	def draw(self):
 
@@ -193,64 +237,19 @@ class PrototypeEditor:
 
 		self.gui_draw_canvas();
 
-		self.prototype["sprite"] = imgui_asset_input("sprite", "sprite", self.prototype["sprite"]);
-		_, self.prototype["y_sort_offset"] = imgui.input_int("Y Sort Offset", self.prototype["y_sort_offset"]);
-		_, self.prototype["override_prompt_position"] = imgui.checkbox("Override prompt position", self.prototype["override_prompt_position"]);
+		self.prototype["sprite"] = eegui_input_asset("Sprite", self.prototype["sprite"], "sprite");
+		self.prototype["y_sort_offset"] == eegui_input_int("Y Sort Offset", self.prototype["y_sort_offset"]);
+		self.prototype["override_prompt_position"] = eegui_input_bool("Override prompt position", self.prototype["override_prompt_position"]);
 		if self.prototype["override_prompt_position"]:
 			imgui.same_line();
-			x, y = self.prototype["prompt_position"];
-			_, self.prototype["prompt_position"] = imgui.input_int2("Prompt position", [int(x), int(y)]);
-
-		scripts_open = imgui.tree_node("Scripts");
-		if imgui.begin_popup_context_item():
-			if imgui.menu_item_simple("New script"):
-				self.prototype["scripts"].append("");
-			imgui.end_popup();
-		if scripts_open:
-			trash = [];
-			for i in range(len(self.prototype["scripts"])):
-				self.prototype["scripts"][i] = imgui_asset_input(f"script##{i}", "script", self.prototype["scripts"][i]);
-				if ContextHelper.request(i):
-					if imgui.menu_item_simple("Delete"):
-						trash.append(i);
-					imgui.end_popup();
-			while len(trash) > 0:
-				i = trash.pop();
-				del self.prototype["scripts"][i];
-			imgui.tree_pop();
-
-		boxes_open = imgui.tree_node("Boxes");
-		if imgui.begin_popup_context_item():
-			if imgui.menu_item_simple("New blocker"):
-				self.prototype["boxes"].append({
-					"aabb": [0, 0, 16, 16],
-					"orientation": "none",
-					"type": "blocker"
-				});
-			if imgui.menu_item_simple("New trigger"):
-				self.prototype["boxes"].append({
-					"aabb": [0, 0, 16, 16],
-					"orientation": "south",
-					"type": "trigger"
-				});
-			imgui.end_popup();
+			self.prototype["prompt_position"] = eegui_input_vec2("Prompt positon", self.prototype["prompt_position"]);
 		
-		for box in self.prototype["boxes"]:
-			if not box["aabb"] in self.manip_map.values():
-				eeid = self.canvas_manipulator.register_aabb(box["aabb"]);
-				self.manip_map[eeid] = id(box);
-		for eeid in self.manip_map:
-			box = self.search_manip_map(eeid);
-			if box != None:
-				shape = self.canvas_manipulator.get_shape(eeid);
-				shape.update(box["aabb"]);
-		
-		if boxes_open:
-			self.gui_draw_boxes();
-			imgui.tree_pop();
+		self.gui_draw_boxes();
+		self.gui_draw_scripts();
 		
 		eegui_end_column();
-		imgui.new_line();
+
+		self.synchronize_manip();
 
 		while len(self.event_queue) > 0:
 			event = self.event_queue.pop(0);
@@ -269,43 +268,33 @@ class PrototypeEditor:
 			
 			if isinstance(event, CanvasManipDrag):
 				if event.eeid == None:
-					self.selection_context = {};
 					return;
 			
 				match event.signal:
 					case CanvasManipDrag.Signal.START:
-						if int(abs(event.distance)) > 2:
-							self.selection_context = {};
-							return;
-					
-						box = self.search_manip_map(event.eeid);
-						edge = aabb_closest_edge(box["aabb"], event.point);
-						self.selection_context = {
-							"mode": "drag",
-							"eeid": event.eeid,
-							"box": box,
-							"edge": edge
-						}
+						self.selection_context = {};
+						self.selection_context["inside"] = event.distance <= -2;
+
+						shape = self.canvas_manip.search(event.eeid);
+						if isinstance(shape, CanvasManipRect):
+							box = get_by_path(self.prototype, self.manip_registry.search(event.eeid));
+							self.selection_context["edge"] = aabb_closest_edge(box["aabb"], event.point);
 
 					case CanvasManipDrag.Signal.TICK:
 						if self.selection_context != {}:
-							point = self.canvas_grid.snap_point(event.point);
-							box = self.selection_context["box"];
-							edge = self.selection_context["edge"];
-							x0, y0, x1, y1 = box["aabb"];
-							match edge:
-								case Orientation.EAST:
-									x1 = point[0];
-								case Orientation.NORTH:
-									y0 = point[1];
-								case Orientation.WEST:
-									x0 = point[0];
-								case Orientation.SOUTH:
-									y1 = point[1];
-							if x1 - x0 > 0 and y1 - y0 > 0:
-								box["aabb"] = int(x0), int(y0), int(x1), int(y1);
-								manip_shape = self.canvas_manipulator.get_shape(event.eeid);
-								manip_shape.update(box["aabb"]);
+							shape = self.canvas_manip.search(event.eeid);
+							if isinstance(shape, CanvasManipRect):
+								box = get_by_path(self.prototype, self.manip_registry.search(event.eeid));
+								edge = self.selection_context["edge"];
+								point = self.canvas_grid.snap_point(event.point);
+								if self.selection_context["inside"]:
+									box["aabb"] = relocate_aabb(box["aabb"], point);
+								else:
+									box["aabb"] = shape_aabb(box["aabb"], edge, point);
+							if isinstance(shape, CanvasManipPoint):
+								point = get_by_path(self.prototype, self.manip_registry.search(event.eeid));
+								point[0] = event.point[0];
+								point[1] = event.point[1];
 					
 					case CanvasManipDrag.Signal.END:
 						self.selection_context = {};

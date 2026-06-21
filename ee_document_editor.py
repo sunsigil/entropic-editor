@@ -1,5 +1,5 @@
 from imgui_bundle import imgui;
-from ee_assets import AssetManager, AssetDocument, DocumentHelper;
+from ee_assets import AssetManager, AssetDocument;
 from ee_sprites import SpritePreview;
 import ee_types;
 from ee_tool_window import ToolWindow, ToolWindowRegistry;

@@ -5,6 +5,7 @@ import glfw;
 
 from ee_cowtools import *;
 from ee_input import InputManager;
+from ee_geometry import *;
 
 class Canvas:
 	def __init__(self, width, height, scale=1, origin=(0, 0)):
@@ -19,6 +20,7 @@ class Canvas:
 		self.draw_flags = ();
 	
 		self.position = None;
+		self.has_mouse = False;
 	
 	def _transform(self, x, y):
 		x += self.origin[0];
@@ -79,6 +81,7 @@ class Canvas:
 		glBindTexture(GL_TEXTURE_2D, self.texture);
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, self.width, self.height, GL_RGBA, GL_UNSIGNED_BYTE, self.image.tobytes());
 		imgui.image(imgui.ImTextureRef(self.texture), imgui.ImVec2(self.width * self.scale, self.height * self.scale));
+		self.has_mouse = imgui.is_item_hovered();
 
 class CanvasIO:
 	def __init__(self, canvas):
@@ -100,19 +103,19 @@ class CanvasIO:
 	def get_cursor(self):
 		return self.cursor;
 
-	def cursor_in_bounds(self):
+	def is_cursor_in_bounds(self):
 		if self.cursor == None:
 			return False;
 		x0, y0 = self._transform(0, 0);
 		x1, y1 = self._transform(self.canvas.width, self.canvas.height);
-		return aabb_contains_point((x0, y0, x1, y1), self.cursor);
+		return aabb_contains_point((x0, y0, x1, y1), self.cursor) and self.canvas.has_mouse;
 
-	def in_bounds_cursor(self):
+	def get_bounded_cursor(self):
 		if self.cursor == None:
 			return None;
 		x0, y0 = self._transform(0, 0);
 		x1, y1 = self._transform(self.canvas.width, self.canvas.height);
-		if self.cursor_in_bounds():
+		if self.is_cursor_in_bounds():
 			return self.cursor;
 		return aabb_closest_point((x0, y0, x1, y1), self.cursor);
 
@@ -169,10 +172,9 @@ class CanvasGrid:
 		self.canvas.draw_aabb((x0, y0, x1, y1), colour, fill);
 
 class CanvasManipRect:
-	def __init__(self, eeid, aabb):
+	def __init__(self, aabb):
 		x0, y0, x1, y1 = aabb;
 		self.aabb = (x0, y0, x1, y1);
-		self.eeid = eeid;
 
 	def distance(self, point):
 		return aabb_point_sdf(self.aabb, point);
@@ -182,16 +184,26 @@ class CanvasManipRect:
 		self.aabb = (x0, y0, x1, y1);
 
 class CanvasManipSegment:
-	def __init__(self, eeid, segment):
+	def __init__(self, segment, radius=4):
 		self.segment = segment;
-		self.eeid = eeid;
+		self.radius = radius;
 
 	def distance(self, point):
-		# SDF radius of 4
-		return segment_point_sdf(self.segment, point)-4;
+		return segment_point_sdf(self.segment, point)-self.radius;
 
 	def update(self, segment):
 		self.segment = segment;
+
+class CanvasManipPoint:
+	def __init__(self, point, radius=4):
+		self.point = point;
+		self.radius = radius;
+
+	def distance(self, point):
+		return point_point_dist(self.point, point)-self.radius;
+
+	def update(self, point):
+		self.point = point;
 
 class CanvasManipClick:
 	def __init__(self, eeid, point, distance=None):
@@ -210,71 +222,96 @@ class CanvasManipDrag:
 		self.point = point;
 		self.distance = distance;
 
+class CanvasManipRecord:
+	def __init__(self, object, shape, eeid):
+		self.object = object;
+		self.shape = shape;
+		self.eeid = eeid;
+class CanvasManipRegistry:
+	def __init__(self, objects=[], shapes=[], eeids=[]):
+		self.records = [];
+		for i in range(len(objects)):
+			self.register(objects[i], shapes[i], eeids[i] if eeids != [] else None);
+	def register(self, object, shape, eeid=None):
+		existing = next((x for x in self.records if x.object == object), None);
+		if existing:
+			existing.shape = shape;
+		else:
+			self.records.append(CanvasManipRecord(
+				object,
+				shape,
+				eeid
+			));
+	def search(self, eeid):
+		for record in self.records:
+			if record.eeid == eeid:
+				return record.object;
+	def update(self, objects, shapes):
+		for i in range(len(objects)):
+			self.register(objects[i], shapes[i]);
+		trash = [];
+		for i in range(len(self.records)):
+			if not self.records[i].object in objects:
+				trash.append(i);
+		for i in trash:
+			del self.records[i];
+
 class CanvasManipulator:
 	def __init__(self, canvas_io, event_queue):
 		self.canvas_io = canvas_io;
 		self.event_queue = event_queue;
 
-		self.shapes = [];
 		self.eeid = iter(EEID());
+		self.shapes = {};
+		
+		self.clicked_point = None;
+		self.clicked_eeid = None;
+		self.drag_started = False;
+
+	def _spatial_search(self, point):
+		min_dist = math.inf;
+		min_eeid = None;
+		for eeid,shape in self.shapes.items():
+			dist = shape.distance(point);
+			if dist <= 2 and abs(dist) < min_dist:
+				min_dist = abs(dist);
+				min_eeid = eeid;
+		return min_eeid;
+
+	def clear(self):
+		self.eeid = iter(EEID());
+		self.shapes = {};
 		
 		self.clicked_point = None;
 		self.clicked_eeid = None;
 		self.drag_started = False;
 	
-	def _get_by_eeid(self, eeid):
-		for shape in self.shapes:
-			if shape.eeid == eeid:
-				return shape;
+	def register_shape(self, shape):
+		eeid = next(self.eeid);
+		self.shapes[eeid] = shape;
+	
+	def synchronize(self, registry: CanvasManipRegistry):
+		canon_eeids = set();
+		for record in registry.records:
+			if record.eeid == None:
+				record.eeid = next(self.eeid);
+			self.shapes[record.eeid] = record.shape;
+			canon_eeids.add(record.eeid);
+		invalid_eeids = [eeid for eeid in self.shapes if eeid not in canon_eeids];
+		for eeid in invalid_eeids:
+			del self.shapes[eeid];
+	
+	def search(self, eeid):
+		if eeid in self.shapes:
+			return self.shapes[eeid];
 		return None;
 
-	def _get_by_point(self, point):
-		min_dist = math.inf;
-		min_shape = None;
-		for shape in self.shapes:
-			dist = shape.distance(point);
-			if dist <= 2 and abs(dist) < min_dist:
-				min_dist = abs(dist);
-				min_shape = shape;
-		return min_shape;
-
-	def clear(self):
-		self.shapes = [];
-		self.eeid = iter(EEID());
-		
-		self.clicked_point = None;
-		self.clicked_eeid = None;
-		self.drag_started = False;
-
-	def register_aabb(self, aabb):
-		eeid = next(self.eeid);
-		shape = CanvasManipRect(eeid, aabb);
-		self.shapes.append(shape);
-		return eeid;
-
-	def register_segment(self, segment):
-		eeid = next(self.eeid);
-		shape = CanvasManipSegment(eeid, segment);
-		self.shapes.append(shape);
-		return eeid;
-
-	def get_shape(self, eeid):
-		return self._get_by_eeid(eeid);
-
-	def delete_shape(self, eeid):
-		trash = [];
-		for shape in self.shapes:
-			if shape.eeid == eeid:
-				trash.append(shape);
-		for t in trash:
-			self.shapes.remove(t);
-
 	def tick(self):
-		cursor = self.canvas_io.in_bounds_cursor();
+		cursor = self.canvas_io.get_bounded_cursor();
 
 		cancel = (
 			InputManager.is_released(glfw.MOUSE_BUTTON_LEFT) or
-			not self.canvas_io.cursor_in_bounds()
+			not self.canvas_io.is_cursor_in_bounds()
 		);
 
 		if cancel:
@@ -287,14 +324,14 @@ class CanvasManipulator:
 		else:
 			if InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
 				self.clicked_point = cursor;
-				shape = self._get_by_point(cursor);
-				eeid = shape.eeid if shape != None else None;
+				eeid = self._spatial_search(self.clicked_point);
+				self.clicked_eeid = eeid;
+				shape = self.shapes[eeid] if eeid in self.shapes else None;
 				distance = shape.distance(self.clicked_point) if shape != None else None;
 				self.event_queue.append(CanvasManipClick(eeid, cursor, distance));
-				self.clicked_eeid = eeid;
 		
 			if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT) and self.clicked_point != None:
-				shape = self._get_by_eeid(self.clicked_eeid);
+				shape = self.shapes[self.clicked_eeid] if self.clicked_eeid in self.shapes else None;
 				distance = shape.distance(self.clicked_point) if shape != None else None;
 
 				if not self.drag_started:

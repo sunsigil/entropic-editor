@@ -12,51 +12,66 @@ class Type(abc.ABC):
 	@abc.abstractmethod
 	def validate(self, value) -> bool:
 		pass;
+	@abc.abstractmethod
+	def rectify(self, value):
+		pass;
 
 class Primitive(Type):
 	pass;
 class Int(Primitive):
+	def __repr__(self):
+		return "Int";
 	def prototype(self) -> int:
 		return 0;
 	def validate(self, value) -> bool:
 		return isinstance(value, int);
-	def __repr__(self):
-		return "Int";
+	def rectify(self, value):
+		return int(value);
 class Float(Primitive):
+	def __repr__(self):
+		return "Float";
 	def prototype(self) -> float:
 		return 0;
 	def validate(self, value) -> bool:
 		return isinstance(value, float);
-	def __repr__(self):
-		return "Float";
+	def rectify(self, value):
+		return float(value);
 class Bool(Primitive):
+	def __repr__(self):
+		return "Bool";
 	def prototype(self) -> bool:
 		return False;
 	def validate(self, value) -> bool:
 		return isinstance(value, bool);
-	def __repr__(self):
-		return "Bool";
+	def rectify(self, value):
+		return bool(value);
 class String(Primitive):
+	def __repr__(self):
+		return "String";
 	def prototype(self) -> str:
 		return "";
 	def validate(self, value) -> bool:
 		return isinstance(value, str);
-	def __repr__(self):
-		return "String";
+	def rectify(self, value):
+		return str(value);
 class Colour(Primitive):
+	def __repr__(self):
+		return "Colour";
 	def prototype(self) -> list[int]:
 		return [255, 255, 255];
 	def validate(self, value) -> bool:
 		return isinstance(value, list[int]) and len(value) == 3;
-	def __repr__(self):
-		return "Colour";
+	def rectify(self, value):
+		return value;
 class Any(Primitive):
+	def __repr__(self):
+		return "Any";
 	def prototype(self):
 		return None;
 	def validate(self, value) -> bool:
 		return True;
-	def __repr__(self):
-		return "Any";
+	def rectify(self, value):
+		return value;
 
 class Enum(Type):
 	def __init__(self, expression):
@@ -64,12 +79,16 @@ class Enum(Type):
 		values = re.split(parse_regex, expression);
 		values = [v for v in values if len(v) > 0];
 		self.values = values;
+	def __repr__(self):
+		return f"Enum({", ".join(self.values)})";
 	def prototype(self) -> str:
 		return self.values[0];
 	def validate(self, value) -> bool:
 		return value in self.values;
-	def __repr__(self):
-		return f"Enum({", ".join(self.values)})";
+	def rectify(self, value):
+		if value not in self.values:
+			value = self.values[0];
+		return value;
 
 class Flags(Type):
 	def __init__(self, expression):
@@ -77,45 +96,54 @@ class Flags(Type):
 		values = re.split(parse_regex, expression);
 		values = [v for v in values if len(v) > 0];
 		self.values = values;
+	def __repr__(self):
+		return f"Flags({", ".join(self.values)})";
 	def prototype(self) -> str:
 		return [];
 	def validate(self, value) -> bool:
-		for v in value:
-			if not v in self.values:
-				return False;
-		return True;
-	def __repr__(self):
-		return f"Flags({", ".join(self.values)})";
+		error = next((x for x in value if not x in self.values), None);
+		return error == None;
+	def rectify(self, value):
+		value = [x for x in value if x in self.values];
+		return value;
 
 class File(Type):
 	def __init__(self, pattern):
 		self.pattern = pattern;
 		self.regex = glob.translate(self.pattern);
+	def __repr__(self):
+		return f"File({self.pattern})";
 	def prototype(self) -> str:
 		return "";
 	def validate(self, value) -> bool:
 		return re.match(self.regex, value);
-	def __repr__(self):
-		return f"File({self.pattern})";
+	def rectify(self, value):
+		return value;
 
 class Asset(Type):
 	def __init__(self, name):
 		self.name = name;
+	def __repr__(self):
+		return f"Asset({self.name})";
 	def prototype(self) -> str:
 		return "";
 	def validate(self, value) -> bool:
 		return isinstance(value, str);
-	def __repr__(self):
-		return f"Asset({self.name})";
+	def rectify(self, value):
+		return value;
 
 class List(Type):
 	def __init__(self, T):
 		self.T = T;
+	def __repr__(self):
+		return f"List({self.T})";
+
 	def prototype(self) -> list:
 		if isinstance(self.T, List):
 			return [self.T.prototype()];
 		else:
 			return [];
+
 	def validate(self, value) -> bool:
 		if not isinstance(value, list):
 			return False;
@@ -123,13 +151,19 @@ class List(Type):
 		for item in value:
 			valid = valid and self.T.validate(item);
 		return valid;
-	def __repr__(self):
-		return f"List({self.T})";
+
+	def rectify(self, value):
+		return [self.T.rectify(x) for x in value];
+
+	def get_inmost_type(self):
+		T = self.T;
+		while isinstance(T, List):
+			T = T.T;
+		return T;
 
 class Object(Type):
 	def __init__(self, elements):
 		self.elements : list[Element] = elements;
-	
 	def __repr__(self):
 		return f"Object({", ".join([str(e.T) for e in self.elements])})";
 	
@@ -157,6 +191,26 @@ class Object(Type):
 			return False;
 
 		return True;
+
+	def rectify(self, value):
+		if not isinstance(value, dict):
+			value = {};
+		
+		trash = [];
+		for key in value:
+			element = next((x for x in self.elements if x.name == key), None);
+			if element == None:
+				trash.append(key);
+		for key in trash:
+			del value[key];
+
+		for element in self.elements:
+			if not element.name in value:
+				value[element.name] = element.T.prototype();
+			else:
+				value[element.name] = element.T.rectify(value[element.name]);
+
+		return value;
 
 class Element:
 	def __init__(self, name, T, attributes = [], conditions = []):
@@ -364,6 +418,13 @@ class TypeHelper:
 				violations.append(name);
 		for name in violations:
 			del tnode.children[name];
+	
+		# Sparingly correcting primitives and lists of primitives
+		# Be really careful trying to do this to more complex types
+		if isinstance(tnode.enode.T, Primitive) or (
+			isinstance(tnode.enode.T, List) and isinstance(tnode.enode.T.get_inmost_type(), Primitive)
+		):
+			tnode.inode = tnode.enode.T.rectify(tnode.inode);
 
 	def rectify(self, instance):
 		self._rectify(TNode(None, self.abstract_tree, instance));
