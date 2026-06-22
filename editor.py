@@ -82,7 +82,7 @@ if __name__ == "__main__":
 	ToolWindowRegistry.register(ToolWindow(AssetExplorer, "Asset Explorer", flags=tool_flags, hidden=True));
 
 	ToolWindowRegistry.register(ToolWindow(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(SceneEditor, "Scene Editor", size=(1280, 860), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
+	ToolWindowRegistry.register(ToolWindow(SceneEditor, "Scene Editor", size=(1500, 880), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolWindowRegistry.register(ToolWindow(DialogueEditor, "Dialogue Editor", size=(1000, 600), flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(DialogueGraph, "Dialogue Graph", size=(1280, 720), flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(RecipeEditor, "Recipe Editor", flags=tool_flags));

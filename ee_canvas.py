@@ -6,6 +6,7 @@ import glfw;
 from ee_cowtools import *;
 from ee_input import InputManager;
 from ee_geometry import *;
+from ee_imgui import *;
 
 class Canvas:
 	def __init__(self, width, height, scale=1, origin=(0, 0)):
@@ -76,11 +77,12 @@ class Canvas:
 		self.draw_line(-ox, 0, w-ox, 0, c);
 		self.draw_line(0, -oy, 0, h-oy, c);
 	
-	def render(self):
+	def render(self, gui_id=None):
 		self.position = imgui.get_cursor_screen_pos();
 		glBindTexture(GL_TEXTURE_2D, self.texture);
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, self.width, self.height, GL_RGBA, GL_UNSIGNED_BYTE, self.image.tobytes());
 		imgui.image(imgui.ImTextureRef(self.texture), imgui.ImVec2(self.width * self.scale, self.height * self.scale));
+		EEGUIContextMenu.ping(gui_id);
 		self.has_mouse = imgui.is_item_hovered();
 
 class CanvasIO:

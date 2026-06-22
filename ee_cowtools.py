@@ -149,3 +149,52 @@ class Clipboard:
 	def paste(self, destination):
 		for entry in self.contents:
 			destination.append(entry);
+
+class Trash:
+	class DeleteItemRequest:
+		def __init__(self, source, item):
+			self.source = source;
+			self.item = item;
+	class DeleteIndexRequest:
+		def __init__(self, source, index):
+			self.source = source;
+			self.index = index;
+	class Record:
+		def __init__(self, source, item):
+			self.source = source;
+			self.item = copy.deepcopy(item);
+	
+	def __init__(self, deferred):
+		self.deferred = deferred;
+		self.buffer = [];
+		self.contents = [];
+	
+	def flush(self):
+		while len(self.buffer) > 0:
+			request = self.buffer.pop(0);
+			if isinstance(request, Trash.DeleteItemRequest):
+				self.contents.append(Trash.Record(request.source, request.item));
+				request.source.remove(request.item);
+			elif isinstance(request, Trash.DeleteIndexRequest):
+				self.contents.append(Trash.Record(request.source, request.source[request.index]));
+				del request.source[request.index];
+	
+	def clear(self):
+		self.contents.clear();
+
+	def trash_item(self, source, item):
+		self.buffer.append(Trash.DeleteItemRequest(source, item));
+		if not self.deferred:
+			self.flush();
+	def trash_index(self, source, index):
+		self.buffer.append(Trash.DeleteIndexRequest(source, index));
+		if not self.deferred:
+			self.flush();
+
+	def restore(self):
+		if len(self.contents) > 0:
+			record = self.contents.pop();
+			record.source.append(record.item);
+	def restore_all(self):
+		while len(self.contents) > 0:
+			self.restore();

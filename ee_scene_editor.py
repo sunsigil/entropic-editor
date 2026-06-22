@@ -37,30 +37,6 @@ class EditMode(Enum):
 	TEXTS = 3,
 	PROPERTIES = 4
 
-class CreateEvent:
-	def __init__(self, collection, item, copy_item=False):
-		self.collection = collection;
-		self.item = item;
-		self.copy_item = copy_item;
-	def handle(self):
-		self.item = copy.copy(self.item) if self.copy_item else self.item;
-		self.collection.append(self.item);
-
-class DeleteEvent:
-	def __init__(self, collection, item, is_index=False):
-		self.collection = collection;
-		self.item = item;
-		self.is_index = is_index;
-	def handle(self):	
-		if self.is_index:
-			del self.collection[self.item];
-		else:
-			self.collection.remove(self.item);
-
-class UndoEvent:
-	def __init__(self, event):
-		pass;
-
 class TilemapEditor:
 	def __init__(self, parent):
 		self.parent = parent;
@@ -571,9 +547,10 @@ class SceneEditor:
 		self.scene = scene;
 
 		self.event_queue.clear();
-		self.selection_context.clear();
 		self.canvas_manip.clear();
 		self.manip_registry.clear();
+
+		self.selection_context.clear();
 		
 		self.tilemap_editor.on_load_scene();
 		self.wall_editor.on_load_scene();
@@ -597,6 +574,7 @@ class SceneEditor:
 
 		self.selection_context = SelectionContext();
 		self.clipboard = Clipboard();
+		self.trash = Trash(deferred=True);
 
 		self.edit_mode = EditMode.ENTITIES;
 		self.snap = False;
@@ -627,7 +605,7 @@ class SceneEditor:
 					self.selection_context.clear();
 				else:
 					entity = self.manip_registry.search(event.eeid);
-					self.selection_context.select(entity);
+					self.selection_context.select(entity, exclusive=True);
 			
 			if isinstance(event, CanvasManipDrag):
 				if event.eeid != None:
@@ -737,159 +715,141 @@ class SceneEditor:
 				_, self.scene_viewer.show_grid = imgui.menu_item("Grid", "", self.scene_viewer.show_grid);
 				imgui.end_menu();
 			
-			imgui.end_menu_bar();
+			imgui.end_menu_bar();		
 	
-	def gui_draw_entity(self, entity):
-		name = entity["name"] if len(entity["name"]) > 0 else str(id(entity));
-		prototype = AssetManager.search("prototype", entity["prototype"]);
-		sprite = self.get_entity_sprite(entity);
+	def gui_draw_entities(self):	
+		for entity in self.scene["entities"]:
+			name = entity["name"] if len(entity["name"]) > 0 else str(id(entity));
+			sprite = self.get_entity_sprite(entity);
 
-		imgui.set_next_item_open(self.selection_context.is_selected(entity));
-		node_open = imgui.tree_node(f"{name}####{id(entity)}");
+			imgui.set_next_item_open(self.selection_context.is_selected(entity));
+			node_open = imgui.tree_node(f"{name}####{id(entity)}");
 
-		if imgui.begin_popup_context_item():
-			if imgui.menu_item_simple("Delete"):
-				self.trash.append(entity);
-				imgui.close_current_popup();
-			imgui.end_popup();
-		
-		if node_open:
-			self.selection_context.select(entity, exclusive=True);
+			if imgui.begin_popup_context_item():
+				if imgui.menu_item_simple("Delete"):
+					self.trash.trash_item(self.scene["entities"], entity);
+					imgui.close_current_popup();
+				imgui.end_popup();
 			
-			_, entity["name"] = imgui.input_text("Name", entity["name"]);
-			entity["prototype"] = eegui_input_asset("Prototype", entity["prototype"], "prototype");
+			if node_open:
+				self.selection_context.select(entity, exclusive=True);
+				
+				entity["name"] = eegui_input_string("Name", entity["name"]);
+				entity["prototype"] = eegui_input_asset("Prototype", entity["prototype"], "prototype");
+				if len(entity["prototype"]) > 0 and len(entity["name"]) <= 0:
+					entity["name"] = entity["prototype"];
 
-			if len(entity["prototype"]) > 0 and len(entity["name"]) <= 0:
-				entity["name"] = entity["prototype"];
-
-			_, entity["frame_idx"] = imgui.slider_int("Frame", entity["frame_idx"], 0, sprite.frame_count-1);
-			
-			_, entity["layer"] = imgui.input_int("Layer", entity["layer"], 0, 255);
-			
-			if imgui.tree_node("Script data"):
-				self.rectify_entity_script_data(entity);
-				for data in entity["script_data"]:
-					if imgui.tree_node(f"{data["key"]}####{id(data)}"):
-						match data["type"]:
-							case "bool":
-								_, data["value"] = imgui.checkbox(data["key"], data["value"]);
-							case "int":
-								_, data["value"] = imgui.input_int(data["key"], data["value"]);
-							case "string":
-								_, data["value"] = imgui.input_text(data["key"], data["value"]);
-							case "vec2":
-								_, data["value"] = imgui.input_int2(data["key"], data["value"]);
-							case _:
-								if AssetManager.has_type(data["type"]):
-									data["value"] = eegui_input_asset("value", data["value"], data["type"]);
-								else:
-									_, data["value"] = imgui.input_text("value", data["value"]);						
-						imgui.tree_pop();
+				entity["frame_idx"] = eegui_input_int("Frame", entity["frame_idx"], EEGUIIntStyle.SLIDER, 0, sprite.frame_count-1);
+				entity["layer"] = eegui_input_int("Layer", entity["layer"], 0, 255);
+				
+				if imgui.tree_node("Script data"):
+					self.rectify_entity_script_data(entity);
+					for data in entity["script_data"]:
+						if imgui.tree_node(f"{data["key"]}####{id(data)}"):
+							match data["type"]:
+								case "bool":
+									_, data["value"] = imgui.checkbox(data["key"], data["value"]);
+								case "int":
+									_, data["value"] = imgui.input_int(data["key"], data["value"]);
+								case "string":
+									_, data["value"] = imgui.input_text(data["key"], data["value"]);
+								case "vec2":
+									_, data["value"] = imgui.input_int2(data["key"], data["value"]);
+								case _:
+									if AssetManager.get_type(data["type"]) != None:
+										data["value"] = eegui_input_asset("value", data["value"], data["type"]);
+									else:
+										_, data["value"] = imgui.input_text("value", data["value"]);						
+							imgui.tree_pop();
+					imgui.tree_pop();
 				imgui.tree_pop();
-			imgui.tree_pop();
-	
-	def gui_draw_entities(self):
-		node_open = imgui.tree_node("Entities");
-		if imgui.begin_popup_context_item():
-			if imgui.menu_item_simple("Create"):
-				entity = {
-						"name": "",
-						"prototype": "",
-						"position": [0, 0],
-						"frame_idx": 0,
-						"layer": 0,
-						"script_data": []
-				};
-				self.scene["entities"].append(entity);
-				imgui.close_current_popup();
-			imgui.end_popup();
-		
-		if node_open:
-			for entity in self.scene["entities"]:
-				self.gui_draw_entity(entity);
-			imgui.tree_pop();
 	
 	def gui_draw_properties_editor(self):
-		_, self.scene["has_background"] = imgui.checkbox("Has background", self.scene["has_background"]);
+		self.scene["has_background"] = eegui_input_bool("Has background", self.scene["has_background"]);
 		if self.scene["has_background"]:
-			r, g, b = self.scene["background"];
-			_, (r, g, b) = imgui.color_edit3("Background", (r/255, g/255, b/255));
-			self.scene["background"] = [int(r*255), int(g*255), int(b*255)];
-
-		_, self.scene["has_bounds"] = imgui.checkbox("Has bounds", self.scene["has_bounds"]);
+			self.scene["background"] = eegui_input_colour("Background", self.scene["background"]);
+		self.scene["has_bounds"] = eegui_input_bool("Has bounds", self.scene["has_bounds"]);
 		if self.scene["has_bounds"]:
-			_, self.scene["bounds"] = imgui.input_int4("Bounds", self.scene["bounds"]);
+			self.scene["bounds"] = eegui_input_aabb("Bounds", self.scene["bounds"]);
 	
+	def scene_context_menu(self):
+		selection = self.selection_context.get_selection(single=True);
+		if selection == None:
+			if imgui.menu_item_simple("Spawn"):
+				entity = AssetManager.get_type("scene").search("entities").T.get_inmost_type().prototype();
+				entity["name"] = "New entity";
+				entity["position"] = self.canvas_io.get_cursor();
+				self.scene["entities"].append(entity);
+		else:
+			if imgui.menu_item_simple("Delete"):
+				self.trash.trash_item(self.scene["entities"], selection);
+
 	def draw(self):
 		self.draw_menu_bar();
 
 		if not self._is_scene_loaded():
 			return;
 
-		self.canvas_io.tick();	
+		self.canvas_io.tick();
+		self.synchronize_manip();
+		self.canvas_manip.tick();
 
+		def run_left_panel(panel_tick):
+			imgui.begin_child(
+				"left-panel",
+				imgui.ImVec2((imgui.get_content_region_avail().x - self.canvas.width) * 0.9, imgui.get_content_region_avail().y),
+				0, 0
+			);
+			panel_tick();
+			imgui.end_child();
+		
+		def entities_tick():
+			if InputManager.is_command(glfw.KEY_C):
+				self.clipboard.copy(self.selection_context.get_selection(single=True), copy_mode=Clipboard.CopyMode.DEEP, exclusive=True);
+			if InputManager.is_command(glfw.KEY_V):
+				self.clipboard.paste(self.scene["entities"]);
+			
+			if InputManager.is_command(glfw.KEY_D):
+				selection = self.selection_context.get_selection(single=True);
+				if selection != None:
+					self.trash.trash_item(self.scene["entities"], selection);
+			if InputManager.is_command(glfw.KEY_Z):
+				self.trash.restore();
+
+			self.handle_events();
+			self.gui_draw_entities();
+			self.trash.flush();
+
+		def tilemap_tick():
+			self.tilemap_editor.tick();
+			self.tilemap_editor.draw_gui();
+		
+		def walls_tick():
+			self.wall_editor.tick();
+			self.wall_editor.draw_gui();
+		
+		def texts_tick():
+			self.text_editor.tick();
+			self.text_editor.draw_gui();
+		
+		def properties_tick():
+			self.gui_draw_properties_editor();
+		
 		match self.edit_mode:
 			case EditMode.ENTITIES:
-				if InputManager.is_command(glfw.KEY_C):
-					self.clipboard.copy(self.selection_context.get_selection(), copy_mode=Clipboard.CopyMode.DEEP, exclusive=True);
-				if InputManager.is_command(glfw.KEY_V):
-					self.clipboard.paste(self.sceene["entities"]);
-				
-				self.synchronize_manip();
-				self.canvas_manip.tick();
-
-				imgui.begin_child(
-					"Entity Window",
-					imgui.ImVec2((imgui.get_content_region_avail().x - self.canvas.width) * 0.9, imgui.get_content_region_avail().y),
-					0, 0
-				);
-				self.gui_draw_entities();
-				imgui.end_child();
-			
+				run_left_panel(entities_tick);
 			case EditMode.TILEMAP:
-				self.tilemap_editor.tick();
-				imgui.begin_child(
-					"Tilemap Window",
-					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
-					0, 0
-				);
-				self.tilemap_editor.draw_gui();
-				imgui.end_child();
-			
+				run_left_panel(tilemap_tick);
 			case EditMode.WALLS:
-				self.wall_editor.tick();
-				imgui.begin_child(
-					"Walls Window",
-					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
-					0, 0
-				);
-				self.wall_editor.draw_gui();
-				imgui.end_child();
-			
+				run_left_panel(walls_tick);
 			case EditMode.TEXTS:
-				self.text_editor.tick();
-				imgui.begin_child(
-					"Texts Window",
-					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
-					0, 0
-				);
-				self.text_editor.draw_gui();
-				imgui.end_child();
-			
+				run_left_panel(texts_tick);
 			case EditMode.PROPERTIES:
-				imgui.begin_child(
-					"Properties Window",
-					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
-					0, 0
-				);
-				self.gui_draw_properties_editor();
-				imgui.end_child();
-		
-		self.handle_events();
+				run_left_panel(properties_tick);	
 
 		imgui.same_line();
 		imgui.begin_child(
-			"Scene Window",
+			"main-panel",
 			imgui.ImVec2(imgui.get_content_region_avail().x, imgui.get_content_region_avail().y),
 			0, 0
 		);
@@ -904,7 +864,10 @@ class SceneEditor:
 		self.snap = eegui_input_bool("Snap", self.snap);
 
 		self.scene_viewer.draw();
-		self.canvas.render();
+		self.canvas.render(gui_id="canvas");
+		if EEGUIContextMenu.begin("canvas"):
+			self.scene_context_menu();
+			imgui.end_popup();
 		
 		imgui.end_child();
 		

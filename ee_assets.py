@@ -76,21 +76,24 @@ class AssetDocument:
 class AssetManager:
 	directories = [];
 	documents = [];
+	types = [];
 	active_document = None;
 
 	def initialize(directories):
 		AssetManager.directories = [Path(d) for d in directories];
 		AssetManager.documents = [];
+		AssetManager.types = [];
 
 		for directory in AssetManager.directories:
 			for filepath in directory.iterdir():
 				ext = filepath.suffix;
 				if ext == ".json":
-					safe = False;
+					safe = True;
 					if safe:
 						try:
 							document = AssetDocument(filepath);
 							AssetManager.documents.append(document);
+							AssetManager.types.append(document.type_helper.abstract_tree);
 							print(f"[AssetManager] Loaded {filepath}");
 						except Exception as e:
 							print(f"[AssetManager] Failed to load {filepath}!\n\t({e})");
@@ -98,20 +101,18 @@ class AssetManager:
 						document = AssetDocument(filepath);
 						AssetManager.documents.append(document);
 						print(f"[AssetManager] Loaded {filepath}");
-	def types():
-		return [document.type_name for document in AssetManager.documents];
-
-	def has_type(name):
-		return name in [document.type_name for document in AssetManager.documents];
 
 	def get_document(name) -> AssetDocument:
-		return next((document for document in AssetManager.documents if document.type_name == name), None);
+		return next((x for x in AssetManager.documents if x.type_name == name), None);
+
+	def get_type(name) -> ee_types.Element:
+		return next((x for x in AssetManager.types if x.name == name), None);
 
 	def get_assets(asset_type):
-		return next((document.instances for document in AssetManager.documents if document.type_name == asset_type), None);
+		return next((x.instances for x in AssetManager.documents if x.type_name == asset_type), None);
 
 	def search(asset_type, asset_name):
-		return next((asset for asset in AssetManager.get_assets(asset_type) if asset["name"] == asset_name), None);
+		return next((x for x in AssetManager.get_assets(asset_type) if x["name"] == asset_name), None);
 
 	def get_first(asset_type):
 		assets = AssetManager.get_assets(asset_type);
