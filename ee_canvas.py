@@ -174,14 +174,17 @@ class CanvasGrid:
 class CanvasManipRect:
 	def __init__(self, aabb):
 		x0, y0, x1, y1 = aabb;
-		self.aabb = (x0, y0, x1, y1);
+		self.aabb = x0, y0, x1, y1;
 
 	def distance(self, point):
 		return aabb_point_sdf(self.aabb, point);
 
+	def delta(self, point):
+		return self.aabb[0] - point[0], self.aabb[1] - point[1];
+
 	def update(self, aabb):
 		x0, y0, x1, y1 = aabb;
-		self.aabb = (x0, y0, x1, y1);
+		self.aabb = x0, y0, x1, y1;
 
 class CanvasManipSegment:
 	def __init__(self, segment, radius=4):
@@ -190,6 +193,9 @@ class CanvasManipSegment:
 
 	def distance(self, point):
 		return segment_point_sdf(self.segment, point)-self.radius;
+
+	def delta(self, point):
+		return self.segment[0][0] - point[0], self.segment[0][1] - point[1];
 
 	def update(self, segment):
 		self.segment = segment;
@@ -202,13 +208,17 @@ class CanvasManipPoint:
 	def distance(self, point):
 		return point_point_dist(self.point, point)-self.radius;
 
+	def delta(self, point):
+		return self.point[0] - point[0], self.point[1] - point[1];
+
 	def update(self, point):
 		self.point = point;
 
 class CanvasManipClick:
-	def __init__(self, eeid, point, distance=None):
+	def __init__(self, eeid, point, delta=None, distance=None):
 		self.eeid = eeid;
 		self.point = point;
+		self.delta = delta;
 		self.distance = distance;
 
 class CanvasManipDrag:
@@ -216,10 +226,12 @@ class CanvasManipDrag:
 		START = 0,
 		TICK = 1,
 		END = 2
-	def __init__(self, eeid, signal, point, distance=None):
+	def __init__(self, signal, eeid, start, point, delta=None, distance=None):
 		self.eeid = eeid;
 		self.signal = signal;
+		self.start = start;
 		self.point = point;
+		self.delta = delta;
 		self.distance = distance;
 
 class CanvasManipRecord:
@@ -268,10 +280,13 @@ class CanvasManipulator:
 
 		self.eeid = iter(EEID());
 		self.shapes = {};
-		
+
 		self.clicked_point = None;
 		self.clicked_eeid = None;
-		self.drag_started = False;
+		self.clicked_delta = None;
+		self.clicked_distance = None;
+
+		self.dragging = False;
 
 	def _spatial_search(self, point):
 		min_dist = math.inf;
@@ -288,12 +303,6 @@ class CanvasManipulator:
 		self.shapes = {};
 		
 		self.clicked_point = None;
-		self.clicked_eeid = None;
-		self.drag_started = False;
-	
-	def register_shape(self, shape):
-		eeid = next(self.eeid);
-		self.shapes[eeid] = shape;
 	
 	def synchronize(self, registry: CanvasManipRegistry):
 		canon_eeids = set();
@@ -320,32 +329,32 @@ class CanvasManipulator:
 		);
 
 		if cancel:
-			if self.drag_started:
-				self.event_queue.append(CanvasManipDrag(self.clicked_eeid, CanvasManipDrag.Signal.END, cursor));
+			if self.dragging:
+				self.event_queue.append(CanvasManipDrag(CanvasManipDrag.Signal.END, self.clicked_eeid, self.clicked_point, self.canvas_io.get_bounded_cursor()));
+			self.dragging = False;
+			
 			self.clicked_point = None;
-			self.clicked_eeid = None;
-			self.drag_started = False;
 		
 		else:
 			if InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
 				self.clicked_point = cursor;
-				eeid = self._spatial_search(self.clicked_point);
-				self.clicked_eeid = eeid;
-				shape = self.shapes[eeid] if eeid in self.shapes else None;
-				distance = shape.distance(self.clicked_point) if shape != None else None;
-				self.event_queue.append(CanvasManipClick(eeid, cursor, distance));
+				self.clicked_eeid = self._spatial_search(cursor);
+				if self.clicked_eeid == None:
+					self.event_queue.append(CanvasManipClick(self.clicked_eeid, self.clicked_point));
+					return;
+				shape = self.shapes[self.clicked_eeid];
+				self.clicked_delta = shape.delta(cursor);
+				self.clicked_distance = shape.distance(cursor);
+				self.event_queue.append(CanvasManipClick(self.clicked_eeid, self.clicked_point, self.clicked_delta, self.clicked_distance));
 		
 			if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT) and self.clicked_point != None:
-				shape = self.shapes[self.clicked_eeid] if self.clicked_eeid in self.shapes else None;
-				distance = shape.distance(self.clicked_point) if shape != None else None;
-
-				if not self.drag_started:
+				if not self.dragging:
 					movement = point_point_dist(cursor, self.clicked_point);
 					if movement >= 2:
-						self.event_queue.append(CanvasManipDrag(self.clicked_eeid, CanvasManipDrag.Signal.START, self.clicked_point, distance));
-						self.drag_started = True;
+						self.event_queue.append(CanvasManipDrag(CanvasManipDrag.Signal.START, self.clicked_eeid, self.clicked_point, cursor, self.clicked_delta, self.clicked_distance));
+						self.dragging = True;
 				else:
-					self.event_queue.append(CanvasManipDrag(self.clicked_eeid, CanvasManipDrag.Signal.TICK, cursor, distance));
+					self.event_queue.append(CanvasManipDrag(CanvasManipDrag.Signal.TICK, self.clicked_eeid, self.clicked_point, cursor, self.clicked_delta, self.clicked_distance));
 					
 		
 		

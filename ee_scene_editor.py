@@ -12,6 +12,22 @@ from ee_imgui import *;
 from ee_geometry import *;
 
 #########################################################
+## HELPERS
+
+def get_entity_aabb(entity):
+	prototype = AssetManager.search("prototype", entity["prototype"]);
+	sprite = SpriteBank.get(prototype["sprite"] if prototype != None else "null");
+	x0, y0 = entity["position"];
+	x1, y1 = x0+sprite.frame_width, y0+sprite.frame_height;
+	return [x0, y0, x1, y1];
+
+def get_text_aabb(text):
+	x0, y0 = text["position"];
+	width = len(text["text"]) * 8 * text["scale"];
+	x1, y1 = x0 + width, y0 + 8 * text["scale"];
+	return [x0, y0, x1, y1];
+	
+#########################################################
 ## SCENE EDITOR
 
 class EditMode(Enum):
@@ -20,18 +36,6 @@ class EditMode(Enum):
 	WALLS = 2,
 	TEXTS = 3,
 	PROPERTIES = 4
-
-class CanvasConfig:
-	def __init__(self):
-		self.show_entities = True;
-		self.show_tiles = True;
-		self.show_texts = True;
-
-		self.show_grid = False;
-		self.show_walls = True;
-		self.show_boxes = False;
-
-		self.snap_to_grid = True;
 
 class CreateEvent:
 	def __init__(self, collection, item, copy_item=False):
@@ -403,18 +407,12 @@ class TextEditor:
 			process_trash(self.texts, trash, indices=True);
 			imgui.tree_pop();
 	
-	def _get_text_aabb(self, text):
-		x0, y0 = text["position"];
-		width = len(text["text"]) * 8 * text["scale"];
-		x1, y1 = x0 + width, y0 + 8 * text["scale"];
-		return (x0, y0, x1, y1);
-
 	def _synchronize_manip(self):
 		indices = [i for i in range(len(self.texts))];
 
 		def make_shape(idx):
 			text = self.texts[idx];
-			aabb = self._get_text_aabb(text);
+			aabb = get_text_aabb(text);
 			return CanvasManipRect(aabb);
 		shapes = [make_shape(x) for x in indices];
 		
@@ -452,6 +450,122 @@ class TextEditor:
 		self.canvas_manip.tick();
 		self._handle_events();
 
+class SceneViewer:
+	def __init__(self, parent):
+		self.parent = parent;
+
+		self.show_tiles = True;
+		self.show_entities = True;
+		self.show_texts = True;
+
+		self.show_grid = False;
+		self.show_walls = True;
+		self.show_boxes = False;
+
+	def draw_tiles(self):
+		tilemap = self.parent.scene["tilemap"];
+		palette = SpriteBank.get(tilemap["palette"]);
+
+		match tilemap["type"]:
+			case "sparse":
+				for tile in tilemap["sparse"]:
+					frame_idx = clamp(tile["frame_idx"], 0, palette.frame_count-1);
+					self.parent.canvas.draw_image(
+						tile["position"][0], tile["position"][1],
+						palette.frame_images[frame_idx]
+					);
+
+				if self.parent.edit_mode == EditMode.TILEMAP:
+					cursor = self.parent.canvas_io.get_cursor();
+					grid_cursor = self.parent.canvas_grid.snap_point(cursor);
+					x0, y0 = grid_cursor;
+					x1, y1 = x0+16, y0+16;
+					self.parent.canvas.draw_aabb(
+						(x0, y0, x1, y1),
+						(255, 255, 255),
+					);
+			
+			case "dense":
+				x0, y0 = tilemap["dense"]["position"];
+				w = tilemap["dense"]["columns"];
+				h = tilemap["dense"]["rows"];
+
+				for row in range(h):
+					y = y0 + row * 16;
+					for col in range(w):
+						x = x0 + col * 16;
+						frame_idx = tilemap["dense"]["frame_indices"][row * w + col]-1;
+						if frame_idx >= 0:
+							frame_idx = clamp(frame_idx, 0, palette.frame_count-1);
+							self.parent.canvas.draw_image(
+								x, y,
+								palette.frame_images[frame_idx]
+							);
+	
+	def draw_entities(self):
+
+		def sort_y(entity):
+			base_y = get_entity_aabb(entity)[3];
+			prototype = AssetManager.search("prototype", entity["prototype"]);
+			y_offset = prototype["y_sort_offset"] if prototype != None else 0;
+			return base_y+y_offset;
+		y_sorted = self.parent.scene["entities"];
+		y_sorted = sorted(y_sorted, key=lambda x: x["layer"]);
+		y_sorted = sorted(y_sorted, key=sort_y);
+
+		for entity in y_sorted:
+			prototype = AssetManager.search("prototype", entity["prototype"]);
+			sprite = SpriteBank.get(prototype["sprite"] if prototype != None else "null");
+
+			x, y = entity["position"];
+			frame_idx = clamp(entity["frame_idx"], 0, sprite.frame_count-1);
+			self.parent.canvas.draw_image(x, y, sprite.frame_images[frame_idx]);
+
+			if self.show_boxes and prototype != None:
+				for box in prototype["boxes"]:
+					colour = (255, 0, 0) if box["type"] == "blocker" else (0, 255, 0);
+					x0, y0, x1, y1 = box["aabb"];
+					x0, y0, x1, y1 = x0+x, y0+y, x1+x, y1+y;
+					self.parent.canvas.draw_aabb((x0, y0, x1, y1), colour);
+
+			if self.parent.selection_context.is_selected(entity):
+				aabb = get_entity_aabb(entity);
+				self.parent.canvas.draw_aabb(aabb, (255, 255, 255));
+	
+	def draw_texts(self):
+		for text in self.parent.scene["texts"]:
+			self.parent.canvas.draw_text(text["position"], text["text"], 8*text["scale"], text["colour"]);
+			self.parent.canvas.draw_aabb(get_text_aabb(text), (255, 255, 255));
+	
+	def draw_walls(self):
+		if self.parent.scene["has_bounds"]:
+			self.parent.canvas.draw_aabb(self.parent.scene["bounds"], (128, 0, 0), False);
+		
+		for wall in self.parent.scene["walls"]:
+			colour = (255, 255, 0) if self.parent.wall_editor._is_selected(wall) else (255, 0, 0);
+			if wall["type"] == "aabb":
+				self.parent.canvas.draw_aabb(wall["aabb"], colour, False);
+			elif wall["type"] == "segment":
+				(x0, y0), (x1, y1) = wall["segment"];
+				self.parent.canvas.draw_line(x0, y0, x1, y1, colour);		
+				self.parent.canvas.draw_circle(x0, y0, 2, colour);
+				self.parent.canvas.draw_circle(x1, y1, 2, colour);
+	
+	def draw(self):
+		self.parent.canvas.clear(tuple(self.parent.scene["background"]));
+
+		if self.show_tiles:
+			self.draw_tiles();
+		if self.show_grid:
+			self.parent.canvas_grid.draw_lines((64, 64, 64));
+		
+		if self.show_entities:
+			self.draw_entities();
+		if self.show_texts:
+			self.draw_texts();
+		if self.show_walls:
+			self.draw_walls();	
+
 class SceneEditor:
 	def _load_scene(self, scene):		
 		self.scene = scene;
@@ -470,48 +584,39 @@ class SceneEditor:
 
 	def __init__(self):
 		self.canvas_size = (1000, 720);
-		self.tile_size = 16;
 		self.canvas = Canvas(self.canvas_size[0], self.canvas_size[1], origin=(self.canvas_size[0]//2, self.canvas_size[1]//2));
 		self.canvas_io = CanvasIO(self.canvas);
 		self.canvas_grid = CanvasGrid(
 			self.canvas,
-			self.tile_size
+			16
 		);
 
 		self.event_queue = [];
-		self.selection_context = {};
-		self.clipboard = [];
-		self.trash = [];
-
 		self.canvas_manip = CanvasManipulator(self.canvas_io, self.event_queue);
 		self.manip_registry = CanvasManipRegistry();
+
+		self.selection_context = SelectionContext();
+		self.clipboard = Clipboard();
+
+		self.edit_mode = EditMode.ENTITIES;
+		self.snap = False;
 
 		self.tilemap_editor = TilemapEditor(self);
 		self.wall_editor = WallEditor(self);
 		self.text_editor = TextEditor(self);
-
-		self.canvas_config = CanvasConfig();
-		self.edit_mode = EditMode.ENTITIES;
+		self.scene_viewer = SceneViewer(self);
 
 		self._load_scene(AssetManager.get_first("scene"));
 	
 	def view_drag_handler(self, event):
 		match event.signal:
-			case CanvasManipDrag.Signal.START:
-				self.selection_context["origin"] = self.canvas.origin;
-				x, y = event.point;
-				self.selection_context["point"] = self.canvas._transform(x, y);
 			case CanvasManipDrag.Signal.TICK:
-				ox, oy = self.selection_context["origin"];
-				x0, y0 = self.selection_context["point"];
-
-				x1, y1 = event.point;
-				x1, y1 =  self.canvas._transform(x1, y1);
-				dx, dy = x1-x0, y1-y0;
-				self.canvas.origin = ox+dx, oy+dy;
+				x0, y0 = event.start;
+				x, y = event.point;
+				dx, dy = x-x0, y-y0;
 				
-				self.selection_context["origin"] = self.canvas.origin;
-				self.selection_context["point"] = x1, y1;
+				ox, oy = self.canvas.origin;
+				self.canvas.origin = ox+dx, oy+dy;
 
 	def handle_events(self):
 		while len(self.event_queue) > 0:
@@ -519,27 +624,20 @@ class SceneEditor:
 
 			if isinstance(event, CanvasManipClick):
 				if event.eeid == None:
-					self.selection_context = {};
+					self.selection_context.clear();
 				else:
-					path = self.manip_registry.search(event.eeid);
-					entity = get_by_path(self.scene, path);
-					self.select_entity(entity);
+					entity = self.manip_registry.search(event.eeid);
+					self.selection_context.select(entity);
 			
 			if isinstance(event, CanvasManipDrag):
 				if event.eeid != None:
 					match event.signal:
-						case CanvasManipDrag.Signal.START:
-							path = self.manip_registry.search(event.eeid);
-							entity = get_by_path(self.scene, path);
-							delta = entity["position"][0] - event.point[0], entity["position"][1] - event.point[1];
-							self.select_entity(entity);
-							self.selection_context["delta"] = delta;
 						case CanvasManipDrag.Signal.TICK:
-							entity = self.selection_context["entity"];
+							entity = self.selection_context.get_selection(single=True);
 							point = event.point;
-							delta = self.selection_context["delta"];
-							position = point[0] + delta[0], point[1] + delta[1];
-							if self.canvas_config.snap_to_grid:
+							delta = event.delta;
+							position = point[0]+delta[0], point[1]+delta[1];
+							if self.snap:
 								position = self.canvas_grid.snap_point(position);
 							entity["position"] = position;
 				else:
@@ -605,66 +703,48 @@ class SceneEditor:
 					"type": signature["type"],
 					"value": make_value(signature["type"])
 				});
-
-	def select_entity(self, entity):
-		if entity == None:
-			self.selection_context = {};
-		else:
-			self.selection_context = { "entity": entity };
-
-	def get_selected_entity(self):
-		return None if not "entity" in self.selection_context else self.selection_context["entity"];
 	
 	def synchronize_manip(self):
-		paths = [];
-		for i in range(len(self.scene["entities"])):
-			paths.append(f"entities/{i}");
-
-		def make_shape(path):
-			entity = get_by_path(self.scene, path);
+		def make_shape(entity):
 			aabb = self.get_entity_aabb(entity);
 			return CanvasManipRect(aabb);
-		shapes = [make_shape(x) for x in paths];
+		shapes = [make_shape(x) for x in self.scene["entities"]];
 		
-		self.manip_registry.update(paths, shapes);
+		self.manip_registry.update(self.scene["entities"], shapes);
 		self.canvas_manip.synchronize(self.manip_registry);
 	
-	def copypaste_tick(self):
-		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_C):
-			if "entity" in self.selection_context:
-				self.clipboard = [self.selection_context["entity"]];
-		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_V):
-			for entity in self.clipboard:
-				self.scene["entities"].append(copy.deepcopy(entity));
-	
-	def undo_tick(self):
-		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_Z):
-			if len(self.trash) > 0:
-				restore = self.trash.pop();
-				self.scene["entities"].append(copy.deepcopy(restore));
-	
-	def gui_draw_scene_selector(self):
-		scene_last = self.scene;
+	def draw_menu_bar(self):
 		if imgui.begin_menu_bar():
+
 			if imgui.begin_menu("Scene"):
 				if imgui.begin_menu("Open"):
 					scenes = AssetManager.get_assets("scene");
+					scene_last = self.scene;
 					for scene in scenes:
 						if imgui.menu_item_simple(scene["name"]):
 							self.scene = scene;
+					if self.scene != scene_last:
+						self._load_scene(self.scene);
 					imgui.end_menu();
 				imgui.end_menu();
+			
+			if imgui.begin_menu("View"):
+				_, self.scene_viewer.show_tiles = imgui.menu_item("Tiles", "", self.scene_viewer.show_tiles);
+				_, self.scene_viewer.show_entities = imgui.menu_item("Entities", "", self.scene_viewer.show_entities);
+				_, self.scene_viewer.show_texts = imgui.menu_item("Texts", "", self.scene_viewer.show_texts);
+				_, self.scene_viewer.show_boxes = imgui.menu_item("Boxes", "", self.scene_viewer.show_boxes);
+				_, self.scene_viewer.show_walls = imgui.menu_item("Walls", "", self.scene_viewer.show_walls);
+				_, self.scene_viewer.show_grid = imgui.menu_item("Grid", "", self.scene_viewer.show_grid);
+				imgui.end_menu();
+			
 			imgui.end_menu_bar();
-		if self.scene != scene_last:
-			self._load_scene(self.scene);
 	
 	def gui_draw_entity(self, entity):
 		name = entity["name"] if len(entity["name"]) > 0 else str(id(entity));
 		prototype = AssetManager.search("prototype", entity["prototype"]);
 		sprite = self.get_entity_sprite(entity);
 
-		selected = entity == self.get_selected_entity();
-		imgui.set_next_item_open(selected);
+		imgui.set_next_item_open(self.selection_context.is_selected(entity));
 		node_open = imgui.tree_node(f"{name}####{id(entity)}");
 
 		if imgui.begin_popup_context_item():
@@ -674,8 +754,7 @@ class SceneEditor:
 			imgui.end_popup();
 		
 		if node_open:
-			if not selected:
-				self.select_entity(entity);
+			self.selection_context.select(entity, exclusive=True);
 			
 			_, entity["name"] = imgui.input_text("Name", entity["name"]);
 			entity["prototype"] = eegui_input_asset("Prototype", entity["prototype"], "prototype");
@@ -730,9 +809,6 @@ class SceneEditor:
 				self.gui_draw_entity(entity);
 			imgui.tree_pop();
 	
-		for entity in self.trash:
-			self.scene["entities"].remove(entity);
-	
 	def gui_draw_properties_editor(self):
 		_, self.scene["has_background"] = imgui.checkbox("Has background", self.scene["has_background"]);
 		if self.scene["has_background"]:
@@ -744,164 +820,24 @@ class SceneEditor:
 		if self.scene["has_bounds"]:
 			_, self.scene["bounds"] = imgui.input_int4("Bounds", self.scene["bounds"]);
 	
-	def canvas_draw_entity(self, entity):
-		x, y = entity["position"];
-		sprite = self.get_entity_sprite(entity);
-		frame_idx = clamp(entity["frame_idx"], 0, sprite.frame_count-1);
-		self.canvas.draw_image(x, y, sprite.frame_images[frame_idx]);
-
-		if self.canvas_config.show_boxes:
-			prototype = AssetManager.search("prototype", entity["prototype"]);
-			if prototype != None:
-				for box in prototype["boxes"]:
-					colour = (255, 0, 0) if box["type"] == "blocker" else (0, 255, 0);
-					x0, y0, x1, y1 = box["aabb"];
-					x0, y0, x1, y1 = x0+x, y0+y, x1+x, y1+y;
-					self.canvas.draw_aabb((x0, y0, x1, y1), colour);
-
-		if (
-			"entity" in self.selection_context and 
-			self.selection_context["entity"] == entity
-		):
-			aabb = self.get_entity_aabb(entity);
-			self.canvas.draw_aabb(aabb, (255, 255, 255));
-	
-	def canvas_draw_tilemap(self):
-		tm = self.scene["tilemap"];
-		palette = SpriteBank.get(tm["palette"]);
-
-		match tm["type"]:
-			case "sparse":
-				for tile in tm["sparse"]:
-					
-					frame_idx = clamp(tile["frame_idx"], 0, palette.frame_count-1);
-					self.canvas.draw_image(
-						tile["position"][0], tile["position"][1],
-						palette.frame_images[frame_idx]
-					);
-
-				if self.edit_mode == EditMode.TILEMAP:
-					cursor = self.canvas_io.get_cursor();
-					grid_cursor = self.canvas_grid.snap_point(cursor);
-					x0, y0 = grid_cursor;
-					x1, y1 = x0+16, y0+16;
-					self.canvas.draw_aabb(
-						(x0, y0, x1, y1),
-						(255, 255, 255),
-					);
-			case "dense":
-				x0, y0 = tm["dense"]["position"];
-				w = tm["dense"]["columns"];
-				for row in range(tm["dense"]["rows"]):
-					y = y0 + row * 16;
-					for col in range(tm["dense"]["columns"]):
-						x = x0 + col * 16;
-						frame_idx = tm["dense"]["frame_indices"][row * w + col]-1;
-						if frame_idx >= 0:
-							frame_idx = clamp(frame_idx, 0, palette.frame_count-1);
-							self.canvas.draw_image(
-								x, y,
-								palette.frame_images[frame_idx]
-							);
-	
-	def canvas_draw_walls(self):
-		if self.scene["has_bounds"]:
-			self.canvas.draw_aabb(self.scene["bounds"], (128, 0, 0), False);
-		for wall in self.scene["walls"]:
-			colour = (255, 255, 0) if self.wall_editor._is_selected(wall) else (255, 0, 0);
-			if wall["type"] == "aabb":
-				self.canvas.draw_aabb(wall["aabb"], colour, False);
-			elif wall["type"] == "segment":
-				(x0, y0), (x1, y1) = wall["segment"];
-				self.canvas.draw_line(x0, y0, x1, y1, colour);		
-				self.canvas.draw_circle(x0, y0, 2, colour);
-				self.canvas.draw_circle(x1, y1, 2, colour);
-	
-	def canvas_draw_texts(self):
-		for text in self.scene["texts"]:
-			self.canvas.draw_text(text["position"], text["text"], 8*text["scale"], text["colour"]);
-			self.canvas.draw_aabb(self.text_editor._get_text_aabb(text), (255, 255, 255));
-		
-	def gui_draw_canvas(self):
-		imgui.set_next_item_width(128);
-		self.edit_mode = eegui_input_enum("Edit mode", self.edit_mode, EditMode);
-
-		self.show_entities = True;
-		self.show_tiles = True;
-		self.show_texts = True;
-
-		self.show_grid = False;
-		self.show_walls = True;
-		self.show_boxes = False;
-
-		self.snap_to_grid = True;
-
-		imgui.same_line();
-		_, self.canvas_config.show_entities = imgui.checkbox("Entites", self.canvas_config.show_entities);
-		imgui.same_line();
-		_, self.canvas_config.show_tiles = imgui.checkbox("Tiles", self.canvas_config.show_tiles);
-		imgui.same_line();
-		_, self.canvas_config.show_texts = imgui.checkbox("Texts", self.canvas_config.show_texts);
-
-		imgui.same_line();
-		_, self.canvas_config.show_grid = imgui.checkbox("Grid", self.canvas_config.show_grid);
-		imgui.same_line();
-		_, self.canvas_config.show_walls = imgui.checkbox("Walls", self.canvas_config.show_walls);
-		imgui.same_line();
-		_, self.canvas_config.show_boxes = imgui.checkbox("Boxes", self.canvas_config.show_boxes);
-
-		imgui.same_line();
-		imgui.set_next_item_width(64);
-		_, self.canvas_grid.size = imgui.slider_int("Grid size", round(self.canvas_grid.size / 2) * 2, 2, 16);
-		imgui.same_line();
-		_, self.canvas_config.snap_to_grid = imgui.checkbox("Snap", self.canvas_config.snap_to_grid);
-
-		r, g, b = self.scene["background"];
-		self.canvas.clear((r, g, b));
-
-		if self.canvas_config.show_tiles:
-			self.canvas_draw_tilemap();
-
-		if self.canvas_config.show_grid and self.canvas_grid.size >= 4:
-			self.canvas_grid.draw_lines((64, 64, 64));
-		self.canvas.draw_guides((255, 255, 255));
-		
-		if self.canvas_config.show_entities:
-			def sort_y(entity):
-				base_y = self.get_entity_aabb(entity)[3];
-				prototype = AssetManager.search("prototype", entity["prototype"]);
-				y_offset = prototype["y_sort_offset"] if prototype != None else 0;
-				return base_y+y_offset;
-			y_sorted = self.scene["entities"];
-			y_sorted = sorted(y_sorted, key=lambda x: x["layer"]);
-			y_sorted = sorted(y_sorted, key=sort_y);
-			for entity in y_sorted:
-				self.canvas_draw_entity(entity);
-		
-		if self.canvas_config.show_texts:
-			self.canvas_draw_texts();
-		
-		if self.canvas_config.show_walls:
-			self.canvas_draw_walls();
-		
-		if InputManager.is_held(glfw.KEY_LEFT_SHIFT) and self.canvas_io.is_cursor_in_bounds():
-			x, y = self.canvas_io.get_cursor();
-			self.canvas.draw_text((x, y), f"({int(x)}, {int(y)})", 16, (255, 255, 255));
-
-		self.canvas.render();
-	
 	def draw(self):
-		self.gui_draw_scene_selector();
+		self.draw_menu_bar();
+
 		if not self._is_scene_loaded():
 			return;
 
-		self.copypaste_tick();
-		self.undo_tick();
-		self.handle_events();
-		self.synchronize_manip();
+		self.canvas_io.tick();	
 
 		match self.edit_mode:
 			case EditMode.ENTITIES:
+				if InputManager.is_command(glfw.KEY_C):
+					self.clipboard.copy(self.selection_context.get_selection(), copy_mode=Clipboard.CopyMode.DEEP, exclusive=True);
+				if InputManager.is_command(glfw.KEY_V):
+					self.clipboard.paste(self.sceene["entities"]);
+				
+				self.synchronize_manip();
+				self.canvas_manip.tick();
+
 				imgui.begin_child(
 					"Entity Window",
 					imgui.ImVec2((imgui.get_content_region_avail().x - self.canvas.width) * 0.9, imgui.get_content_region_avail().y),
@@ -909,7 +845,9 @@ class SceneEditor:
 				);
 				self.gui_draw_entities();
 				imgui.end_child();
+			
 			case EditMode.TILEMAP:
+				self.tilemap_editor.tick();
 				imgui.begin_child(
 					"Tilemap Window",
 					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
@@ -917,7 +855,9 @@ class SceneEditor:
 				);
 				self.tilemap_editor.draw_gui();
 				imgui.end_child();
+			
 			case EditMode.WALLS:
+				self.wall_editor.tick();
 				imgui.begin_child(
 					"Walls Window",
 					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
@@ -925,7 +865,9 @@ class SceneEditor:
 				);
 				self.wall_editor.draw_gui();
 				imgui.end_child();
+			
 			case EditMode.TEXTS:
+				self.text_editor.tick();
 				imgui.begin_child(
 					"Texts Window",
 					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
@@ -933,6 +875,7 @@ class SceneEditor:
 				);
 				self.text_editor.draw_gui();
 				imgui.end_child();
+			
 			case EditMode.PROPERTIES:
 				imgui.begin_child(
 					"Properties Window",
@@ -941,6 +884,8 @@ class SceneEditor:
 				);
 				self.gui_draw_properties_editor();
 				imgui.end_child();
+		
+		self.handle_events();
 
 		imgui.same_line();
 		imgui.begin_child(
@@ -949,17 +894,17 @@ class SceneEditor:
 			0, 0
 		);
 
-		self.canvas_io.tick();
-		self.gui_draw_canvas();
-		match self.edit_mode:
-			case EditMode.ENTITIES:
-				self.canvas_manip.tick();
-			case EditMode.TILEMAP:
-				self.tilemap_editor.tick();
-			case EditMode.WALLS:
-				self.wall_editor.tick();
-			case EditMode.TEXTS:
-				self.text_editor.tick();
+		self.edit_mode = eegui_input_enum("Edit mode", self.edit_mode, EditMode, style=EEGUIEnumStyle.RADIO_BUTTONS);
+
+		imgui.same_line();
+		imgui.set_next_item_width(64);
+		self.canvas_grid.size = eegui_input_int("Grid size", round(self.canvas_grid.size / 2) * 2, 2, 16);
+
+		imgui.same_line();
+		self.snap = eegui_input_bool("Snap", self.snap);
+
+		self.scene_viewer.draw();
+		self.canvas.render();
 		
 		imgui.end_child();
 		

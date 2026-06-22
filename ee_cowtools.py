@@ -88,3 +88,64 @@ def process_trash(collection, trash, indices=False):
 			del collection[t];
 		else:
 			collection.remove(t);
+
+class SelectionContext:
+	def __init__(self):
+		self.selections = [];
+		self.env = {};
+
+	def clear(self):
+		self.selections = [];
+		self.env = {};
+	
+	def select(self, item, exclusive=False):
+		if exclusive:
+			self.selections = [];
+		self.selections.append(item);
+
+	def deselect(self, item):
+		if item in self.selections:
+			self.selections.remove(item);
+	
+	def is_selected(self, item):
+		return item in self.selections;
+
+	def get_selection(self, single=False):
+		if single:
+			return self.selections[-1] if len(self.selections) > 0 else None;
+		return self.selections;
+	
+	def env_set(self, key, value):
+		self.env[key] = value;
+
+	def env_get(self, key):
+		if not key in self.env:
+			return None;
+		return self.env[key];
+
+class Clipboard:
+	class CopyMode(Enum):
+		NONE = 0
+		SHALLOW = 1
+		DEEP = 2
+	
+	def __init__(self):
+		self.contents = [];
+
+	def clear(self):
+		self.contents.clear();
+
+	def copy(self, value, copy_mode=CopyMode.NONE, exclusive=False):
+		if exclusive:
+			self.contents.clear();
+		match copy_mode:
+			case Clipboard.CopyMode.NONE:
+				self.contents.append(value);
+			case Clipboard.CopyMode.SHALLOW:
+				self.contents.append(copy.copy(value));
+			case Clipboard.CopyMode.DEEP:
+				self.contents.append(copy.deepcopy(value));
+
+	def paste(self, destination):
+		for entry in self.contents:
+			destination.append(entry);

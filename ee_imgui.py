@@ -61,8 +61,20 @@ def eegui_combo(gui_id, value, values, fmt=lambda x: x):
 
 # Primitives
 
-def eegui_input_int(gui_id, value):
-	_, value = imgui.input_int(str(gui_id), value);
+class EEGUIIntStyle(Enum):
+	DEFAULT = 0
+	SLIDER = 1
+
+def eegui_input_int(gui_id, value, style=EEGUIIntStyle.DEFAULT, low_bound=None, high_bound=None):
+	match style:
+		case EEGUIIntStyle.DEFAULT:
+			_, value = imgui.input_int(str(gui_id), value);
+			if low_bound != None:
+				value = max(value, low_bound);
+			if high_bound != None:
+				value = min(value, high_bound);
+		case EEGUIIntStyle.SLIDER:
+			_, value = imgui.slider_int(str(gui_id), value, low_bound, high_bound);
 	EEGUITooltip.ping();
 	EEGUIContextMenu.ping(gui_id);
 	return value;
@@ -103,8 +115,11 @@ class EEGUIEnumStyle(Enum):
 	RADIO_BUTTONS = 1
 
 def eegui_input_enum(gui_id, value, values, style=EEGUIEnumStyle.COMBO):
-	if isinstance(values, Enum):
-		values = [x.name for x in values];
+	enum_class = values if isinstance(values, type) and issubclass(values, Enum) else None;
+	if enum_class != None:
+		value = value.name;
+		values = [x.name for x in values];	
+	
 	match style:
 		case EEGUIEnumStyle.COMBO:
 			value = eegui_combo(gui_id, value, values);
@@ -115,6 +130,9 @@ def eegui_input_enum(gui_id, value, values, style=EEGUIEnumStyle.COMBO):
 				imgui.same_line();
 			imgui.new_line();
 			value = values[selected_idx] if selected_idx != -1 else value;
+	
+	if enum_class != None:
+		value = next((x for x in enum_class if x.name == value), None);
 	return value;
 
 # Flags

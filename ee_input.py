@@ -7,7 +7,6 @@ class InputManager:
 
 	_glfw_io = {};
 	_imgui_io = None;
-	
 
 	def initialize(glfw_handle, imgui_impl):
 		InputManager._glfw_handle = glfw_handle;

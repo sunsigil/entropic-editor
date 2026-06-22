@@ -186,7 +186,7 @@ class PrototypeEditor:
 		self.draw_grid = imgui.checkbox("Draw grid", self.draw_grid)[1];
 		imgui.same_line();
 		imgui.set_next_item_width(64);
-		_, self.canvas_grid.size = imgui.slider_int("Grid size", round(self.canvas_grid.size / 2) * 2, 2, 16);
+		self.canvas_grid.size = eegui_input_int("Grid size", self.canvas_grid.size, style=EEGUIIntStyle.SLIDER, low_bound=2, high_bound=16);
 
 		self.canvas.clear((128, 128, 128));
 		if self.draw_grid:
