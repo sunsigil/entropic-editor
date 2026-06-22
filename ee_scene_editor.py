@@ -1,6 +1,7 @@
 from imgui_bundle import imgui;
 import glfw;
 import csv;
+import copy;
 
 from ee_cowtools import *;
 from ee_canvas import *;
@@ -8,6 +9,7 @@ from ee_assets import *;
 from ee_sprites import SpriteBank, EditorSprite, SpritePreview;
 from ee_input import InputManager;
 from ee_imgui import *;
+from ee_geometry import *;
 
 #########################################################
 ## SCENE EDITOR
@@ -31,45 +33,35 @@ class CanvasConfig:
 
 		self.snap_to_grid = True;
 
-class CreateEntityEvent:
-	def __init__(self, entity):
-		self.entity = entity;
-class DeleteEntityEvent:
-	def __init__(self, entity):
-		self.entity = entity;
+class CreateEvent:
+	def __init__(self, collection, item, copy_item=False):
+		self.collection = collection;
+		self.item = item;
+		self.copy_item = copy_item;
+	def handle(self):
+		self.item = copy.copy(self.item) if self.copy_item else self.item;
+		self.collection.append(self.item);
 
-class CreateTileEvent:
-	def __init__(self, position, frame_idx):
-		self.position = position;
-		self.frame_idx = frame_idx;
-class DeleteTileEvent:
-	def __init__(self, tile):
-		self.tile = tile;
-
-class CreateWallEvent:
-	def __init__(self, wall):
-		self.wall = wall;
-class DeleteWallEvent:
-	def __init__(self, wall):
-		self.wall = wall;
+class DeleteEvent:
+	def __init__(self, collection, item, is_index=False):
+		self.collection = collection;
+		self.item = item;
+		self.is_index = is_index;
+	def handle(self):	
+		if self.is_index:
+			del self.collection[self.item];
+		else:
+			self.collection.remove(self.item);
 
 class UndoEvent:
-	def __init__(self):
+	def __init__(self, event):
 		pass;
-
-class CreateTextEvent:
-	def __init__(self, text):
-		self.text = text;
-class DeleteTextEvent:
-	def __init__(self, text):
-		self.text = text;
 
 class TilemapEditor:
 	def __init__(self, parent):
 		self.parent = parent;
 		self.tilemap = None;
 		self.selected_frame = 0;
-		self.event_queue = [];
 	
 	def _type(self):
 		return self.tilemap["type"];
@@ -90,102 +82,88 @@ class TilemapEditor:
 				x, y = self.parent.canvas_grid.snap_point(position);
 				idx = y * self._data()["columns"] + x;
 				return self._data()["frame_indices"][idx] != 0;
-
 	def _is_occupied(self, position):
 		return self._spatial_search(position) != None;
 
-	def _clean(self):
-		match self._type():
-			case "sparse":
-				for tile in self._data():
-					if not self._spatial_search(tile["position"]) is tile:
-						self.parent.event_queue.append(DeleteTileEvent(tile));
-	
 	def on_load_scene(self):
-		if self.tilemap != None:
-			self._clean();
 		self.tilemap = self.parent.scene["tilemap"];
-		self.event_queue.clear();
 	
-	def gui_draw_palette(self):
+	def _gui_draw_palette(self):
+		sprite = SpriteBank.get(self.tilemap["palette"]);
+		wdw_w = imgui.get_content_region_avail().x;
+		cols = int(wdw_w // 72);
+		rows = int(math.ceil(sprite.frame_count / cols)) if cols > 0 else 0;
+
+		i = 0;
+		for r in range(rows):
+			for c in range(cols):
+				if i < sprite.frame_count:
+					tint = (0.5, 0.5, 0.5, 1) if i == self.selected_frame else (1, 1, 1, 1);
+					if imgui.image_button(f"##{i}", imgui.ImTextureRef(sprite.frame_textures[i]), (64, 64), tint_col=tint):
+						self.selected_frame = i;
+					imgui.same_line();
+				i += 1;
+			imgui.new_line();
+	
+	def _load_csv(self):
+		with open(self._data()["csv"]) as file:
+			reader = csv.reader(file);
+			self._data()["frame_indices"] = [];
+			rows = 0;
+			for row in reader:
+				for col in row:
+					self._data()["frame_indices"].append(int(col));
+				rows += 1;
+			self._data()["rows"] = rows;
+			self._data()["columns"] = len(self._data()["frame_indices"])//rows;
+	
+	def _gui_draw_csv(self):
+		_, self._data()["position"] = imgui.input_int2("Position", self._data()["position"]);
+		
+		last_csv = self._data()["csv"];
+		self._data()["csv"] = eegui_input_file("CSV", self._data()["csv"], "*.csv");
+		if self._data()["csv"] != last_csv:
+			self._load_csv();
+	
+	def draw_gui(self):
 		if self.tilemap == None:
 			return;
 	
-		self.tilemap["palette"] = imgui_asset_name_selector("palette", "sprite", self.tilemap["palette"]);
+		self.tilemap["palette"] = eegui_input_asset("##palette", self.tilemap["palette"], "sprite");
 		if self.tilemap["palette"] == "":
 			return;
 
 		match self._type():
 			case "sparse":
-				sprite = SpriteBank.get(self.tilemap["palette"]);
-				wdw_w = imgui.get_content_region_avail().x;
-				cols = int(wdw_w // 72);
-				rows = int(math.ceil(sprite.frame_count / cols));
-
-				i = 0;
-				for r in range(rows):
-					for c in range(cols):
-						if i < sprite.frame_count:
-							tint = (0.5, 0.5, 0.5, 1) if i == self.selected_frame else (1, 1, 1, 1);
-							if imgui.image_button(f"##{id(i)}", imgui.ImTextureRef(sprite.frame_textures[i]), (64, 64), tint_col=tint):
-								self.selected_frame = i;
-							imgui.same_line();
-						i += 1;
-					imgui.new_line();
+				self._gui_draw_palette();
 			case "dense":
-				explorer = ToolWindowRegistry.lookup(FileExplorer);
-				if imgui.button(f"...") and not explorer.is_open():
-					explorer.open();
-					explorer.get().configure(self._data()["csv"], "assets", "*.csv");
-				if explorer.is_open() and explorer.get().is_targeting(self._data()["csv"]):
-					harvest = explorer.get_result();
-					if harvest != None:
-						self._data()["csv"] = str(Path("assets")/harvest);
-						with open(self._data()["csv"]) as file:
-							reader = csv.reader(file);
-							self._data()["frame_indices"] = [];
-							rows = 0;
-							for row in reader:
-								for col in row:
-									self._data()["frame_indices"].append(int(col));
-								rows += 1;
-							self._data()["rows"] = rows;
-							self._data()["columns"] = len(self._data()["frame_indices"])//rows;
-				
-				_, self._data()["position"] = imgui.input_int2("Position", self._data()["position"]);
+				self._gui_draw_csv();
 	
-	def handle_events(self):
-		while len(self.event_queue) > 0:
-			event = self.event_queue.pop(0);
-
-			if isinstance(event, CreateTileEvent):
-				self.tilemap["sparse"].append(
-					{
-						"position": list(event.position),
-						"frame_idx": event.frame_idx
-					}
-				);
-			if isinstance(event, DeleteTileEvent):
-				self.tilemap["sparse"].remove(event.tile);
-	
-	def tick_sparse(self):
+	def _paint_tick(self):
 		palette = SpriteBank.get(self.tilemap["palette"]);
 		self.selected_frame = clamp(self.selected_frame, 0, palette.frame_count-1);
 
-		if self.parent.canvas_io.cursor_in_bounds():
+		if self.parent.canvas_io.is_cursor_in_bounds():
 			if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT):
 				cursor = self.parent.canvas_io.get_cursor();
 				tile_cursor = self.parent.canvas_grid.snap_point(cursor);
+
 				if InputManager.is_held(glfw.KEY_LEFT_SHIFT):
+					trash = [];
 					for idx, tile in enumerate(self.tilemap["sparse"]):
 						tx, ty = self.parent.canvas_grid.snap_point(tile["position"]);
 						cx, cy = tile_cursor;
 						if int(tx) == int(cx) and int(ty) == int(cy):
-							self.event_queue.append(DeleteTileEvent(self.tilemap["sparse"][idx]));
+							trash.append(idx);
+					process_trash(self.tilemap["sparse"], trash, indices=True);
+	
 				elif self.selected_frame != None:
 					existing = self._spatial_search(tile_cursor);
 					if existing == None:
-						self.event_queue.append(CreateTileEvent(tile_cursor, self.selected_frame));
+						self.tilemap["sparse"].append({
+							"position": list(tile_cursor),
+							"frame_idx": self.selected_frame
+						});
 					else:
 						existing["frame_idx"] = self.selected_frame;
 
@@ -194,16 +172,9 @@ class TilemapEditor:
 			return;
 		if self.tilemap["palette"] == "":
 			return;
-
 		match self._type():
 			case "sparse":
-				self.tick_sparse();
-	
-		self.handle_events();
-
-	def __del__(self):
-		if self.tilemap != None:
-			self._clean();
+				self._paint_tick();
 
 class WallEditor:
 	class PlaceModes(Enum):
@@ -217,160 +188,150 @@ class WallEditor:
 
 		self.event_queue = [];
 		self.canvas_manip = CanvasManipulator(self.parent.canvas_io, self.event_queue);
-		self.manip_map = {};
+		self.manip_registry = CanvasManipRegistry();
+
 		self.context = {};
-	
 		self.place_mode = WallEditor.PlaceModes.NONE;
 		self.selected = None;
 
 	def on_load_scene(self):
 		self.walls = self.parent.scene["walls"];
 		self.canvas_manip.clear();
-		self.manip_map.clear();
-		self.event_queue.clear();
+		self.manip_registry.clear();
 		self.context.clear();
 	
-	def gui_draw_walls(self):
+	def draw_gui(self):
 		if self.walls == None:
 			return;
 
-		imgui.text("Place mode");
-		imgui.same_line();
-		self.place_mode = imgui_enum_selector("place-mode", self.PlaceModes, self.place_mode);
+		self.place_mode = eegui_input_enum("Place mode", self.place_mode, self.PlaceModes);
 
 		for idx, wall in enumerate(self.walls):
 			imgui.set_next_item_open(wall == self.selected);
-			node_open = imgui.tree_node(f"{idx}##{id(self.walls)}{idx}");
+			node_open = imgui.tree_node(f"Wall {idx}##{id(self.walls)}{idx}");
 
+			trash = [];
 			if imgui.begin_popup_context_item():
 				if imgui.menu_item_simple("Delete"):
-					self.event_queue.append(DeleteWallEvent(wall));
-					imgui.close_current_popup();
-				if imgui.menu_item_simple("Duplicate"):
-					self.event_queue.append(CreateWallEvent(list(wall)));
+					trash.append(idx);
 					imgui.close_current_popup();
 				imgui.end_popup();
+			process_trash(self.walls, trash, indices=True);
 
 			if node_open:
 				match wall["type"]:
 					case "aabb":
-						wall["aabb"] = list(wall["aabb"]);
-						lstapply(wall["aabb"], int);
-						_, self.walls[idx]["aabb"] = imgui.input_int4("AABB", self.walls[idx]["aabb"]);
+						wall["aabb"] = eegui_input_aabb("AABB", wall["aabb"]);
 					case "segment":
-						wall["segment"][0] = list(wall["segment"][0]);
-						wall["segment"][1] = list(wall["segment"][1]);
-						lstapply(wall["segment"][0], int);
-						lstapply(wall["segment"][1], int);
-						_, self.walls[idx]["segment"][0] = imgui.input_int2("A", self.walls[idx]["segment"][0]);
-						_, self.walls[idx]["segment"][1] = imgui.input_int2("B", self.walls[idx]["segment"][1]);
+						wall["segment"][0] = eegui_input_vec2("A", wall["segment"][0]);
+						wall["segment"][1] = eegui_input_vec2("B", wall["segment"][1]);
 				imgui.tree_pop();
 
-	def is_selected(self, wall):
+	def _is_selected(self, wall):
 		return self.selected == wall;	
+
+	def _synchronize_manip(self):
+		def make_shape(wall):
+			match wall["type"]:
+				case "aabb":
+					return CanvasManipRect(wall["aabb"]);
+				case "segment":
+					return CanvasManipSegment(wall["segment"]);
+		shapes = [make_shape(x) for x in self.walls];
+		
+		self.manip_registry.update(self.walls, shapes);
+		self.canvas_manip.synchronize(self.manip_registry);
 	
-	def handle_events(self):
+	def _handle_events(self):
 		while len(self.event_queue) > 0:
 			event = self.event_queue.pop(0);
 
-			if isinstance(event, CreateWallEvent):
-				self.walls.append(event.wall);
-			if isinstance(event, DeleteWallEvent):
-				eeid = None;
-				for k,v in self.manip_map.items():
-					if v == event.wall:
-						eeid = k;
-				del self.manip_map[eeid];
-				self.canvas_manip.delete_shape(eeid);
-				self.walls.remove(event.wall);
-
 			if isinstance(event, CanvasManipClick):
 				hit = event.eeid != None;
+				self.selected = self.manip_registry.search(event.eeid) if hit else None;
 
-				if hit:
-					self.selected = self.manip_map[event.eeid];
-				else:
-					self.selected = None;
+				if hit or InputManager.is_held(glfw.KEY_LEFT_SHIFT):
+					continue;
 				
-				if self.place_mode != None and not hit and not InputManager.is_held(glfw.KEY_LEFT_SHIFT):
-					x, y = event.point;
-					x0, y0 = self.parent.canvas_grid.snap_point(event.point);
-					x1, y1 = x0+16, y0+16;
-					new_wall = None;
+				x, y = event.point;
+				x0, y0 = self.parent.canvas_grid.snap_point(event.point);
+				x1, y1 = x0+16, y0+16;
+				new_wall = None;
+				
+				match self.place_mode:
+					case WallEditor.PlaceModes.AABB:
+						new_wall = {
+							"type": "aabb",
+							"aabb": [x0, y0, x1, y1]
+						};
 
-					match self.place_mode:
-						case WallEditor.PlaceModes.AABB:
-							new_wall = {
-								"type": "aabb",
-								"aabb": [x0, y0, x1, y1]
-							};
-
-						case WallEditor.PlaceModes.SEGMENT:
-							deltas = [abs(x-x0), abs(y-y0), abs(x-x1), abs(y-y1)];
-							min_idx = min(range(len(deltas)), key=deltas.__getitem__);
-							segment = None;
-							if min_idx == 0:				
-								segment = [[x0, y0], [x0, y1]];
-							elif min_idx == 1:			
-								segment = [[x0, y0], [x1, y0]];
-							elif min_idx == 2:			
-								segment = [[x1, y0], [x1, y1]];
-							elif min_idx == 3:	
-								segment = [[x0, y1], [x1, y1]];
-							new_wall = {
-								"type": "segment",
-								"segment": segment
-							};
-
-					if new_wall != None:
-						self.walls.append(new_wall);
-						self.selected = new_wall;
+					case WallEditor.PlaceModes.SEGMENT:
+						deltas = [abs(x-x0), abs(y-y0), abs(x-x1), abs(y-y1)];
+						min_idx = min(range(len(deltas)), key=deltas.__getitem__);
+						segment = None;
+						if min_idx == 0:				
+							segment = [[x0, y0], [x0, y1]];
+						elif min_idx == 1:			
+							segment = [[x0, y0], [x1, y0]];
+						elif min_idx == 2:			
+							segment = [[x1, y0], [x1, y1]];
+						elif min_idx == 3:	
+							segment = [[x0, y1], [x1, y1]];
+						new_wall = {
+							"type": "segment",
+							"segment": segment
+						};
+				
+				if new_wall != None:
+					self.walls.append(new_wall);
+					self.selected = new_wall;	
 
 			if isinstance(event, CanvasManipDrag):
 				if event.eeid == None:
 					self.parent.view_drag_handler(event);
-				else:
-					match event.signal:
-						case CanvasManipDrag.Signal.START:
-							wall = self.manip_map[event.eeid];
-							self.context["type"] = wall["type"];
-							x, y = event.point;
+					continue;
+				
+				match event.signal:
+					case CanvasManipDrag.Signal.START:
+						wall = self.manip_registry.search(event.eeid);
+						type = wall["type"];
+						x, y = event.point;
 
-							match wall["type"]:
-								case "aabb":
-									x0, y0 = wall["aabb"][:2];
-									self.context["delta"] = (x0 - x, y0 - y);
-									self.context["inside"] = event.distance <= -1;
-									self.context["edge"] = aabb_closest_edge(wall["aabb"], event.point);
-								case "segment":
-									x0, y0 = wall["segment"][0];
-									self.context["delta"] = (x0 - x, y0 - y);
-									a_dist = point_point_dist(wall["segment"][0], event.point);
-									b_dist = point_point_dist(wall["segment"][1], event.point);
-									self.context["inside"] = a_dist >= 4 and b_dist >= 4;
-									self.context["end"] = segment_closest_end(wall["segment"], event.point);
+						match type:
+							case "aabb":
+								x0, y0 = wall["aabb"][:2];
+								self.context["delta"] = (x0 - x, y0 - y);
+								self.context["inside"] = event.distance <= -1;
+								self.context["edge"] = aabb_closest_edge(wall["aabb"], event.point);
+							case "segment":
+								x0, y0 = wall["segment"][0];
+								self.context["delta"] = (x0 - x, y0 - y);
+								a_dist = point_point_dist(wall["segment"][0], event.point);
+								b_dist = point_point_dist(wall["segment"][1], event.point);
+								self.context["inside"] = a_dist >= 4 and b_dist >= 4;
+								self.context["end"] = segment_closest_end(wall["segment"], event.point);
 
-						case CanvasManipDrag.Signal.TICK:
-							wall = self.manip_map[event.eeid];
-							type = self.context["type"];
+					case CanvasManipDrag.Signal.TICK:
+						wall = self.manip_registry.search(event.eeid);
+						type = wall["type"];
 
-							match type:
-								case "aabb":
-									if self.context["inside"]:
-										point = event.point[0] + self.context["delta"][0], event.point[1] + self.context["delta"][1];
-										point = self.parent.canvas_grid.snap_point(point);
-										lstcopy(wall["aabb"], relocate_aabb(wall["aabb"], point));
-									else:
-										point = self.parent.canvas_grid.snap_point(event.point);
-										lstcopy(wall["aabb"], shape_aabb(wall["aabb"], self.context["edge"], point));
-								case "segment":
-									if self.context["inside"]:
-										point = event.point[0] + self.context["delta"][0], event.point[1] + self.context["delta"][1];
-										point = self.parent.canvas_grid.snap_point(point);
-										lstcopy(wall["segment"], relocate_segment(wall["segment"], point));
-									else:
-										point = self.parent.canvas_grid.snap_point(event.point);
-										lstcopy(wall["segment"], shape_segment(wall["segment"], self.context["end"], point));
+						match type:
+							case "aabb":
+								if self.context["inside"]:
+									point = event.point[0] + self.context["delta"][0], event.point[1] + self.context["delta"][1];
+									point = self.parent.canvas_grid.snap_point(point);
+									wall["aabb"] = relocate_aabb(wall["aabb"], point);
+								else:
+									point = self.parent.canvas_grid.snap_point(event.point);
+									wall["aabb"] = shape_aabb(wall["aabb"], self.context["edge"], point);
+							case "segment":
+								if self.context["inside"]:
+									point = event.point[0] + self.context["delta"][0], event.point[1] + self.context["delta"][1];
+									point = self.parent.canvas_grid.snap_point(point);
+									wall["segment"] = relocate_segment(wall["segment"], point);
+								else:
+									point = self.parent.canvas_grid.snap_point(event.point);
+									wall["segment"] = shape_segment(wall["segment"], self.context["end"], point);
 	
 	def tick(self):
 		if self.walls == None:
@@ -378,24 +339,12 @@ class WallEditor:
 	
 		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_D):
 			if self.selected != None:
-				self.event_queue.append(DeleteWallEvent(self.selected));
+				self.walls.remove(self.selected);
 				self.selected = None;
-	
-		for wall in self.walls:
-			if not wall in self.manip_map.values():
-				match wall["type"]:
-					case "aabb":
-						eeid = self.canvas_manip.register_aabb(wall["aabb"]);
-					case "segment":
-						eeid = self.canvas_manip.register_segment(wall["segment"]);
-				self.manip_map[eeid] = wall;
 		
-		for k,v in self.manip_map.items():
-			shape = self.canvas_manip.get_shape(k);
-			shape.update(v[v["type"]]);
-		
+		self._synchronize_manip();
 		self.canvas_manip.tick();
-		self.handle_events();
+		self._handle_events();
 
 class TextEditor:
 	def __init__(self, parent):
@@ -404,17 +353,17 @@ class TextEditor:
 
 		self.event_queue = [];
 		self.canvas_manip = CanvasManipulator(self.parent.canvas_io, self.event_queue);
-		self.manip_map = {};
+		self.manip_registry = CanvasManipRegistry();
 		self.context = {};
 
 	def on_load_scene(self):
 		self.texts = self.parent.scene["texts"];
 		self.canvas_manip.clear();
-		self.manip_map.clear();
+		self.manip_registry.clear();
 		self.event_queue.clear();
 		self.context.clear();
 	
-	def gui_draw_texts(self):
+	def draw_gui(self):
 		if self.texts == None:
 			return;
 	
@@ -422,86 +371,86 @@ class TextEditor:
 
 		if imgui.begin_popup_context_item():
 			if imgui.menu_item_simple("New text"):
-				self.event_queue.append(CreateTextEvent({
+				self.texts.append({
 					"text": "Hello, world!",
 					"colour": [255, 255, 255],
 					"scale": 1,
 					"position": [0, 0]
-				}));
+				});
 				imgui.close_current_popup();
 			imgui.end_popup();
 
 		if node_open:
+			trash = [];
+
 			for idx, text in enumerate(self.texts):
 				node_open = imgui.tree_node(f"{idx}##{id(self.texts)}{idx}");
 
 				if imgui.begin_popup_context_item():
+					trash = [];
 					if imgui.menu_item_simple("Delete"):
-						self.event_queue.append(DeleteTextEvent(text));
+						trash.append(idx);
 						imgui.close_current_popup();
 					imgui.end_popup();
 
 				if node_open:
-					_, text["text"] = imgui.input_text("Text", text["text"]);
-
-					r, g, b = text["colour"];
-					_, (r, g, b) = imgui.color_edit3("Colour", (r/255, g/255, b/255));
-					text["colour"] = [int(r*255), int(g*255), int(b*255)];
-
-					_, text["scale"] = imgui.input_int("Scale", text["scale"], 0, 3);
-
-					_, text["position"] = imgui.input_int2("Position", text["position"]);
+					text["text"] = eegui_input_string("Text", text["text"]);
+					text["colour"] = eegui_input_colour("Colour", text["colour"]);
+					text["scale"] = eegui_input_int("Scale", text["scale"]);
+					text["position"] = eegui_input_vec2("Position", text["position"]);
 					imgui.tree_pop();
+			
+			process_trash(self.texts, trash, indices=True);
 			imgui.tree_pop();
 	
-	def move_text(self, text, point):
+	def _get_text_aabb(self, text):
+		x0, y0 = text["position"];
+		width = len(text["text"]) * 8 * text["scale"];
+		x1, y1 = x0 + width, y0 + 8 * text["scale"];
+		return (x0, y0, x1, y1);
+
+	def _synchronize_manip(self):
+		indices = [i for i in range(len(self.texts))];
+
+		def make_shape(idx):
+			text = self.texts[idx];
+			aabb = self._get_text_aabb(text);
+			return CanvasManipRect(aabb);
+		shapes = [make_shape(x) for x in indices];
+		
+		self.manip_registry.update(indices, shapes);
+		self.canvas_manip.synchronize(self.manip_registry);
+	
+	def _move_text(self, text, point):
 		x, y = point;
 		text["position"][0] = int(x);
 		text["position"][1] = int(y);
 	
-	def handle_events(self):
+	def _handle_events(self):
 		while len(self.event_queue) > 0:
 			event = self.event_queue.pop(0);
-
-			if isinstance(event, CreateTextEvent):
-				self.texts.append(event.text);
-			if isinstance(event, DeleteTextEvent):
-				self.texts.remove(event.text)
 
 			if isinstance(event, CanvasManipDrag):
 				if event.eeid != None:
 					match event.signal:
 						case CanvasManipDrag.Signal.START:
-							text = self.manip_map[event.eeid];
+							text = self.texts[self.manip_registry.search(event.eeid)];
 							self.context = {
 								"delta": (text["position"][0] - event.point[0], text["position"][1] - event.point[1]),
 							}
 						case CanvasManipDrag.Signal.TICK:
-							text = self.manip_map[event.eeid];
+							text = self.texts[self.manip_registry.search(event.eeid)];
 							point = event.point[0] + self.context["delta"][0], event.point[1] + self.context["delta"][1];
 							point = self.parent.canvas_grid.snap_point(point);
-							self.move_text(text, point);
-	
-	def get_text_aabb(self, text):
-		x0, y0 = text["position"];
-		width = len(text["text"]) * 8 * text["scale"];
-		x1, y1 = x0 + width, y0 + 8 * text["scale"];
-		return (x0, y0, x1, y1);
+							self._move_text(text, point);
 	
 	def tick(self):
 		if self.texts == None:
 			return;
-	
-		for text in self.texts:
-			if not text in self.manip_map.values():
-				eeid = self.canvas_manip.register_aabb(self.get_text_aabb(text));
-				self.manip_map[eeid] = text;
-		for k,v in self.manip_map.items():
-			shape = self.canvas_manip.get_shape(k);
-			shape.update(self.get_text_aabb(v));
 		
+		self._synchronize_manip();
 		self.canvas_manip.tick();
-		self.handle_events();
+		self._handle_events();
 
 class SceneEditor:
 	def _load_scene(self, scene):		
@@ -510,7 +459,7 @@ class SceneEditor:
 		self.event_queue.clear();
 		self.selection_context.clear();
 		self.canvas_manip.clear();
-		self.manip_map.clear();
+		self.manip_registry.clear();
 		
 		self.tilemap_editor.on_load_scene();
 		self.wall_editor.on_load_scene();
@@ -535,7 +484,7 @@ class SceneEditor:
 		self.trash = [];
 
 		self.canvas_manip = CanvasManipulator(self.canvas_io, self.event_queue);
-		self.manip_map = {};
+		self.manip_registry = CanvasManipRegistry();
 
 		self.tilemap_editor = TilemapEditor(self);
 		self.wall_editor = WallEditor(self);
@@ -572,13 +521,16 @@ class SceneEditor:
 				if event.eeid == None:
 					self.selection_context = {};
 				else:
-					self.selection_context["entity"] = self.manip_map[event.eeid];
+					path = self.manip_registry.search(event.eeid);
+					entity = get_by_path(self.scene, path);
+					self.select_entity(entity);
 			
 			if isinstance(event, CanvasManipDrag):
 				if event.eeid != None:
 					match event.signal:
 						case CanvasManipDrag.Signal.START:
-							entity = self.manip_map[event.eeid];
+							path = self.manip_registry.search(event.eeid);
+							entity = get_by_path(self.scene, path);
 							delta = entity["position"][0] - event.point[0], entity["position"][1] - event.point[1];
 							self.select_entity(entity);
 							self.selection_context["delta"] = delta;
@@ -592,16 +544,6 @@ class SceneEditor:
 							entity["position"] = position;
 				else:
 					self.view_drag_handler(event);
-			
-			if isinstance(event, CreateEntityEvent):
-				self.scene["entities"].append(event.entity);
-				self.select_entity(event.entity);
-			
-			if isinstance(event, DeleteEntityEvent):
-				if self.get_selected_entity() == event.entity:
-					self.select_entity(None);
-				self.trash.append(event.entity);
-				self.scene["entities"].remove(event.entity);
 	
 	def get_entity_sprite(self, entity):
 		prototype = AssetManager.search("prototype", entity["prototype"]);
@@ -673,16 +615,19 @@ class SceneEditor:
 	def get_selected_entity(self):
 		return None if not "entity" in self.selection_context else self.selection_context["entity"];
 	
-	def manip_bookkeeping_tick(self):
-		for entity in self.scene["entities"]:
-			if entity not in self.manip_map.values():
-				aabb = self.get_entity_aabb(entity);
-				eeid = self.canvas_manip.register_aabb(aabb);
-				self.manip_map[eeid] = entity
-		for k,v in self.manip_map.items():
-			aabb = self.get_entity_aabb(v);
-			shape = self.canvas_manip.get_shape(k);
-			shape.update(aabb);
+	def synchronize_manip(self):
+		paths = [];
+		for i in range(len(self.scene["entities"])):
+			paths.append(f"entities/{i}");
+
+		def make_shape(path):
+			entity = get_by_path(self.scene, path);
+			aabb = self.get_entity_aabb(entity);
+			return CanvasManipRect(aabb);
+		shapes = [make_shape(x) for x in paths];
+		
+		self.manip_registry.update(paths, shapes);
+		self.canvas_manip.synchronize(self.manip_registry);
 	
 	def copypaste_tick(self):
 		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_C):
@@ -690,17 +635,26 @@ class SceneEditor:
 				self.clipboard = [self.selection_context["entity"]];
 		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_V):
 			for entity in self.clipboard:
-				self.event_queue.append(CreateEntityEvent(copy.deepcopy(entity)));
+				self.scene["entities"].append(copy.deepcopy(entity));
 	
 	def undo_tick(self):
 		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_Z):
 			if len(self.trash) > 0:
 				restore = self.trash.pop();
-				CreateEntityEvent(restore);
+				self.scene["entities"].append(copy.deepcopy(restore));
 	
 	def gui_draw_scene_selector(self):
 		scene_last = self.scene;
-		self.scene = imgui_asset_selector(id(self.scene), "scene", self.scene);
+		if imgui.begin_menu_bar():
+			if imgui.begin_menu("Scene"):
+				if imgui.begin_menu("Open"):
+					scenes = AssetManager.get_assets("scene");
+					for scene in scenes:
+						if imgui.menu_item_simple(scene["name"]):
+							self.scene = scene;
+					imgui.end_menu();
+				imgui.end_menu();
+			imgui.end_menu_bar();
 		if self.scene != scene_last:
 			self._load_scene(self.scene);
 	
@@ -715,7 +669,7 @@ class SceneEditor:
 
 		if imgui.begin_popup_context_item():
 			if imgui.menu_item_simple("Delete"):
-				self.event_queue.append(DeleteEntityEvent(entity));
+				self.trash.append(entity);
 				imgui.close_current_popup();
 			imgui.end_popup();
 		
@@ -724,7 +678,7 @@ class SceneEditor:
 				self.select_entity(entity);
 			
 			_, entity["name"] = imgui.input_text("Name", entity["name"]);
-			entity["prototype"] = imgui_asset_input("prototype", "prototype", entity["prototype"]);
+			entity["prototype"] = eegui_input_asset("Prototype", entity["prototype"], "prototype");
 
 			if len(entity["prototype"]) > 0 and len(entity["name"]) <= 0:
 				entity["name"] = entity["prototype"];
@@ -748,7 +702,7 @@ class SceneEditor:
 								_, data["value"] = imgui.input_int2(data["key"], data["value"]);
 							case _:
 								if AssetManager.has_type(data["type"]):
-									data["value"] = imgui_asset_input("value", data["type"], data["value"]);
+									data["value"] = eegui_input_asset("value", data["value"], data["type"]);
 								else:
 									_, data["value"] = imgui.input_text("value", data["value"]);						
 						imgui.tree_pop();
@@ -757,8 +711,8 @@ class SceneEditor:
 	
 	def gui_draw_entities(self):
 		node_open = imgui.tree_node("Entities");
-		if imgui.begin_popup_context_item("Create"):
-			if imgui.menu_item_simple("New entity"):
+		if imgui.begin_popup_context_item():
+			if imgui.menu_item_simple("Create"):
 				entity = {
 						"name": "",
 						"prototype": "",
@@ -767,7 +721,7 @@ class SceneEditor:
 						"layer": 0,
 						"script_data": []
 				};
-				self.event_queue.append(CreateEntityEvent(entity));
+				self.scene["entities"].append(entity);
 				imgui.close_current_popup();
 			imgui.end_popup();
 		
@@ -775,6 +729,9 @@ class SceneEditor:
 			for entity in self.scene["entities"]:
 				self.gui_draw_entity(entity);
 			imgui.tree_pop();
+	
+		for entity in self.trash:
+			self.scene["entities"].remove(entity);
 	
 	def gui_draw_properties_editor(self):
 		_, self.scene["has_background"] = imgui.checkbox("Has background", self.scene["has_background"]);
@@ -851,7 +808,7 @@ class SceneEditor:
 		if self.scene["has_bounds"]:
 			self.canvas.draw_aabb(self.scene["bounds"], (128, 0, 0), False);
 		for wall in self.scene["walls"]:
-			colour = (255, 255, 0) if self.wall_editor.is_selected(wall) else (255, 0, 0);
+			colour = (255, 255, 0) if self.wall_editor._is_selected(wall) else (255, 0, 0);
 			if wall["type"] == "aabb":
 				self.canvas.draw_aabb(wall["aabb"], colour, False);
 			elif wall["type"] == "segment":
@@ -863,11 +820,11 @@ class SceneEditor:
 	def canvas_draw_texts(self):
 		for text in self.scene["texts"]:
 			self.canvas.draw_text(text["position"], text["text"], 8*text["scale"], text["colour"]);
-			self.canvas.draw_aabb(self.text_editor.get_text_aabb(text), (255, 255, 255));
+			self.canvas.draw_aabb(self.text_editor._get_text_aabb(text), (255, 255, 255));
 		
 	def gui_draw_canvas(self):
 		imgui.set_next_item_width(128);
-		self.edit_mode = imgui_enum_selector(id(self.edit_mode), EditMode, self.edit_mode);
+		self.edit_mode = eegui_input_enum("Edit mode", self.edit_mode, EditMode);
 
 		self.show_entities = True;
 		self.show_tiles = True;
@@ -938,10 +895,10 @@ class SceneEditor:
 		if not self._is_scene_loaded():
 			return;
 
-		self.manip_bookkeeping_tick();
 		self.copypaste_tick();
 		self.undo_tick();
 		self.handle_events();
+		self.synchronize_manip();
 
 		match self.edit_mode:
 			case EditMode.ENTITIES:
@@ -958,7 +915,7 @@ class SceneEditor:
 					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
 					0, 0
 				);
-				self.tilemap_editor.gui_draw_palette();
+				self.tilemap_editor.draw_gui();
 				imgui.end_child();
 			case EditMode.WALLS:
 				imgui.begin_child(
@@ -966,7 +923,7 @@ class SceneEditor:
 					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
 					0, 0
 				);
-				self.wall_editor.gui_draw_walls();
+				self.wall_editor.draw_gui();
 				imgui.end_child();
 			case EditMode.TEXTS:
 				imgui.begin_child(
@@ -974,7 +931,7 @@ class SceneEditor:
 					imgui.ImVec2(imgui.get_content_region_avail().x - self.canvas.width, imgui.get_content_region_avail().y),
 					0, 0
 				);
-				self.text_editor.gui_draw_texts();
+				self.text_editor.draw_gui();
 				imgui.end_child();
 			case EditMode.PROPERTIES:
 				imgui.begin_child(

@@ -134,8 +134,8 @@ class PrototypeEditor:
 					imgui.end_popup();
 
 				if node_open:
-					box["type"] = eegui_selector("Type", box["type"], ["trigger", "blocker"]);
-					box["orientation"] = eegui_selector("Orientation", box["orientation"], ["none", "north", "east", "south", "west"]);
+					box["type"] = eegui_combo("Type", box["type"], ["trigger", "blocker"]);
+					box["orientation"] = eegui_combo("Orientation", box["orientation"], ["none", "north", "east", "south", "west"]);
 					box["aabb"] = eegui_input_aabb("AABB", box["aabb"]);
 					imgui.tree_pop();
 

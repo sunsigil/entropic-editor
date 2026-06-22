@@ -232,6 +232,10 @@ class CanvasManipRegistry:
 		self.records = [];
 		for i in range(len(objects)):
 			self.register(objects[i], shapes[i], eeids[i] if eeids != [] else None);
+	
+	def clear(self):
+		self.update([], []);
+	
 	def register(self, object, shape, eeid=None):
 		existing = next((x for x in self.records if x.object == object), None);
 		if existing:
@@ -242,10 +246,7 @@ class CanvasManipRegistry:
 				shape,
 				eeid
 			));
-	def search(self, eeid):
-		for record in self.records:
-			if record.eeid == eeid:
-				return record.object;
+	
 	def update(self, objects, shapes):
 		for i in range(len(objects)):
 			self.register(objects[i], shapes[i]);
@@ -253,8 +254,12 @@ class CanvasManipRegistry:
 		for i in range(len(self.records)):
 			if not self.records[i].object in objects:
 				trash.append(i);
-		for i in trash:
-			del self.records[i];
+		process_trash(self.records, trash, True);
+	
+	def search(self, eeid):
+		for record in self.records:
+			if record.eeid == eeid:
+				return record.object;
 
 class CanvasManipulator:
 	def __init__(self, canvas_io, event_queue):

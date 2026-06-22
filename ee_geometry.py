@@ -15,7 +15,7 @@ def is_left(a, b, c):
 	c = np.array(c);
 	ab = b-a;
 	ac = c-a;
-	np.cross(ab, ac);
+	return np.cross(ab, ac) > 0;
 
 def point_point_dist(a, b):
 	a = np.array(a);
@@ -102,8 +102,6 @@ def aabb_closest_point(aabb, point):
 		return None;
 
 def shape_aabb(aabb, edge, point):
-	aabb = copy.copy(aabb);
-
 	x0, y0, x1, y1 = aabb;
 	match edge:
 		case Orientation.EAST:
@@ -114,19 +112,16 @@ def shape_aabb(aabb, edge, point):
 			x0 = point[0];
 		case Orientation.SOUTH:
 			y1 = point[1];
-	if x1 - x0 > 0 and y1 - y0 > 0:
-		aabb = x0, y0, x1, y1;
 	
+	if x1 - x0 > 0 and y1 - y0 > 0:
+		aabb = [x0, y0, x1, y1];
 	return aabb;
 
 def relocate_aabb(aabb, point):
-	aabb = copy.copy(aabb);
-
 	x0, y0, x1, y1 = aabb;
 	w, h = x1-x0, y1-y0;
 	x, y = point;
-
-	return x, y, x+w, y+h;
+	return [x, y, x+w, y+h];
 
 def shape_segment(segment, end, point):
 	segment = copy.copy(segment);
@@ -134,29 +129,23 @@ def shape_segment(segment, end, point):
 	a, b = segment;
 	x0, y0 = a;
 	x1, y1 = b;
-
 	match end:
 		case 0:
 			x0, y0 = point;
 		case 1:
 			x1, y1 = point;
+	
 	if x0 != x1 or y0 != y1:
 		a = x0, y0;
 		b = x1, y1;
-		segment = a, b;
-	
+		segment = [a, b];
 	return segment;
 
 def relocate_segment(segment, point):
-	segment = copy.copy(segment);
-
-	(x0, y0), (x1, y1) = segment;
+	[x0, y0], [x1, y1] = segment;
 	dx, dy = x1-x0, y1-y0;
 	x, y = point;
-
-	a = x, y;
-	b = x+dx, y+dy;
-	return a, b;
+	return [[x, y], [x+dx, y+dy]];
 
 def segment_closest_end(segment, point):
 	a, b = segment;

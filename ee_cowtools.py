@@ -79,25 +79,12 @@ def make_texture(buffer, width, height):
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
 	return texture;
 
-def process_trash(collection, trash):
+def process_trash(collection, trash, indices=False):
 	if len(collection) == 0 or len(trash) == 0:
 		return;
-	indices = isinstance(trash[0], int) and not isinstance(collection[0], int);
 	while len(trash) > 0:
 		t = trash.pop();
 		if indices:
 			del collection[t];
 		else:
 			collection.remove(t);
-
-def lstcopy(dst, src, deep=False):
-	N = min(len(src), len(dst));
-	for i in range(N):
-		if deep:
-			dst[i] = copy.deepcopy(src[i]);
-		else:
-			dst[i] = src[i];
-
-def lstapply(lst, f):
-	for i in range(len(lst)):
-		lst[i] = f(lst[i]);

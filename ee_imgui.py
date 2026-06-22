@@ -46,7 +46,7 @@ class EEGUIContextMenu:
 
 # Even More Primitive
 
-def eegui_selector(gui_id, value, values, fmt=lambda x: x):
+def eegui_combo(gui_id, value, values, fmt=lambda x: x):
 	if imgui.begin_combo(str(gui_id), str(fmt(value))):
 		for candidate in values:
 			selected = candidate == value;
@@ -98,10 +98,23 @@ def eegui_input_any(gui_id, value):
 
 # Enums
 
-def eegui_input_enum(gui_id, value, values):
+class EEGUIEnumStyle(Enum):
+	COMBO = 0
+	RADIO_BUTTONS = 1
+
+def eegui_input_enum(gui_id, value, values, style=EEGUIEnumStyle.COMBO):
 	if isinstance(values, Enum):
-		values = [x for x in values];
-	value = eegui_selector(gui_id, value, values);
+		values = [x.name for x in values];
+	match style:
+		case EEGUIEnumStyle.COMBO:
+			value = eegui_combo(gui_id, value, values);
+		case EEGUIEnumStyle.RADIO_BUTTONS:
+			selected_idx = values.index(value) if value in values else -1;
+			for idx,v in enumerate(values):
+				_, selected_idx = imgui.radio_button(v, selected_idx, idx);
+				imgui.same_line();
+			imgui.new_line();
+			value = values[selected_idx] if selected_idx != -1 else value;
 	return value;
 
 # Flags
@@ -245,21 +258,19 @@ def eegui_typed_input(gui_id, T, value, previews=False, tooltip=False):
 # External to the type system
 
 def eegui_input_aabb(gui_id, value, mode="xyxy"):
+	imgui.begin_group();
 	match mode:
 		case "xyxy":
-			x0, y0, x1, y1 = value;
-			imgui.begin_group();
-			x0, y0 = imgui.input_int2(f"X0 Y0##{gui_id}", [int(x0), int(y0)])[1];
-			x1, y1 = imgui.input_int2(f"X1 Y1##{gui_id}", [int(x1), int(y1)])[1];
-			imgui.end_group();
-			EEGUIContextMenu.ping(gui_id);
-			return x0, y0, x1, y1;
+			value[:2] = imgui.input_int2(f"X0 Y0##{gui_id}", [int(value[0]), int(value[1])])[1];
+			value[2:] = imgui.input_int2(f"X1 Y1##{gui_id}", [int(value[2]), int(value[3])])[1];
 		case "xywh":
 			x0, y0, x1, y1 = value;
 			w, h = x1-x0, y1-y0;
 			x0, y0 = imgui.input_int2(f"X Y##{gui_id}", [int(x0), int(y0)])[1];
 			w, h = imgui.input_int2(f"W H##{gui_id}", [int(w), int(h)])[1];
-			return x0, y0, x0+w, y0+h;
+			value = [x0, y0, x0+w, x0+h];
+	imgui.end_group();
+	EEGUIContextMenu.ping(gui_id);
 	return value;
 
 def eegui_input_vec2(gui_id, value):
@@ -270,11 +281,11 @@ def eegui_input_vec2(gui_id, value):
 # Layout
 
 def eegui_begin_column(imgui_id, w=None):
-	if w == None:
-		w = imgui.get_content_region_avail().x;
+	w = imgui.get_content_region_avail().x if w == None else w;
+	h = imgui.get_content_region_avail().y;
 	imgui.begin_child(
 		str(imgui_id),
-		imgui.ImVec2(w, imgui.get_window_height()),
+		imgui.ImVec2(w, h),
 		0, 0
 	);
 def eegui_end_column():
