@@ -57,16 +57,16 @@ class EditorSprite:
 		self.preview_texture = make_texture(self.preview_image.tobytes(), self.preview_width, self.preview_height);
 
 class SpriteBank:
-	mapping = {};
+	entries = {};
 
 	def _update(name, path, frames):
 		real_path = AssetManager.get_document("sprite").directory / path;
 		editor_sprite = EditorSprite(real_path, frames);
-		SpriteBank.mapping[name] = editor_sprite;
-		SpriteBank.mapping[path] = editor_sprite;
+		SpriteBank.entries[name] = editor_sprite;
+		SpriteBank.entries[path] = editor_sprite;
 	
 	def update():
-		sprites = AssetManager.get_assets("sprite");
+		sprites = AssetManager.get_all("sprite");
 
 		for sprite in sprites:
 
@@ -75,30 +75,30 @@ class SpriteBank:
 			real_path = AssetManager.get_document("sprite").directory / asset_path;
 			frames = sprite["frames"] if "frames" in sprite else 1;
 
-			if name not in SpriteBank.mapping or frames != SpriteBank.mapping[name].frame_count or real_path != SpriteBank.mapping[name].path:
+			if name not in SpriteBank.entries or frames != SpriteBank.entries[name].frame_count or real_path != SpriteBank.entries[name].path:
 				if Path.is_file(real_path):
 					SpriteBank._update(name, asset_path, frames);
 				else:
 					SpriteBank._update(name, "null.png", 1);
 	
-	def get(name, path=None, frames=None):
-		if not name in SpriteBank.mapping:
+	def search(name, path=None, frames=None):
+		if not name in SpriteBank.entries:
 			if path != None and frames != None:
 				SpriteBank._update(name, path, frames);
 			else:
 				SpriteBank.update();
-		if name not in SpriteBank.mapping:
-			return SpriteBank.mapping["null.png"];
-		return SpriteBank.mapping[name];
+		if name not in SpriteBank.entries:
+			return SpriteBank.entries["null.png"];
+		return SpriteBank.entries[name];
 
 class SpritePreview:
 	def draw(name, path=None, frames=None, **kwargs):
-		sprite = SpriteBank.get(name, path, frames);
+		sprite = SpriteBank.search(name, path, frames);
 		imgui.image(imgui.ImTextureRef(sprite.preview_texture), imgui.ImVec2(sprite.preview_width * 2, sprite.preview_height * 2));
 		if "show_dimensions" in kwargs and kwargs["show_dimensions"]:
 			imgui.text(f"{sprite.frame_width}x{sprite.frame_height}");
 
 	def draw_thumbnail(name, size):
-		sprite = SpriteBank.get(name);
+		sprite = SpriteBank.search(name);
 		aspect = sprite.frame_width / sprite.frame_height;
 		imgui.image(imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(aspect * size, size));

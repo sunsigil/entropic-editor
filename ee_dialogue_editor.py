@@ -159,7 +159,7 @@ class DialogueGraph:
 	def __init__(self):
 		self.context = imnodes.create_editor();
 
-		self.node_bank = AssetManager.get_assets("dialogue");
+		self.node_bank = AssetManager.get_all("dialogue");
 		self.node_assets = [];
 		self.links = [];
 	
@@ -249,7 +249,7 @@ class DialogueGraph:
 
 class DialogueEditor:
 	def __init__(self):		
-		self.nodes = AssetManager.get_assets("dialogue");
+		self.nodes = AssetManager.get_all("dialogue");
 		self.node = None;
 		self.trash = [];
 	

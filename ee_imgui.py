@@ -2,12 +2,13 @@ import OpenGL;
 OpenGL.FULL_LOGGING = True;
 from OpenGL.GL import *;
 from imgui_bundle import imgui;
+from enum import Enum;
+
+import ee_context;
 from ee_assets import AssetManager;
 from ee_tool_window import ToolWindowRegistry;
 from ee_file_explorer import FileExplorer;
 from ee_asset_explorer import AssetExplorer;
-import ee_context;
-from enum import Enum;
 import ee_types;
 import ee_sprites;
 
@@ -68,7 +69,7 @@ class EEGUIIntStyle(Enum):
 def eegui_input_int(gui_id, value, style=EEGUIIntStyle.DEFAULT, low_bound=None, high_bound=None):
 	match style:
 		case EEGUIIntStyle.DEFAULT:
-			_, value = imgui.input_int(str(gui_id), value);
+			_, value = imgui.input_int(str(gui_id), int(value));
 			if low_bound != None:
 				value = max(value, low_bound);
 			if high_bound != None:
@@ -86,13 +87,13 @@ def eegui_input_float(gui_id, value):
 	return value;
 
 def eegui_input_bool(gui_id, value):
-	_, value = imgui.checkbox(str(gui_id), value);
+	_, value = imgui.checkbox(str(gui_id), bool(value));
 	EEGUITooltip.ping();
 	EEGUIContextMenu.ping(gui_id);
 	return value;
 
 def eegui_input_string(gui_id, value):
-	_, value = imgui.input_text(str(gui_id), value);
+	_, value = imgui.input_text(str(gui_id), str(value));
 	EEGUITooltip.ping();
 	EEGUIContextMenu.ping(gui_id);
 	return value;
@@ -106,6 +107,11 @@ def eegui_input_colour(gui_id, value):
 
 def eegui_input_any(gui_id, value):
 	value = eegui_input_string(gui_id, value);
+	return value;
+
+def eegui_input_vec2(gui_id, value):
+	_, value = imgui.input_int2(gui_id, [int(value[0]), int(value[1])]);
+	EEGUIContextMenu.ping(gui_id);
 	return value;
 
 # Enums
@@ -166,7 +172,7 @@ def eegui_input_file(gui_id, value, pattern, directory=None, asset_type=None):
 				if asset_type != None:
 					directory = AssetManager.get_document(asset_type).directory;
 				else:
-					directory = ee_context.env["game_path"];
+					directory = ee_context.get().directory;
 			explorer.get().configure(gui_id, directory, pattern, asset_type);
 	
 	imgui.pop_id();
@@ -248,11 +254,12 @@ def eegui_typed_input(gui_id, T, value, previews=False, tooltip=False):
 		value = eegui_input_asset(gui_id, value, T.name);
 	
 	if isinstance(T, ee_types.File):
-		if previews:
-			match T.pattern:
-				case "*.png":
-					ee_sprites.SpritePreview.draw(value);
-		value = eegui_input_file(gui_id, value, T.pattern);
+		directory = None;
+		if T.pattern == "*.png":
+			if previews:
+				ee_sprites.SpritePreview.draw(value);
+			directory = ee_context.get().directory/"assets/sprites";
+		value = eegui_input_file(gui_id, value, T.pattern, directory=directory);
 	
 	if isinstance(T, ee_types.Flags):
 		value = eegui_input_flags(gui_id, value, T.values);
@@ -260,6 +267,8 @@ def eegui_typed_input(gui_id, T, value, previews=False, tooltip=False):
 		value = eegui_input_enum(gui_id, value, T.values);
 	if isinstance(T, ee_types.Any):
 		value = eegui_input_any(gui_id, value);
+	if isinstance(T, ee_types.Vec2):
+		value = eegui_input_vec2(gui_id, value);
 	if isinstance(T, ee_types.Colour):
 		value = eegui_input_colour(gui_id, value);
 	if isinstance(T, ee_types.String):
@@ -288,11 +297,6 @@ def eegui_input_aabb(gui_id, value, mode="xyxy"):
 			w, h = imgui.input_int2(f"W H##{gui_id}", [int(w), int(h)])[1];
 			value = [x0, y0, x0+w, x0+h];
 	imgui.end_group();
-	EEGUIContextMenu.ping(gui_id);
-	return value;
-
-def eegui_input_vec2(gui_id, value):
-	value = imgui.input_int2(gui_id, [int(value[0]), int(value[1])])[1];
 	EEGUIContextMenu.ping(gui_id);
 	return value;
 

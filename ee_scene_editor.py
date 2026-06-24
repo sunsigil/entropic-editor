@@ -14,9 +14,12 @@ from ee_geometry import *;
 #########################################################
 ## HELPERS
 
-def get_entity_aabb(entity):
+def get_entity_sprite(entity):
 	prototype = AssetManager.search("prototype", entity["prototype"]);
-	sprite = SpriteBank.get(prototype["sprite"] if prototype != None else "null");
+	return SpriteBank.search(prototype["sprite"] if prototype != None else "null");
+
+def get_entity_aabb(entity):
+	sprite = get_entity_sprite(entity);
 	x0, y0 = entity["position"];
 	x1, y1 = x0+sprite.frame_width, y0+sprite.frame_height;
 	return [x0, y0, x1, y1];
@@ -34,7 +37,8 @@ class EditMode(Enum):
 	ENTITIES = 0,
 	TILEMAP = 1,
 	WALLS = 2,
-	TEXTS = 3,
+	DOORS = 3,
+	TEXTS = 4,
 	PROPERTIES = 4
 
 class TilemapEditor:
@@ -69,7 +73,7 @@ class TilemapEditor:
 		self.tilemap = self.parent.scene["tilemap"];
 	
 	def _gui_draw_palette(self):
-		sprite = SpriteBank.get(self.tilemap["palette"]);
+		sprite = SpriteBank.search(self.tilemap["palette"]);
 		wdw_w = imgui.get_content_region_avail().x;
 		cols = int(wdw_w // 72);
 		rows = int(math.ceil(sprite.frame_count / cols)) if cols > 0 else 0;
@@ -120,7 +124,7 @@ class TilemapEditor:
 				self._gui_draw_csv();
 	
 	def _paint_tick(self):
-		palette = SpriteBank.get(self.tilemap["palette"]);
+		palette = SpriteBank.search(self.tilemap["palette"]);
 		self.selected_frame = clamp(self.selected_frame, 0, palette.frame_count-1);
 
 		if self.parent.canvas_io.is_cursor_in_bounds():
@@ -426,6 +430,60 @@ class TextEditor:
 		self.canvas_manip.tick();
 		self._handle_events();
 
+class DoorEditor:
+	class Door:
+		def __init__(self, scene, entity):
+			self.scene = scene;
+			self.entity = entity;
+			self.pointees = [];
+			self.pointors = [];
+		
+		def update(self, doors):
+			pass;
+	
+	def __init__(self, parent):
+		self.parent = parent;
+		self.door_pool = [];
+		self.door_hierarchy = {};
+	
+	def poll_all_doors(self):
+		self.door_pool = [];
+		self.door_hierarchy = {};
+		for scene in AssetManager.get_all("scene"):
+			self.door_hierarchy[scene["name"]] = [];
+			for entity in scene["entities"]:
+				prototype = AssetManager.search("prototype", entity["prototype"]);
+				if prototype == None:
+					continue;
+				if "door" in prototype["scripts"]:
+					door = DoorEditor.Door(scene, entity);
+					self.door_pool.append(door);
+					self.door_hierarchy[scene["name"]].append(door);
+	
+	def logic(self):
+		self.poll_all_doors();
+		for door in self.door_pool:
+			door.update(self.door_pool);
+	
+	def draw_gui(self):
+		for scene in self.door_hierarchy:
+			if scene == self.parent.scene["name"]:
+				for door in self.door_hierarchy[scene]:
+					if imgui.tree_node(door.entity["name"]):
+						to_scene = next((x for x in door.entity["script_data"] if x["key"] == "to_scene"), None);
+						to_entity = next((x for x in door.entity["script_data"] if x["key"] == "to_entity"), None);
+						to_scene["value"] = eegui_input_asset("To scene", to_scene["value"], "scene");
+						to_entity["value"] = eegui_input_string("To entity", to_entity["value"]);
+						imgui.tree_pop();
+
+	def draw_canvas(self):
+		for scene in self.door_hierarchy:
+			if scene == self.parent.scene["name"]:
+				for door in self.door_hierarchy[scene]:
+					x, y = door.entity["position"];
+					sprite = SpriteBank.search("editor_door");
+					self.parent.canvas.draw_image(x, y, sprite.frame_images[0]);
+
 class SceneViewer:
 	def __init__(self, parent):
 		self.parent = parent;
@@ -437,10 +495,11 @@ class SceneViewer:
 		self.show_grid = False;
 		self.show_walls = True;
 		self.show_boxes = False;
+		self.show_gizmos = True;
 
 	def draw_tiles(self):
 		tilemap = self.parent.scene["tilemap"];
-		palette = SpriteBank.get(tilemap["palette"]);
+		palette = SpriteBank.search(tilemap["palette"]);
 
 		match tilemap["type"]:
 			case "sparse":
@@ -491,7 +550,7 @@ class SceneViewer:
 
 		for entity in y_sorted:
 			prototype = AssetManager.search("prototype", entity["prototype"]);
-			sprite = SpriteBank.get(prototype["sprite"] if prototype != None else "null");
+			sprite = SpriteBank.search(prototype["sprite"] if prototype != None else "null");
 
 			x, y = entity["position"];
 			frame_idx = clamp(entity["frame_idx"], 0, sprite.frame_count-1);
@@ -542,6 +601,9 @@ class SceneViewer:
 		if self.show_walls:
 			self.draw_walls();	
 
+		if self.show_gizmos:
+			self.parent.door_editor.draw_canvas();
+
 class SceneEditor:
 	def _load_scene(self, scene):		
 		self.scene = scene;
@@ -557,7 +619,7 @@ class SceneEditor:
 		self.text_editor.on_load_scene();
 
 	def _is_scene_loaded(self):
-		return self.scene in AssetManager.get_assets("scene");
+		return self.scene in AssetManager.get_all("scene");
 
 	def __init__(self):
 		self.canvas_size = (1000, 720);
@@ -583,6 +645,7 @@ class SceneEditor:
 		self.wall_editor = WallEditor(self);
 		self.text_editor = TextEditor(self);
 		self.scene_viewer = SceneViewer(self);
+		self.door_editor = DoorEditor(self);
 
 		self._load_scene(AssetManager.get_first("scene"));
 	
@@ -623,7 +686,7 @@ class SceneEditor:
 	
 	def get_entity_sprite(self, entity):
 		prototype = AssetManager.search("prototype", entity["prototype"]);
-		return SpriteBank.get(prototype["sprite"] if prototype != None else "null");
+		return SpriteBank.search(prototype["sprite"] if prototype != None else "null");
 
 	def get_entity_aabb(self, entity):
 		sprite = self.get_entity_sprite(entity);
@@ -696,7 +759,7 @@ class SceneEditor:
 
 			if imgui.begin_menu("Scene"):
 				if imgui.begin_menu("Open"):
-					scenes = AssetManager.get_assets("scene");
+					scenes = AssetManager.get_all("scene");
 					scene_last = self.scene;
 					for scene in scenes:
 						if imgui.menu_item_simple(scene["name"]):
@@ -712,6 +775,7 @@ class SceneEditor:
 				_, self.scene_viewer.show_texts = imgui.menu_item("Texts", "", self.scene_viewer.show_texts);
 				_, self.scene_viewer.show_boxes = imgui.menu_item("Boxes", "", self.scene_viewer.show_boxes);
 				_, self.scene_viewer.show_walls = imgui.menu_item("Walls", "", self.scene_viewer.show_walls);
+				_, self.scene_viewer.show_gizmos = imgui.menu_item("Gizmos", "", self.scene_viewer.show_gizmos);
 				_, self.scene_viewer.show_grid = imgui.menu_item("Grid", "", self.scene_viewer.show_grid);
 				imgui.end_menu();
 			
@@ -746,20 +810,8 @@ class SceneEditor:
 					self.rectify_entity_script_data(entity);
 					for data in entity["script_data"]:
 						if imgui.tree_node(f"{data["key"]}####{id(data)}"):
-							match data["type"]:
-								case "bool":
-									_, data["value"] = imgui.checkbox(data["key"], data["value"]);
-								case "int":
-									_, data["value"] = imgui.input_int(data["key"], data["value"]);
-								case "string":
-									_, data["value"] = imgui.input_text(data["key"], data["value"]);
-								case "vec2":
-									_, data["value"] = imgui.input_int2(data["key"], data["value"]);
-								case _:
-									if AssetManager.get_type(data["type"]) != None:
-										data["value"] = eegui_input_asset("value", data["value"], data["type"]);
-									else:
-										_, data["value"] = imgui.input_text("value", data["value"]);						
+							data_type = ee_types.TypeRegistry.get(data["type"]);
+							data["value"] = eegui_typed_input(data["key"], data_type, data["value"]);
 							imgui.tree_pop();
 					imgui.tree_pop();
 				imgui.tree_pop();
@@ -828,6 +880,10 @@ class SceneEditor:
 			self.wall_editor.tick();
 			self.wall_editor.draw_gui();
 		
+		def doors_tick():
+			self.door_editor.logic();
+			self.door_editor.draw_gui();
+		
 		def texts_tick():
 			self.text_editor.tick();
 			self.text_editor.draw_gui();
@@ -842,6 +898,8 @@ class SceneEditor:
 				run_left_panel(tilemap_tick);
 			case EditMode.WALLS:
 				run_left_panel(walls_tick);
+			case EditMode.DOORS:
+				run_left_panel(doors_tick);
 			case EditMode.TEXTS:
 				run_left_panel(texts_tick);
 			case EditMode.PROPERTIES:

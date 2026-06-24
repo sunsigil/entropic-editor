@@ -41,7 +41,7 @@ class RecipeEditor:
 					item = AssetManager.search("item", item_name);
 					if item == None:
 						continue;
-					sprite = SpriteBank.get(item["sprite"]);
+					sprite = SpriteBank.search(item["sprite"]);
 					self.canvas.draw_flags = Canvas.DrawFlags.CENTER_X | Canvas.DrawFlags.CENTER_Y;
 					self.canvas.draw_image(
 						x * self.cell_size + self.cell_size/2,
@@ -67,7 +67,7 @@ class RecipeEditor:
 		if self.recipe != None:
 			item_name = self.recipe["output"];
 			item = AssetManager.search("item", item_name);
-			sprite = SpriteBank.get(item["sprite"]) if item != None else SpriteBank.get("null_sprite");
+			sprite = SpriteBank.search(item["sprite"]) if item != None else SpriteBank.search("null_sprite");
 
 			true_height = sprite.frame_height;
 			display_height = self.cell_size * self.canvas.scale;

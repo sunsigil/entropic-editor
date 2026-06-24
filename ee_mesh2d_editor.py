@@ -23,7 +23,7 @@ class Mesh2DEditor:
 		self.last_edge_closed = True;
 		self.last_click = imgui.ImVec2(-1, -1);
 	
-		self.mesh_pool = AssetManager.get_assets("mesh2d");
+		self.mesh_pool = AssetManager.get_all("mesh2d");
 		self.mesh = self.mesh_pool[0] if len(self.mesh_pool) > 0 else None;
 		if(not self.mesh is None):
 			self.open_mesh(self.mesh);
@@ -159,7 +159,7 @@ class Mesh2DEditor:
 			imgui.end_combo();
 
 		canvas_pos = imgui.get_cursor_screen_pos();
-		mouse_pos = ee_context.imgui_io.mouse_pos;
+		mouse_pos = ee_context.get().imgui_io.mouse_pos;
 		brush_pos = mouse_pos - canvas_pos;
 		brush_pos /= self.canvas_scale;
 		in_bounds = self.in_bounds(brush_pos);
@@ -170,7 +170,7 @@ class Mesh2DEditor:
 				self.last_click = vertex;
 			if in_bounds:
 				if imgui.is_mouse_down(0) and not self.was_left_click:
-					if ee_context.imgui_io.key_shift:
+					if ee_context.get().imgui_io.key_shift:
 						tl = imgui.ImVec2(256, 256);
 						br = imgui.ImVec2(-1, -1);
 						for [v0, v1] in self.polyline:

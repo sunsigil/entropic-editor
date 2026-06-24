@@ -55,7 +55,7 @@ class FileExplorer:
 			listings = list(filter(lambda x: self.search in str(x.name), listings));
 		
 		if self.asset_type != None:
-			assets = AssetManager.get_assets("sprite");
+			assets = AssetManager.get_all("sprite");
 			if len(assets) > 0 and "path" in assets[0]:
 				_, self.filter_unused = imgui.checkbox("Unused", self.filter_unused);
 				if self.filter_unused:

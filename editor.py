@@ -7,10 +7,11 @@ import sys;
 
 import glfw;
 from imgui_bundle import imgui;
+from imgui_bundle.python_backends.glfw_backend import GlfwRenderer;
 
+import ee_context;
 from ee_cowtools import *;
 from ee_assets import *;
-import ee_context;
 from ee_tool_window import ToolWindow, ToolWindowRegistry;
 
 from ee_scene_editor import SceneEditor;
@@ -38,20 +39,14 @@ if __name__ == "__main__":
 		print("usage: editor.py game_dir");
 		exit();
 	
-	env = {};
-	env["editor_path"] = Path(__file__).parent.absolute();
-	env["game_path"] = Path(args[0]);
-	ee_context.create_context(env, 1920, 1080);
+	editor_path = Path(__file__).parent.absolute();
+	game_path = Path(args[0]);
 
-	AssetManager.initialize([
-		env["game_path"]/"assets",
-		env["game_path"]/"assets/sprites",
-		env["game_path"]/"assets/meshes",
-		env["game_path"]/"assets/data",
-		env["game_path"]/"assets/scripts",
-		env["game_path"]/"assets/palettes"
-	]);
-	InputManager.initialize(ee_context.glfw_handle, ee_context.imgui_impl);
+	ee_context.set(ee_context.Context(game_path, "Entropic Editor", 1920, 1080));
+	InputManager.initialize(ee_context.get().glfw_handle, ee_context.get().imgui_impl);
+
+	for path in (game_path/"assets").rglob("*.json"):
+		AssetManager.load_document(path);
 
 	window_flag_list = [
 		imgui.WindowFlags_.no_saved_settings,
@@ -65,7 +60,7 @@ if __name__ == "__main__":
 	];
 	window_flags = foldl(lambda a, b : a | b, 0, window_flag_list);
 
-	splash_img = Image.open(env["editor_path"]/"splash.png");
+	splash_img = Image.open(editor_path/"splash.png");
 	splash_tex = make_texture(splash_img.tobytes(), splash_img.width, splash_img.height);
 	splash_flag_list = [
 		imgui.WindowFlags_.no_scrollbar,
@@ -91,46 +86,41 @@ if __name__ == "__main__":
 	ToolWindowRegistry.register(ToolWindow(EnDeCoder, "EnDeCoder", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
 
-	#ToolWindowRegistry.register(ToolWindow(ThemeEditor, "Theme Editor", flags=tool_flags));
-	#ToolWindowRegistry.register(ToolWindow(AnimationViewer, "Animation Viewer", flags=tool_flags));	
-	#ToolWindowRegistry.register(ToolWindow(NoticeEditor, "Notice Editor", flags=tool_flags));
-	#oolWindowRegistry.register(ToolWindow(OutputUnderstander, "Output Understander", flags=tool_flags));
-	
-
-	while ee_context.alive():
-		ee_context.begin_frame();
+	while ee_context.get().is_alive():
+		ee_context.get().begin_frame();
 		
 		SpriteBank.update();
 		InputManager.update();
 
-		if AssetManager.active_document != None:
-			AssetManager.active_document.refresh();
+		if DocumentEditor.active_document != None:
+			DocumentEditor.active_document.refresh();
 
 		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_S):
+			print(f"Saving...");
 			for document in AssetManager.documents:
-				print(f"Saving {document.path}!");
 				document.save();
 
 		imgui.set_next_window_pos((0, 0));
-		imgui.begin("Editor", flags=window_flags | (splash_flags if AssetManager.active_document == None else 0));
+		imgui.begin(ee_context.get().name, flags=window_flags | (splash_flags if DocumentEditor.active_document == None else 0));
 
 		if imgui.begin_main_menu_bar():
+
 			if imgui.begin_menu("File"):
 				if imgui.begin_menu("Open"):
 					for document in AssetManager.documents:
-						selected = document == AssetManager.active_document;
-						title = document.path.relative_to(env["game_path"]);
-						if imgui.menu_item_simple(str(title), selected = selected):
-							if AssetManager.active_document != None:
-								AssetManager.active_document.save();
-							AssetManager.active_document = document;
+						if imgui.menu_item(str(document.path.relative_to(ee_context.get().directory)), "", document == DocumentEditor.active_document)[1]:
+							if DocumentEditor.active_document != None:
+								DocumentEditor.active_document.save();
+							DocumentEditor.active_document = document;
 					imgui.end_menu();
-				if imgui.menu_item_simple("Save All"):
+				
+				if imgui.menu_item_simple("Save all"):
+					print("Saving...");
 					for document in AssetManager.documents:
-						print(f"Saving {document.path}!");
 						document.save();
-				if imgui.menu_item_simple("Close", enabled=AssetManager.active_document != None):
-					AssetManager.active_document = None;
+				
+				if imgui.menu_item_simple("Close", enabled=DocumentEditor.active_document != None):
+					DocumentEditor.active_document = None;	
 				imgui.end_menu();
 			
 			if imgui.begin_menu("Tools"):
@@ -138,22 +128,20 @@ if __name__ == "__main__":
 					if not tool.hidden and imgui.menu_item_simple(tool.title):
 						tool.open();
 				imgui.end_menu();
+			
 			imgui.end_main_menu_bar();
 		
-		if AssetManager.active_document == None:
+		if DocumentEditor.active_document == None:
 			imgui.set_scroll_x(0);
 			imgui.set_scroll_y(0);
 			imgui.image(imgui.ImTextureRef(splash_tex), imgui.ImVec2(splash_img.width, splash_img.height));
 		else:
-			AssetManager.active_document.refresh();
-			DocumentEditor.draw(AssetManager.active_document);
+			DocumentEditor.draw();
 		
 		for tool in ToolWindowRegistry.all():
 			tool.draw();
 		
 		imgui.end();
 
-		ee_context.end_frame();
-
-	ee_context.destroy_context();
+		ee_context.get().end_frame();
 

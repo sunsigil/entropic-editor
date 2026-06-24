@@ -22,7 +22,7 @@ class PrototypeSpawner:
 	def autofill(self):
 		if len(self.prototype["sprite"]) > 0:
 			self.prototype["name"] = self.prototype["sprite"];
-		sprite = SpriteBank.get(self.prototype["sprite"]);
+		sprite = SpriteBank.search(self.prototype["sprite"]);
 		height = min(sprite.frame_width, sprite.frame_height);
 		self.prototype["boxes"].append({
 			"aabb": [0, sprite.frame_height-height, sprite.frame_width, sprite.frame_height],
@@ -57,7 +57,7 @@ class PrototypeEditor:
 	def _load_prototype(self, prototype):
 		self.prototype = prototype;
 		if prototype != None:
-			sprite = SpriteBank.get(self.prototype["sprite"]);
+			sprite = SpriteBank.search(self.prototype["sprite"]);
 			self.canvas.origin = (128-sprite.frame_width//2, 128-sprite.frame_height//2);
 			self.canvas_manip.clear();
 			self.manip_registry = CanvasManipRegistry();
@@ -83,7 +83,7 @@ class PrototypeEditor:
 		self._load_prototype(AssetManager.get_first("prototype"));
 	
 	def gui_draw_selector(self):
-		protoypes = sorted(AssetManager.get_assets("prototype"), key=lambda x: x["name"]);
+		protoypes = sorted(AssetManager.get_all("prototype"), key=lambda x: x["name"]);
 
 		for prototype in protoypes:
 			selected = imgui.menu_item_simple(prototype["name"]);
@@ -193,7 +193,7 @@ class PrototypeEditor:
 			self.canvas_grid.draw_lines((64, 64, 64));
 
 		if self.prototype != None:
-			sprite = SpriteBank.get(self.prototype["sprite"]);
+			sprite = SpriteBank.search(self.prototype["sprite"]);
 			self.canvas.draw_image(0, 0, sprite.frame_images[0]);
 
 			y = sprite.frame_height+self.prototype["y_sort_offset"];

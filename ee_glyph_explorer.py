@@ -7,7 +7,7 @@ from ee_imgui import *;
 
 class GlyphExplorer:
 	def __init__(self):
-		self.sprite = SpriteBank.get("glyph");
+		self.sprite = SpriteBank.search("glyph");
 		self.filters = {
 			"lowercase": lambda x: x.islower(),
 			"uppercase": lambda x: x.isupper(),

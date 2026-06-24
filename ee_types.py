@@ -63,6 +63,15 @@ class Colour(Primitive):
 		return isinstance(value, list[int]) and len(value) == 3;
 	def rectify(self, value):
 		return value;
+class Vec2(Primitive):
+	def __repr__(self):
+		return f"Vec2";
+	def prototype(self) -> list[int]:
+		return [0, 0];
+	def validate(self, value) -> bool:
+		return isinstance(value, list[int]) and len(value) == 2;
+	def rectify(self, value):
+		return value;
 class Any(Primitive):
 	def __repr__(self):
 		return "Any";
@@ -284,6 +293,8 @@ def construct_type(expr) -> Type:
 				return String();
 			case "colour":
 				return Colour();
+			case "vec2":
+				return Vec2();
 			case "any":
 				return Any();
 
@@ -429,3 +440,14 @@ class TypeHelper:
 	def rectify(self, instance):
 		self._rectify(TNode(None, self.abstract_tree, instance));
 
+class TypeRegistry:
+	entries = {};
+	def register(name, type):
+		if not TypeRegistry.has(name):
+			TypeRegistry.entries[name] = type;
+	def has(name):
+		return name in TypeRegistry.entries;
+	def get(name):
+		if TypeRegistry.has(name):
+			return TypeRegistry.entries[name];
+		return construct_type(name);

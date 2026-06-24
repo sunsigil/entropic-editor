@@ -18,7 +18,7 @@ class AssetExplorer:
 		return "private" in asset and asset["private"];
 
 	def draw(self):
-		listings = [s["name"] for s in AssetManager.get_assets(self.type)];
+		listings = [s["name"] for s in AssetManager.get_all(self.type)];
 
 		_, self.search = imgui.input_text("Search", self.search);
 		if len(self.search) > 0:
@@ -41,7 +41,7 @@ class AssetExplorer:
 
 					asset = AssetManager.search(self.type, listings[i]);
 					sprite_name = listings[i] if self.type == "sprite" else (asset["sprite"] if "sprite" in asset else "");
-					sprite = SpriteBank.get(sprite_name);
+					sprite = SpriteBank.search(sprite_name);
 
 					if imgui.image_button(f"##{id(i)}", imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(64, 64)):
 						self.result = listings[i];

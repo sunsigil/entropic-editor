@@ -101,7 +101,7 @@ class PaletteViewer:
 				self.cursor = int(point[1] * self.get_cols() + point[0]);
 	
 	def gui_draw_selector(self):
-		palettes = sorted(AssetManager.get_assets("palette"), key=lambda x: x["name"]);
+		palettes = sorted(AssetManager.get_all("palette"), key=lambda x: x["name"]);
 
 		for palette in palettes:
 			selected = imgui.menu_item_simple(palette["name"]);

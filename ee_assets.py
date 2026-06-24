@@ -76,48 +76,31 @@ class AssetDocument:
 class AssetManager:
 	directories = [];
 	documents = [];
-	types = [];
-	active_document = None;
 
-	def initialize(directories):
-		AssetManager.directories = [Path(d) for d in directories];
-		AssetManager.documents = [];
-		AssetManager.types = [];
+	def load_document(path):
+		try:
+			document = AssetDocument(path);
+			AssetManager.documents.append(document);
+			print(f"[AssetManager] Loaded {path}");
+		except Exception as e:
+			print(f"[AssetManager] Failed to load {path}!\n\t({e})");
+			raise(e);			
 
-		for directory in AssetManager.directories:
-			for filepath in directory.iterdir():
-				ext = filepath.suffix;
-				if ext == ".json":
-					safe = True;
-					if safe:
-						try:
-							document = AssetDocument(filepath);
-							AssetManager.documents.append(document);
-							AssetManager.types.append(document.type_helper.abstract_tree);
-							print(f"[AssetManager] Loaded {filepath}");
-						except Exception as e:
-							print(f"[AssetManager] Failed to load {filepath}!\n\t({e})");
-					else:
-						document = AssetDocument(filepath);
-						AssetManager.documents.append(document);
-						print(f"[AssetManager] Loaded {filepath}");
+	def get_document(asset_type) -> AssetDocument:
+		return next((x for x in AssetManager.documents if x.type_name == asset_type), None);
 
-	def get_document(name) -> AssetDocument:
-		return next((x for x in AssetManager.documents if x.type_name == name), None);
-
-	def get_type(name) -> ee_types.Element:
-		return next((x for x in AssetManager.types if x.name == name), None);
-
-	def get_assets(asset_type):
+	def get_all(asset_type):
 		return next((x.instances for x in AssetManager.documents if x.type_name == asset_type), None);
 
-	def search(asset_type, asset_name):
-		return next((x for x in AssetManager.get_assets(asset_type) if x["name"] == asset_name), None);
-
 	def get_first(asset_type):
-		assets = AssetManager.get_assets(asset_type);
+		assets = AssetManager.get_all(asset_type);
 		if assets == None or len(assets) == 0:
 			return None;
 		return assets[0];
+
+	def search(asset_type, asset_name):
+		return next((x for x in AssetManager.get_all(asset_type) if x["name"] == asset_name), None);
+
+	
 
 	
