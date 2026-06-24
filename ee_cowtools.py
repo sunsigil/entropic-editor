@@ -82,6 +82,8 @@ def make_texture(buffer, width, height):
 def process_trash(collection, trash, indices=False):
 	if len(collection) == 0 or len(trash) == 0:
 		return;
+	if indices:
+		trash.sort();
 	while len(trash) > 0:
 		t = trash.pop();
 		if indices:
@@ -170,6 +172,7 @@ class Trash:
 		self.contents = [];
 	
 	def flush(self):
+		self.buffer = sorted(self.buffer, reverse=True, key = lambda x: x.index if isinstance(x, Trash.DeleteIndexRequest) else 0);
 		while len(self.buffer) > 0:
 			request = self.buffer.pop(0);
 			if isinstance(request, Trash.DeleteItemRequest):

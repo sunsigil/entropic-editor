@@ -417,6 +417,7 @@ class TypeHelper:
 		for name,child in tnode.children.items():
 			if child.inode == None:
 				child.update(child.enode, child.enode.prototype());
+				tnode.inode[name] = child.inode;
 
 		# Propagation pass
 		for name,child in tnode.children.items():
@@ -429,6 +430,7 @@ class TypeHelper:
 				violations.append(name);
 		for name in violations:
 			del tnode.children[name];
+			del tnode.inode[name];
 	
 		# Sparingly correcting primitives and lists of primitives
 		# Be really careful trying to do this to more complex types
@@ -439,15 +441,3 @@ class TypeHelper:
 
 	def rectify(self, instance):
 		self._rectify(TNode(None, self.abstract_tree, instance));
-
-class TypeRegistry:
-	entries = {};
-	def register(name, type):
-		if not TypeRegistry.has(name):
-			TypeRegistry.entries[name] = type;
-	def has(name):
-		return name in TypeRegistry.entries;
-	def get(name):
-		if TypeRegistry.has(name):
-			return TypeRegistry.entries[name];
-		return construct_type(name);

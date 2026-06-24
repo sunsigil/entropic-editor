@@ -62,9 +62,12 @@ class Canvas:
 		x, y = self._transform(x, y);
 		self.draw.circle((x, y), r, outline=c);
 	
-	def draw_image(self, x, y, image):
+	def draw_image(self, x, y, image, c=None):
 		x, y = self._transform(x, y);
-		self.image.paste(image, (int(x), int(y)), mask=image);
+		if c != None:
+			self.image.paste(c, (int(x), int(y)), mask=image);
+		else:
+			self.image.paste(image, (int(x), int(y)), mask=image);
 	
 	def draw_text(self, xy, text, s, c):
 		x, y = xy;

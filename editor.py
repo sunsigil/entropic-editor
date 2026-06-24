@@ -76,7 +76,7 @@ if __name__ == "__main__":
 	ToolWindowRegistry.register(ToolWindow(FileExplorer, "File Explorer", flags=tool_flags, hidden=True));
 	ToolWindowRegistry.register(ToolWindow(AssetExplorer, "Asset Explorer", flags=tool_flags, hidden=True));
 
-	ToolWindowRegistry.register(ToolWindow(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolWindowRegistry.register(ToolWindow(SceneEditor, "Scene Editor", size=(1500, 880), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolWindowRegistry.register(ToolWindow(DialogueEditor, "Dialogue Editor", size=(1000, 600), flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(DialogueGraph, "Dialogue Graph", size=(1280, 720), flags=tool_flags));
@@ -92,8 +92,8 @@ if __name__ == "__main__":
 		SpriteBank.update();
 		InputManager.update();
 
-		if DocumentEditor.active_document != None:
-			DocumentEditor.active_document.refresh();
+		for document in AssetManager.documents:
+			document.refresh();
 
 		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_S):
 			print(f"Saving...");

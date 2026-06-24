@@ -16,19 +16,38 @@ from ee_geometry import *;
 
 def get_entity_sprite(entity):
 	prototype = AssetManager.search("prototype", entity["prototype"]);
-	return SpriteBank.search(prototype["sprite"] if prototype != None else "null");
+	if prototype == None:
+		return None;
+	return SpriteBank.search(prototype["sprite"], safe=False);
 
 def get_entity_aabb(entity):
-	sprite = get_entity_sprite(entity);
-	x0, y0 = entity["position"];
-	x1, y1 = x0+sprite.frame_width, y0+sprite.frame_height;
-	return [x0, y0, x1, y1];
+	x, y = entity["position"];
+
+	prototype = AssetManager.search("prototype", entity["prototype"]);
+	if prototype != None:
+		sprite = SpriteBank.search(prototype["sprite"], safe=False);
+		if sprite != None:
+			return [x, y, x+sprite.frame_width, y+sprite.frame_height];
+	
+		if len(prototype["boxes"]) > 0:
+			x0, y0, x1, y1 = math.inf, math.inf, -math.inf, -math.inf;
+			for box in prototype["boxes"]:
+				x0 = min(x0, box["aabb"][0]);
+				y0 = min(y0, box["aabb"][1]);
+				x1 = max(x1, box["aabb"][2]);
+				y1 = max(y1, box["aabb"][3]);
+			return [x0+x, y0+y, x1+x, y1+y];
+
+	return [x, y, x+16, y+16];
 
 def get_text_aabb(text):
 	x0, y0 = text["position"];
 	width = len(text["text"]) * 8 * text["scale"];
 	x1, y1 = x0 + width, y0 + 8 * text["scale"];
 	return [x0, y0, x1, y1];
+
+def get_script_data(entity, key):
+	return next((x for x in entity["script_data"] if x["key"] == key), None);
 	
 #########################################################
 ## SCENE EDITOR
@@ -435,16 +454,62 @@ class DoorEditor:
 		def __init__(self, scene, entity):
 			self.scene = scene;
 			self.entity = entity;
-			self.pointees = [];
-			self.pointors = [];
+			self.pointers = [];
 		
 		def update(self, doors):
-			pass;
+			for door in doors:
+				if door is self:
+					continue;
+				to_scene = get_script_data(door.entity, "to_scene");
+				if to_scene == None or to_scene["value"] != self.scene["name"]:
+					continue;
+				to_entity = get_script_data(door.entity, "to_entity");
+				if to_entity == None or to_entity["value"] != self.entity["name"]:
+					continue;
+				self.pointers.append(door);
+	
+		def points_to(self):
+			to_scene = get_script_data(self.entity, "to_scene");
+			to_entity = get_script_data(self.entity, "to_entity");
+			return to_scene["value"] != "" and to_entity["value"] != "";
+
+		def is_pointed_to(self):
+			return len(self.pointers) > 0;
+
+	class Selector:
+		def __init__(self, parent, door):
+			self.parent = parent;
+			self.door = door;
+			self.open = True;
+
+		def draw(self):
+			_, self.open = imgui.begin("Select door", self.open);
+			for scene in self.parent.door_hierarchy:
+				if imgui.collapsing_header(scene):
+					imgui.push_id(scene);
+					for door in self.parent.door_hierarchy[scene]:
+						if door == self.door:
+							continue;
+						to_scene = get_script_data(self.door.entity, "to_scene");
+						to_entity = get_script_data(self.door.entity, "to_entity");
+						was_selected = door.entity["name"] == to_entity["value"];
+						clicked, value = imgui.menu_item(door.entity["name"], "", was_selected);
+						if clicked:
+							if was_selected:
+								to_scene["value"] = "";
+								to_entity["value"] = "";
+							else:
+								to_scene["value"] = door.scene["name"];
+								to_entity["value"] = door.entity["name"];
+					imgui.pop_id();
+			imgui.end();
 	
 	def __init__(self, parent):
 		self.parent = parent;
 		self.door_pool = [];
 		self.door_hierarchy = {};
+
+		self.selector = None;
 	
 	def poll_all_doors(self):
 		self.door_pool = [];
@@ -470,19 +535,72 @@ class DoorEditor:
 			if scene == self.parent.scene["name"]:
 				for door in self.door_hierarchy[scene]:
 					if imgui.tree_node(door.entity["name"]):
-						to_scene = next((x for x in door.entity["script_data"] if x["key"] == "to_scene"), None);
-						to_entity = next((x for x in door.entity["script_data"] if x["key"] == "to_entity"), None);
-						to_scene["value"] = eegui_input_asset("To scene", to_scene["value"], "scene");
-						to_entity["value"] = eegui_input_string("To entity", to_entity["value"]);
-						imgui.tree_pop();
+						to_scene = get_script_data(door.entity, "to_scene");
+						to_entity = get_script_data(door.entity, "to_entity");
+						if AssetManager.search("scene", to_scene["value"]) == None:
+							to_scene["value"] = "";
+						elif next((x for x in AssetManager.search("scene", to_scene["value"])["entities"] if x["name"] == to_entity["value"]), None) == None:
+							to_entity["value"] = "";
+						
+						if to_scene["value"] == "":
+							imgui.text("Unlinked");
+						elif to_entity["value"] == "":
+							imgui.text(f"Linked to scene {to_scene["value"]}");
+						else:
+							imgui.text(f"Linked to {to_scene["value"]}.{to_entity["value"]}");
+						
+						imgui.same_line();
+						if imgui.button("Browse"):
+							self.selector = DoorEditor.Selector(self, door);
+						
+						orientation = get_script_data(door.entity, "orientation");
+						orientation["value"] = eegui_input_orientation("Orientation", orientation["value"]);
+						
+						imgui.tree_pop();		
+
+		if self.selector != None:
+			self.selector.draw();
+			if not self.selector.open:
+				self.selector = None;
 
 	def draw_canvas(self):
 		for scene in self.door_hierarchy:
 			if scene == self.parent.scene["name"]:
 				for door in self.door_hierarchy[scene]:
+					door_gizmo = SpriteBank.search("editor_door");
 					x, y = door.entity["position"];
-					sprite = SpriteBank.search("editor_door");
-					self.parent.canvas.draw_image(x, y, sprite.frame_images[0]);
+
+					prototype = AssetManager.search("prototype", door.entity["prototype"]);
+					box = next((x for x in prototype["boxes"] if x["type"] == "trigger"), None);
+					if box != None:
+						x0, y0, x1, y1 = box["aabb"];
+						w, h = x1-x0, y1-y0;
+						x = x + x0 + w/2;
+						y = y + y1;
+					
+					idx = 0;
+					if door.points_to() and not door.is_pointed_to():
+						idx = 1;
+					if door.is_pointed_to() and not door.points_to():
+						idx = 2;
+					if door.points_to() and door.is_pointed_to():
+						idx = 3;
+					self.parent.canvas.draw_image(x-door_gizmo.frame_width/2, y-door_gizmo.frame_height, door_gizmo.frame_images[idx]);
+
+					arrow_gizmo = SpriteBank.search("editor_arrow");
+					orientation = get_script_data(door.entity, "orientation");
+					x_off = -arrow_gizmo.frame_width/2;
+					y_off = -door_gizmo.frame_height/2-arrow_gizmo.frame_height/2;
+					match orientation["value"]:
+						case 1:
+							x_off += door_gizmo.frame_width/2+arrow_gizmo.frame_width/2;
+						case 2:
+							y_off -= door_gizmo.frame_height/2+arrow_gizmo.frame_height/2;
+						case 3:
+							x_off -= door_gizmo.frame_width/2+arrow_gizmo.frame_width/2;
+						case 4:
+							y_off += door_gizmo.frame_height/2+arrow_gizmo.frame_height/2;
+					self.parent.canvas.draw_image(x+x_off, y+y_off, arrow_gizmo.frame_images[orientation["value"]], c=(255, 128, 0));
 
 class SceneViewer:
 	def __init__(self, parent):
@@ -538,7 +656,6 @@ class SceneViewer:
 							);
 	
 	def draw_entities(self):
-
 		def sort_y(entity):
 			base_y = get_entity_aabb(entity)[3];
 			prototype = AssetManager.search("prototype", entity["prototype"]);
@@ -550,13 +667,17 @@ class SceneViewer:
 
 		for entity in y_sorted:
 			prototype = AssetManager.search("prototype", entity["prototype"]);
-			sprite = SpriteBank.search(prototype["sprite"] if prototype != None else "null");
+			sprite = SpriteBank.search(prototype["sprite"], safe=False) if prototype != None else None;
+			aabb = get_entity_aabb(entity);
+			
+			if sprite != None:
+				x, y = entity["position"];
+				frame_idx = clamp(entity["frame_idx"], 0, sprite.frame_count-1);
+				self.parent.canvas.draw_image(x, y, sprite.frame_images[frame_idx]);
+			else:
+				self.parent.canvas.draw_aabb(aabb, (255, 255, 0));
 
-			x, y = entity["position"];
-			frame_idx = clamp(entity["frame_idx"], 0, sprite.frame_count-1);
-			self.parent.canvas.draw_image(x, y, sprite.frame_images[frame_idx]);
-
-			if self.show_boxes and prototype != None:
+			if prototype != None and self.show_boxes:
 				for box in prototype["boxes"]:
 					colour = (255, 0, 0) if box["type"] == "blocker" else (0, 255, 0);
 					x0, y0, x1, y1 = box["aabb"];
@@ -564,7 +685,6 @@ class SceneViewer:
 					self.parent.canvas.draw_aabb((x0, y0, x1, y1), colour);
 
 			if self.parent.selection_context.is_selected(entity):
-				aabb = get_entity_aabb(entity);
 				self.parent.canvas.draw_aabb(aabb, (255, 255, 255));
 	
 	def draw_texts(self):
@@ -639,7 +759,7 @@ class SceneEditor:
 		self.trash = Trash(deferred=True);
 
 		self.edit_mode = EditMode.ENTITIES;
-		self.snap = False;
+		self.snap = True;
 
 		self.tilemap_editor = TilemapEditor(self);
 		self.wall_editor = WallEditor(self);
@@ -688,12 +808,6 @@ class SceneEditor:
 		prototype = AssetManager.search("prototype", entity["prototype"]);
 		return SpriteBank.search(prototype["sprite"] if prototype != None else "null");
 
-	def get_entity_aabb(self, entity):
-		sprite = self.get_entity_sprite(entity);
-		x0, y0 = entity["position"];
-		x1, y1 = x0 + sprite.frame_width, y0 + sprite.frame_height;
-		return (x0, y0, x1, y1);
-
 	def get_entity_script_data_signatures(self, entity):
 		script_data = [];
 		prototype = AssetManager.search("prototype", entity["prototype"]);
@@ -703,51 +817,52 @@ class SceneEditor:
 				script_data += script["script_data"];
 		return script_data;
 
-	def rectify_entity_script_data(self, entity):
-		signatures = self.get_entity_script_data_signatures(entity);
+	def rectify_script_data(self):
+		for entity in self.scene["entities"]:
+			signatures = self.get_entity_script_data_signatures(entity);
 
-		# Remove invalid keys and types
-		trash = [];
-		for data in entity["script_data"]:
-			match = next(
-				(x for x in signatures if x["key"] == data["key"] and x["type"] == data["type"]), 
-				None
-			);
-			if match == None:
-				trash.append(data);
-		process_trash(entity["script_data"], trash);
-	
-		# Deduplicate
-		first = {}
-		for i, data in enumerate(entity["script_data"]):
-			first[data["key"]] = i;
-		trash = [];
-		for i, data in enumerate(entity["script_data"]):
-			if first[data["key"]] != i:
-				trash.append(data);
-		process_trash(entity["script_data"], trash);
+			# Remove invalid keys and types
+			trash = [];
+			for data in entity["script_data"]:
+				match = next(
+					(x for x in signatures if x["key"] == data["key"] and x["type"] == data["type"]), 
+					None
+				);
+				if match == None:
+					trash.append(data);
+			process_trash(entity["script_data"], trash);
+		
+			# Deduplicate
+			first = {}
+			for i, data in enumerate(entity["script_data"]):
+				first[data["key"]] = i;
+			trash = [];
+			for i, data in enumerate(entity["script_data"]):
+				if first[data["key"]] != i:
+					trash.append(data);
+			process_trash(entity["script_data"], trash);
 
-		def make_value(type):
-			match type:
-				case "vec2": return [0, 0];
-				case _: return ee_types.construct_type(signature["type"]).prototype();
-	
-		# Add missing signatures
-		for signature in signatures:
-			match = next(
-				(x for x in entity["script_data"] if x["key"] == signature["key"] and x["type"] == signature["type"]), 
-				None
-			);
-			if match == None:
-				entity["script_data"].append({
-					"key": signature["key"],
-					"type": signature["type"],
-					"value": make_value(signature["type"])
-				});
+			def make_value(type):
+				match type:
+					case "vec2": return [0, 0];
+					case _: return ee_types.construct_type(signature["type"]).prototype();
+		
+			# Add missing signatures
+			for signature in signatures:
+				match = next(
+					(x for x in entity["script_data"] if x["key"] == signature["key"] and x["type"] == signature["type"]), 
+					None
+				);
+				if match == None:
+					entity["script_data"].append({
+						"key": signature["key"],
+						"type": signature["type"],
+						"value": make_value(signature["type"])
+					});
 	
 	def synchronize_manip(self):
 		def make_shape(entity):
-			aabb = self.get_entity_aabb(entity);
+			aabb = get_entity_aabb(entity);
 			return CanvasManipRect(aabb);
 		shapes = [make_shape(x) for x in self.scene["entities"]];
 		
@@ -779,6 +894,12 @@ class SceneEditor:
 				_, self.scene_viewer.show_grid = imgui.menu_item("Grid", "", self.scene_viewer.show_grid);
 				imgui.end_menu();
 			
+			if imgui.begin_menu("Grid"):
+				imgui.set_next_item_width(64);
+				self.canvas_grid.size = eegui_input_int("Size", self.canvas_grid.size, style=EEGUIIntStyle.SLIDER, low_bound=2, high_bound=16);
+				self.snap = eegui_input_bool("Snap", self.snap);
+				imgui.end_menu();
+			
 			imgui.end_menu_bar();		
 	
 	def gui_draw_entities(self):	
@@ -807,7 +928,6 @@ class SceneEditor:
 				entity["layer"] = eegui_input_int("Layer", entity["layer"], 0, 255);
 				
 				if imgui.tree_node("Script data"):
-					self.rectify_entity_script_data(entity);
 					for data in entity["script_data"]:
 						if imgui.tree_node(f"{data["key"]}####{id(data)}"):
 							data_type = ee_types.TypeRegistry.get(data["type"]);
@@ -823,18 +943,20 @@ class SceneEditor:
 		self.scene["has_bounds"] = eegui_input_bool("Has bounds", self.scene["has_bounds"]);
 		if self.scene["has_bounds"]:
 			self.scene["bounds"] = eegui_input_aabb("Bounds", self.scene["bounds"]);
+		self.scene["free_camera"] = eegui_input_bool("Free camera", self.scene["free_camera"]);
 	
 	def scene_context_menu(self):
 		selection = self.selection_context.get_selection(single=True);
-		if selection == None:
-			if imgui.menu_item_simple("Spawn"):
-				entity = AssetManager.get_type("scene").search("entities").T.get_inmost_type().prototype();
-				entity["name"] = "New entity";
-				entity["position"] = self.canvas_io.get_cursor();
-				self.scene["entities"].append(entity);
-		else:
+		hovered = selection != None and aabb_contains_point(self.canvas_io.get_cursor(), get_entity_aabb(selection));
+		if hovered:
 			if imgui.menu_item_simple("Delete"):
 				self.trash.trash_item(self.scene["entities"], selection);
+		
+		if imgui.menu_item_simple("Spawn"):
+			entity = AssetManager.get_document("scene").type_helper.search("entities").T.get_inmost_type().prototype();
+			entity["name"] = "New entity";
+			entity["position"] = self.canvas_io.get_cursor();
+			self.scene["entities"].append(entity);
 
 	def draw(self):
 		self.draw_menu_bar();
@@ -844,7 +966,7 @@ class SceneEditor:
 
 		self.canvas_io.tick();
 		self.synchronize_manip();
-		self.canvas_manip.tick();
+		self.rectify_script_data();
 
 		def run_left_panel(panel_tick):
 			imgui.begin_child(
@@ -867,8 +989,10 @@ class SceneEditor:
 					self.trash.trash_item(self.scene["entities"], selection);
 			if InputManager.is_command(glfw.KEY_Z):
 				self.trash.restore();
-
+			
+			self.canvas_manip.tick();
 			self.handle_events();
+
 			self.gui_draw_entities();
 			self.trash.flush();
 
@@ -912,14 +1036,13 @@ class SceneEditor:
 			0, 0
 		);
 
-		self.edit_mode = eegui_input_enum("Edit mode", self.edit_mode, EditMode, style=EEGUIEnumStyle.RADIO_BUTTONS);
-
-		imgui.same_line();
-		imgui.set_next_item_width(64);
-		self.canvas_grid.size = eegui_input_int("Grid size", round(self.canvas_grid.size / 2) * 2, 2, 16);
-
-		imgui.same_line();
-		self.snap = eegui_input_bool("Snap", self.snap);
+		if imgui.begin_tab_bar("edit-mode"):
+			for value in EditMode:
+				tab_visible, tab_open = imgui.begin_tab_item(value.name);
+				if tab_visible:
+					self.edit_mode = value;
+					imgui.end_tab_item();
+			imgui.end_tab_bar();
 
 		self.scene_viewer.draw();
 		self.canvas.render(gui_id="canvas");

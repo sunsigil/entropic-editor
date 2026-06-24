@@ -81,14 +81,16 @@ class SpriteBank:
 				else:
 					SpriteBank._update(name, "null.png", 1);
 	
-	def search(name, path=None, frames=None):
+	def search(name, path=None, frames=None, safe=True):
 		if not name in SpriteBank.entries:
 			if path != None and frames != None:
 				SpriteBank._update(name, path, frames);
 			else:
 				SpriteBank.update();
-		if name not in SpriteBank.entries:
-			return SpriteBank.entries["null.png"];
+		if not name in SpriteBank.entries:
+			if safe:
+				return SpriteBank.entries["null.png"];
+			return None;
 		return SpriteBank.entries[name];
 
 class SpritePreview:

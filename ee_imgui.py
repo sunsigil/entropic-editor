@@ -300,6 +300,38 @@ def eegui_input_aabb(gui_id, value, mode="xyxy"):
 	EEGUIContextMenu.ping(gui_id);
 	return value;
 
+def eegui_input_orientation(gui_id, value):
+	arrow = ee_sprites.SpriteBank.search("editor_arrow");
+	orientations = [
+		-1, 2, -1,
+		3, 0, 1,
+		-1, 4, -1
+	];
+
+	imgui.text(gui_id);
+	
+	imgui.same_line();
+	imgui.push_id(gui_id);
+	imgui.begin_group();
+	imgui.push_style_var(imgui.StyleVar_.frame_padding, imgui.ImVec2(0, 0));
+	for y in range(3):
+		for x in range(3):
+			if x > 0:
+				imgui.same_line();
+			cell_idx = y*3+x;
+			cell_orientation = orientations[cell_idx];
+			if cell_orientation == -1:
+				imgui.dummy(imgui.ImVec2(16, 16));
+			else:
+				tint = (0.5, 0.5, 0.5, 1) if cell_orientation == value else (1, 1, 1, 1);
+				if imgui.image_button(f"##{cell_orientation}", imgui.ImTextureRef(arrow.frame_textures[cell_orientation]), (16, 16), tint_col=tint):
+					value = cell_orientation;
+	imgui.pop_style_var();
+	imgui.end_group();
+	imgui.pop_id();	
+
+	return value;
+
 # Layout
 
 def eegui_begin_column(imgui_id, w=None):

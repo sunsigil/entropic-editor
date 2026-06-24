@@ -12,7 +12,7 @@ from ee_geometry import *;
 
 class PrototypeSpawner:
 	def __init__(self):
-		self.size = (256, 128);
+		self.size = (512, 256);
 		self.prototype = {
 			"sprite": "",
 			"boxes": []
@@ -34,12 +34,13 @@ class PrototypeSpawner:
 		imgui.set_next_window_size(self.size);
 		_, open = imgui.begin("Create prototype", not self.finished);
 
-		self.prototype["sprite"] == eegui_input_asset("sprite", self.prototype["sprite"], "sprite");
+		self.prototype["sprite"] = eegui_input_asset("sprite", self.prototype["sprite"], "sprite");
 	
-		if AssetManager.search("sprite", self.prototype["sprite"]) != None and imgui.button("Create"):
-			self.autofill();
-			AssetManager.get_document("prototype").spawn_entry(source=self.prototype);
-			self.finished = True;
+		if AssetManager.search("sprite", self.prototype["sprite"]) != None:
+			if imgui.button("Create"):
+				self.autofill();
+				AssetManager.get_document("prototype").spawn_entry(source=self.prototype);
+				self.finished = True;
 			imgui.same_line();
 		if imgui.button("Cancel"):
 			self.finished = True;
@@ -86,12 +87,9 @@ class PrototypeEditor:
 		protoypes = sorted(AssetManager.get_all("prototype"), key=lambda x: x["name"]);
 
 		for prototype in protoypes:
-			selected = imgui.menu_item_simple(prototype["name"]);
+			selected = imgui.menu_item_simple(prototype["name"]+f"##{id(prototype)}");
 
 			if imgui.begin_popup_context_item():
-				if imgui.menu_item_simple("New prototype"):
-					self.prototype_spawner = PrototypeSpawner();
-					imgui.close_current_popup();
 				if imgui.menu_item_simple("Delete"):
 					AssetManager.get_document("prototype").delete_entry(prototype);
 					imgui.close_current_popup();
@@ -99,11 +97,6 @@ class PrototypeEditor:
 			
 			if selected:
 				self._load_prototype(prototype);
-
-		if self.prototype_spawner != None:
-			self.prototype_spawner.draw();
-			if self.prototype_spawner.is_finished():
-				self.prototype_spawner = None;
 	
 	def gui_draw_boxes(self):
 		boxes_open = imgui.tree_node("Boxes");
@@ -183,11 +176,6 @@ class PrototypeEditor:
 					self.canvas.draw_line(x0, my, x0-16, my, colour);
 	
 	def gui_draw_canvas(self):
-		self.draw_grid = imgui.checkbox("Draw grid", self.draw_grid)[1];
-		imgui.same_line();
-		imgui.set_next_item_width(64);
-		self.canvas_grid.size = eegui_input_int("Grid size", self.canvas_grid.size, style=EEGUIIntStyle.SLIDER, low_bound=2, high_bound=16);
-
 		self.canvas.clear((128, 128, 128));
 		if self.draw_grid:
 			self.canvas_grid.draw_lines((64, 64, 64));
@@ -228,12 +216,33 @@ class PrototypeEditor:
 		self.canvas_manip.synchronize(self.manip_registry);
 	
 	def draw(self):
+		if imgui.begin_menu_bar():
+			if imgui.begin_menu("Asset"):
+				if imgui.menu_item_simple("New"):
+					AssetManager.get_document("prototype").spawn_entry();
+				if imgui.menu_item_simple("New from sprite"):
+					self.prototype_spawner = PrototypeSpawner();
+				imgui.end_menu();
+			
+			if imgui.begin_menu("View"):
+				_, self.draw_grid = imgui.menu_item("Show grid", "", self.draw_grid);
+				imgui.set_next_item_width(64);
+				self.canvas_grid.size = eegui_input_int("Grid size", self.canvas_grid.size, style=EEGUIIntStyle.SLIDER, low_bound=2, high_bound=16);
+				imgui.end_menu();
+			imgui.end_menu_bar();
+		
+		if self.prototype_spawner != None:
+			self.prototype_spawner.draw();
+			if self.prototype_spawner.is_finished():
+				self.prototype_spawner = None;
 
-		eegui_begin_column("prototype_window", imgui.get_content_region_avail().x * 0.15);
+		eegui_begin_column("left-panel", imgui.get_content_region_avail().x * 0.15);
 		self.gui_draw_selector();
 		eegui_end_column();
 
-		eegui_begin_column("scene_window");
+		eegui_begin_column("main-panel");
+
+		self.prototype["name"] = eegui_input_string("Name", self.prototype["name"]);
 
 		self.gui_draw_canvas();
 
