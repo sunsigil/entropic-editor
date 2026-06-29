@@ -1,12 +1,12 @@
 from imgui_bundle import imgui;
 import glfw;
 
-from entropic_editor.ee_cowtools import *;
-from entropic_editor.ee_canvas import Canvas, CanvasGrid, CanvasIO;
-from entropic_editor.ee_assets import *;
-from entropic_editor.ee_sprites import SpriteBank, EditorSprite;
-from entropic_editor.ee_input import InputManager;
-from entropic_editor.ee_imgui import *;
+from cowtools import *;
+from canvas import Canvas, CanvasGrid, CanvasIO;
+from assets import *;
+from sprites import SpriteBank, EditorSprite;
+from input import InputManager;
+from editor_gui import *;
 
 class RecipeEditor:
 	def __init__(self):	

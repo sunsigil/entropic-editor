@@ -6,11 +6,11 @@ import math;
 import glfw;
 import copy;
 
-from entropic_editor.ee_cowtools import *;
-from entropic_editor.ee_canvas import Canvas, CanvasGrid, CanvasIO;
-from entropic_editor.ee_imgui import *;
-from entropic_editor.ee_input import InputManager;
-from entropic_editor.ee_colours import *;
+from cowtools import *;
+from canvas import Canvas, CanvasGrid, CanvasIO;
+from editor_gui import *;
+from input import InputManager;
+from colours import *;
 
 def highlight(c):
 	if value(c) > 224:

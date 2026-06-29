@@ -1,8 +1,8 @@
 from PIL import Image;
 from pathlib import Path;
 
-from entropic_editor.ee_assets import *;
-from entropic_editor.ee_cowtools import *;
+from assets import *;
+from cowtools import *;
 
 def _is_image_black(img):
 	pixels = img.load();

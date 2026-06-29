@@ -4,13 +4,13 @@ from OpenGL.GL import *;
 from imgui_bundle import imgui;
 from enum import Enum;
 
-import entropic_editor.ee_context as ee_context;
-from entropic_editor.ee_assets import AssetManager;
-from entropic_editor.ee_tool_window import ToolWindowRegistry;
-from entropic_editor.ee_file_explorer import FileExplorer;
-from entropic_editor.ee_asset_explorer import AssetExplorer;
-import entropic_editor.ee_types as ee_types;
-import entropic_editor.ee_sprites as ee_sprites;
+import context as context;
+from assets import AssetManager;
+from tool_window import ToolWindowRegistry;
+from file_explorer import FileExplorer;
+from asset_explorer import AssetExplorer;
+import types as types;
+import sprites as sprites;
 
 # Not Even Input
 
@@ -172,7 +172,7 @@ def eegui_input_file(gui_id, value, pattern, directory=None, asset_type=None):
 				if asset_type != None:
 					directory = AssetManager.get_document(asset_type).directory;
 				else:
-					directory = ee_context.get().directory;
+					directory = context.get().directory;
 			explorer.get().configure(gui_id, directory, pattern, asset_type);
 	
 	imgui.pop_id();
@@ -209,7 +209,7 @@ def eegui_typed_input(gui_id, T, value, previews=False, tooltip=False):
 	if tooltip:
 		EEGUITooltip.tooltip = T;
 
-	if isinstance(T, ee_types.Object):
+	if isinstance(T, types.Object):
 		node_open = imgui.tree_node(gui_id);
 		EEGUITooltip.ping();
 		EEGUIContextMenu.ping(gui_id);
@@ -220,7 +220,7 @@ def eegui_typed_input(gui_id, T, value, previews=False, tooltip=False):
 					value[element.name] = eegui_typed_input(element.name, element.T, value[element.name], previews, tooltip);
 			imgui.tree_pop();
 
-	if isinstance(T, ee_types.List):
+	if isinstance(T, types.List):
 		node_open = imgui.tree_node(gui_id);
 		EEGUITooltip.ping();
 		EEGUIContextMenu.ping(gui_id);
@@ -246,38 +246,38 @@ def eegui_typed_input(gui_id, T, value, previews=False, tooltip=False):
 
 			imgui.tree_pop();
 	
-	if isinstance(T, ee_types.Asset):
+	if isinstance(T, types.Asset):
 		if previews:
 			match T.name:
 				case "sprite":
-					ee_sprites.SpritePreview.draw(value);
+					sprites.SpritePreview.draw(value);
 		value = eegui_input_asset(gui_id, value, T.name);
 	
-	if isinstance(T, ee_types.File):
+	if isinstance(T, types.File):
 		directory = None;
 		if T.pattern == "*.png":
 			if previews:
-				ee_sprites.SpritePreview.draw(value);
-			directory = ee_context.get().directory/"assets/sprites";
+				sprites.SpritePreview.draw(value);
+			directory = context.get().directory/"assets/sprites";
 		value = eegui_input_file(gui_id, value, T.pattern, directory=directory);
 	
-	if isinstance(T, ee_types.Flags):
+	if isinstance(T, types.Flags):
 		value = eegui_input_flags(gui_id, value, T.values);
-	if isinstance(T, ee_types.Enum):
+	if isinstance(T, types.Enum):
 		value = eegui_input_enum(gui_id, value, T.values);
-	if isinstance(T, ee_types.Any):
+	if isinstance(T, types.Any):
 		value = eegui_input_any(gui_id, value);
-	if isinstance(T, ee_types.Vec2):
+	if isinstance(T, types.Vec2):
 		value = eegui_input_vec2(gui_id, value);
-	if isinstance(T, ee_types.Colour):
+	if isinstance(T, types.Colour):
 		value = eegui_input_colour(gui_id, value);
-	if isinstance(T, ee_types.String):
+	if isinstance(T, types.String):
 		value = eegui_input_string(gui_id, value);
-	if isinstance(T, ee_types.Bool):
+	if isinstance(T, types.Bool):
 		value = eegui_input_bool(gui_id, value);
-	if isinstance(T, ee_types.Float):
+	if isinstance(T, types.Float):
 		value = eegui_input_float(gui_id, value);
-	if isinstance(T, ee_types.Int):
+	if isinstance(T, types.Int):
 		value = eegui_input_int(gui_id, value);
 
 	return value;
@@ -301,7 +301,7 @@ def eegui_input_aabb(gui_id, value, mode="xyxy"):
 	return value;
 
 def eegui_input_orientation(gui_id, value):
-	arrow = ee_sprites.SpriteBank.search("editor_arrow");
+	arrow = sprites.SpriteBank.search("editor_arrow");
 	orientations = [
 		-1, 2, -1,
 		3, 0, 1,

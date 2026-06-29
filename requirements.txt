@@ -8,4 +8,5 @@ imgui-bundle
 
 build
 twine
+toml
 -r testpypi_requirements.txt

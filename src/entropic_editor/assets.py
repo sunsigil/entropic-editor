@@ -1,6 +1,6 @@
 from pathlib import Path;
 import json;
-import entropic_editor.ee_types as ee_types;
+import asset_types;
 import copy;
 
 def load_typefile(path):
@@ -9,10 +9,10 @@ def load_typefile(path):
 	file.close();
 
 	for name,expr in data.items():
-		T = ee_types.construct_type(expr["type"]);
-		ee_types.TypeRegistry.register(name, T);
+		T = asset_types.construct_type(expr["type"]);
+		asset_types.TypeRegistry.register(name, T);
 
-	print("[Typefile] Loaded types from", path);
+	print("[Typefile] Loaded asset_types from", path);
 
 #########################################################
 ## DOCUMENT MODEL
@@ -44,7 +44,7 @@ class AssetDocument:
 		
 		keys = self.data.keys();
 		self.type_name = next(k for k in keys if k != "instances");
-		self.type_helper = ee_types.TypeHelper(self.type_name, self.data[self.type_name]);
+		self.type_helper = asset_types.TypeHelper(self.type_name, self.data[self.type_name]);
 		self.instances = self.data["instances"];
 	
 		self.id_set = set();

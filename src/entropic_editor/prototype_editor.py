@@ -2,13 +2,13 @@ from imgui_bundle import imgui;
 import glfw;
 from enum import Enum;
 
-from entropic_editor.ee_cowtools import *;
-from entropic_editor.ee_canvas import *
-from entropic_editor.ee_assets import *;
-from entropic_editor.ee_sprites import SpriteBank;
-from entropic_editor.ee_input import InputManager;
-from entropic_editor.ee_imgui import *;
-from entropic_editor.ee_geometry import *;
+from cowtools import *;
+from canvas import *
+from assets import *;
+from sprites import SpriteBank;
+from input import InputManager;
+from editor_gui import *;
+from geometry import *;
 
 class PrototypeSpawner:
 	def __init__(self):

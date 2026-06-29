@@ -1,8 +1,8 @@
 from pathlib import Path;
 from imgui_bundle import imgui;
-from entropic_editor.ee_cowtools import foldl;
+from cowtools import foldl;
 import os;
-from entropic_editor.ee_assets import AssetManager;
+from assets import AssetManager;
 import copy;
 
 class FileExplorer:

@@ -3,9 +3,9 @@ import qrcode;
 import base64;
 import re;
 
-from entropic_editor.ee_cowtools import *;
-from entropic_editor.ee_assets import *;
-from entropic_editor.ee_canvas import Canvas;
+from cowtools import *;
+from assets import *;
+from canvas import Canvas;
 
 class EnDeCoder:
 	def __init__(self):

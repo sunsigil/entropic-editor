@@ -9,30 +9,25 @@ import argparse;
 import glfw;
 from imgui_bundle import imgui;
 from imgui_bundle.python_backends.glfw_backend import GlfwRenderer;
+import context;
 
-import entropic_editor.ee_context as ee_context;
-from entropic_editor.ee_cowtools import *;
-from entropic_editor.ee_assets import *;
-from entropic_editor.ee_tool_window import ToolWindow, ToolWindowRegistry;
+from cowtools import *;
+from assets import *;
+from tool_window import ToolWindow, ToolWindowRegistry;
 
-from entropic_editor.ee_scene_editor import SceneEditor;
-from entropic_editor.ee_sprites import SpriteBank;
-from entropic_editor.ee_input import InputManager;
-from entropic_editor.ee_prototype_editor import PrototypeEditor;
-from entropic_editor.ee_dialogue_editor import DialogueGraph, DialogueEditor;
-from entropic_editor.ee_recipe_editor import RecipeEditor;
-from entropic_editor.ee_qr_encoder import EnDeCoder;
-from entropic_editor.ee_file_explorer import FileExplorer;
-from entropic_editor.ee_mesh2d_editor import Mesh2DEditor;
-from entropic_editor.ee_document_editor import DocumentEditor;
-from entropic_editor.ee_palette_viewer import PaletteViewer;
-from entropic_editor.ee_asset_explorer import AssetExplorer;
-from entropic_editor.ee_glyph_explorer import GlyphExplorer;
-
-#from ee_theme_editor import ThemeEditor;
-#from ee_anim_viewer import AnimationViewer;
-#from ee_notice_editor import NoticeEditor;
-#from ee_output_understander import OutputUnderstander;
+from scene_editor import SceneEditor;
+from sprites import SpriteBank;
+from input import InputManager;
+from prototype_editor import PrototypeEditor;
+from dialogue_editor import DialogueGraph, DialogueEditor;
+from recipe_editor import RecipeEditor;
+from coder import EnDeCoder;
+from file_explorer import FileExplorer;
+from mesh_editor import Mesh2DEditor;
+from document_editor import DocumentEditor;
+from palette_viewer import PaletteViewer;
+from asset_explorer import AssetExplorer;
+from glyph_viewer import GlyphExplorer;
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(
@@ -47,8 +42,8 @@ if __name__ == "__main__":
 	game_path = args.game_path;
 	typefile_path = args.types;
 
-	ee_context.set(ee_context.Context(game_path, "Entropic Editor", 1920, 1080));
-	InputManager.initialize(ee_context.get().glfw_handle, ee_context.get().imgui_impl);
+	context.set(context.Context(game_path, "Entropic Editor", 1920, 1080));
+	InputManager.initialize(context.get().glfw_handle, context.get().imgui_impl);
 
 	if typefile_path != None and typefile_path.is_file():
 		load_typefile(typefile_path);
@@ -95,8 +90,8 @@ if __name__ == "__main__":
 	ToolWindowRegistry.register(ToolWindow(EnDeCoder, "EnDeCoder", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
 
-	while ee_context.get().is_alive():
-		ee_context.get().begin_frame();
+	while context.get().is_alive():
+		context.get().begin_frame();
 		
 		SpriteBank.update();
 		InputManager.update();
@@ -110,14 +105,14 @@ if __name__ == "__main__":
 				document.save();
 
 		imgui.set_next_window_pos((0, 0));
-		imgui.begin(ee_context.get().name, flags=window_flags | (splash_flags if DocumentEditor.active_document == None else 0));
+		imgui.begin(context.get().name, flags=window_flags | (splash_flags if DocumentEditor.active_document == None else 0));
 
 		if imgui.begin_main_menu_bar():
 
 			if imgui.begin_menu("File"):
 				if imgui.begin_menu("Open"):
 					for document in AssetManager.documents:
-						if imgui.menu_item(str(document.path.relative_to(ee_context.get().directory)), "", document == DocumentEditor.active_document)[1]:
+						if imgui.menu_item(str(document.path.relative_to(context.get().directory)), "", document == DocumentEditor.active_document)[1]:
 							if DocumentEditor.active_document != None:
 								DocumentEditor.active_document.save();
 							DocumentEditor.active_document = document;
@@ -152,5 +147,5 @@ if __name__ == "__main__":
 		
 		imgui.end();
 
-		ee_context.get().end_frame();
+		context.get().end_frame();
 

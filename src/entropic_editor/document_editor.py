@@ -1,11 +1,11 @@
 from imgui_bundle import imgui;
-from entropic_editor.ee_assets import AssetManager, AssetDocument;
-from entropic_editor.ee_sprites import SpritePreview;
-import entropic_editor.ee_types as ee_types;
-from entropic_editor.ee_tool_window import ToolWindow, ToolWindowRegistry;
-from entropic_editor.ee_asset_explorer import AssetExplorer;
-from entropic_editor.ee_file_explorer import FileExplorer;
-from entropic_editor.ee_imgui import *;
+from assets import AssetManager, AssetDocument;
+from sprites import SpritePreview;
+import types as types;
+from tool_window import ToolWindow, ToolWindowRegistry;
+from asset_explorer import AssetExplorer;
+from file_explorer import FileExplorer;
+from editor_gui import *;
 import copy;
 
 class DocumentEditor:

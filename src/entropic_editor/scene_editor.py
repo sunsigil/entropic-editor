@@ -3,13 +3,13 @@ import glfw;
 import csv;
 import copy;
 
-from entropic_editor.ee_cowtools import *;
-from entropic_editor.ee_canvas import *;
-from entropic_editor.ee_assets import *;
-from entropic_editor.ee_sprites import SpriteBank, EditorSprite, SpritePreview;
-from entropic_editor.ee_input import InputManager;
-from entropic_editor.ee_imgui import *;
-from entropic_editor.ee_geometry import *;
+from cowtools import *;
+from canvas import *;
+from assets import *;
+from sprites import SpriteBank, EditorSprite, SpritePreview;
+from input import InputManager;
+from editor_gui import *;
+from geometry import *;
 
 #########################################################
 ## HELPERS
@@ -1017,7 +1017,7 @@ class SceneEditor:
 			def make_value(type):
 				match type:
 					case "vec2": return [0, 0];
-					case _: return ee_types.construct_type(signature["type"]).prototype();
+					case _: return types.construct_type(signature["type"]).prototype();
 		
 			# Add missing signatures
 			for signature in signatures:
@@ -1101,7 +1101,7 @@ class SceneEditor:
 				if imgui.tree_node("Script data"):
 					for data in entity["script_data"]:
 						if imgui.tree_node(f"{data["key"]}####{id(data)}"):
-							data_type = ee_types.construct_type(data["type"]);
+							data_type = types.construct_type(data["type"]);
 							data["value"] = eegui_typed_input(data["key"], data_type, data["value"]);
 							imgui.tree_pop();
 					imgui.tree_pop();
