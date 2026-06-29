@@ -4,13 +4,13 @@ from OpenGL.GL import *;
 from imgui_bundle import imgui;
 from enum import Enum;
 
-import ee_context;
-from ee_assets import AssetManager;
-from ee_tool_window import ToolWindowRegistry;
-from ee_file_explorer import FileExplorer;
-from ee_asset_explorer import AssetExplorer;
-import ee_types;
-import ee_sprites;
+import entropic_editor.ee_context as ee_context;
+from entropic_editor.ee_assets import AssetManager;
+from entropic_editor.ee_tool_window import ToolWindowRegistry;
+from entropic_editor.ee_file_explorer import FileExplorer;
+from entropic_editor.ee_asset_explorer import AssetExplorer;
+import entropic_editor.ee_types as ee_types;
+import entropic_editor.ee_sprites as ee_sprites;
 
 # Not Even Input
 

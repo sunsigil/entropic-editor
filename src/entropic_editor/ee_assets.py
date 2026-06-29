@@ -1,6 +1,6 @@
 from pathlib import Path;
 import json;
-import ee_types;
+import entropic_editor.ee_types as ee_types;
 import copy;
 
 def load_typefile(path):

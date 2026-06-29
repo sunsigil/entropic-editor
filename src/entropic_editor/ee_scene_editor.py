@@ -3,13 +3,13 @@ import glfw;
 import csv;
 import copy;
 
-from ee_cowtools import *;
-from ee_canvas import *;
-from ee_assets import *;
-from ee_sprites import SpriteBank, EditorSprite, SpritePreview;
-from ee_input import InputManager;
-from ee_imgui import *;
-from ee_geometry import *;
+from entropic_editor.ee_cowtools import *;
+from entropic_editor.ee_canvas import *;
+from entropic_editor.ee_assets import *;
+from entropic_editor.ee_sprites import SpriteBank, EditorSprite, SpritePreview;
+from entropic_editor.ee_input import InputManager;
+from entropic_editor.ee_imgui import *;
+from entropic_editor.ee_geometry import *;
 
 #########################################################
 ## HELPERS

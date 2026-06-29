@@ -1,5 +1,5 @@
 from imgui_bundle import imgui;
-from ee_cowtools import foldl;
+from entropic_editor.ee_cowtools import foldl;
 
 class ToolWindow:
 	def __init__(self, T, title, size=(720, 720), flags=[], hidden=False):

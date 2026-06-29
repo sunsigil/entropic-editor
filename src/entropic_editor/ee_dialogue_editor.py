@@ -1,6 +1,6 @@
 from imgui_bundle import imgui, imgui_node_editor as imnodes;
-from ee_assets import AssetManager;
-from ee_cowtools import *;
+from entropic_editor.ee_assets import AssetManager;
+from entropic_editor.ee_cowtools import *;
 from typing import TypeVar, Generic, Type;
 
 #########################################################

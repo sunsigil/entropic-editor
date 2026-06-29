@@ -3,10 +3,10 @@ from imgui_bundle import imgui;
 from PIL import Image, ImageDraw;
 import glfw;
 
-from ee_cowtools import *;
-from ee_input import InputManager;
-from ee_geometry import *;
-from ee_imgui import *;
+from entropic_editor.ee_cowtools import *;
+from entropic_editor.ee_input import InputManager;
+from entropic_editor.ee_geometry import *;
+from entropic_editor.ee_imgui import *;
 
 class Canvas:
 	def __init__(self, width, height, scale=1, origin=(0, 0)):

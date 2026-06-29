@@ -1,8 +1,8 @@
 from imgui_bundle import imgui;
-from ee_canvas import Canvas;
-from ee_assets import AssetManager;
+from entropic_editor.ee_canvas import Canvas;
+from entropic_editor.ee_assets import AssetManager;
 from collections import OrderedDict;
-import ee_context;
+import entropic_editor.ee_context as ee_context;
 
 class Mesh2DEditor:
 	def __init__(self):

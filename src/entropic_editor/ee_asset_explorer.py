@@ -1,6 +1,6 @@
 from imgui_bundle import imgui;
-from ee_assets import AssetManager;
-from ee_sprites import SpritePreview, SpriteBank;
+from entropic_editor.ee_assets import AssetManager;
+from entropic_editor.ee_sprites import SpritePreview, SpriteBank;
 import math;
 
 class AssetExplorer:

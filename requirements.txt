@@ -1,0 +1,11 @@
+pillow
+PyOpenGL
+glfw
+numpy
+qrcode
+regex
+imgui-bundle
+
+build
+twine
+-r testpypi_requirements.txt

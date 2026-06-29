@@ -1,9 +1,9 @@
 from imgui_bundle import imgui;
-from ee_assets import AssetManager;
-from ee_sprites import SpritePreview, SpriteBank;
+from entropic_editor.ee_assets import AssetManager;
+from entropic_editor.ee_sprites import SpritePreview, SpriteBank;
 import math;
 import string;
-from ee_imgui import *;
+from entropic_editor.ee_imgui import *;
 
 class GlyphExplorer:
 	def __init__(self):
