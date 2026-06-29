@@ -221,6 +221,20 @@ class Object(Type):
 
 		return value;
 
+class TypeRegistry:
+	entries = {};
+
+	def clear():
+		TypeRegistry.entries.clear();
+
+	def register(key, value):
+		TypeRegistry.entries[key] = value;
+
+	def search(key):
+		if key in TypeRegistry.entries:
+			return TypeRegistry.entries[key];
+		return None;
+
 class Element:
 	def __init__(self, name, T, attributes = [], conditions = []):
 		self.name = name;
@@ -306,6 +320,10 @@ def construct_type(expr) -> Type:
 		if re.match(r"\*.[A-z]+", expr):
 			return File(expr);
 
+	registered = TypeRegistry.search(expr);
+	if registered != None:
+		return registered;
+
 	return Asset(expr);
 
 def compare_types(a, b):
@@ -340,6 +358,8 @@ def construct_element(name, expr) -> Element:
 	T = construct_type(expr["type"]);
 	attributes = expr["attributes"] if "attributes" in expr else [];
 	conditions = expr["conditions"] if "conditions" in expr else [];
+	if "registered-type" in attributes:
+		TypeRegistry.register(name, T);
 	return Element(name, T, attributes, conditions);
 
 class TNode:	

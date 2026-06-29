@@ -4,6 +4,7 @@ from pathlib import Path;
 from PIL import Image;
 from stat import *;
 import sys;
+import argparse;
 
 import glfw;
 from imgui_bundle import imgui;
@@ -34,19 +35,27 @@ from ee_glyph_explorer import GlyphExplorer;
 #from ee_output_understander import OutputUnderstander;
 
 if __name__ == "__main__":
-	args = sys.argv[1:];
-	if len(args) < 1:
-		print("usage: editor.py game_dir");
-		exit();
-	
+	parser = argparse.ArgumentParser(
+		prog="editor.py",
+		description="Interactive editor for game content"
+	);
+	parser.add_argument("game_path", type=Path);
+	parser.add_argument("--types", type=Path);
+	args = parser.parse_args(sys.argv[1:]);
+
 	editor_path = Path(__file__).parent.absolute();
-	game_path = Path(args[0]);
+	game_path = args.game_path;
+	typefile_path = args.types;
 
 	ee_context.set(ee_context.Context(game_path, "Entropic Editor", 1920, 1080));
 	InputManager.initialize(ee_context.get().glfw_handle, ee_context.get().imgui_impl);
 
+	if typefile_path != None and typefile_path.is_file():
+		load_typefile(typefile_path);
+
 	for path in (game_path/"assets").rglob("*.json"):
-		AssetManager.load_document(path);
+		if AssetDocument.is_file_asset_document(path):
+			AssetManager.load_document(path);
 
 	window_flag_list = [
 		imgui.WindowFlags_.no_saved_settings,

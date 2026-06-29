@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "entropic_editor"
+version = "0.0.1"
+authors = [
+  { name="Tomas Stegemann", email="tomas@entropicengineering.com" },
+]
+description = "An interactive editor for game data"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: MacOS",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/sunsigil/entropic-editor"

@@ -316,6 +316,7 @@ class CanvasManipulator:
 				record.eeid = next(self.eeid);
 			self.shapes[record.eeid] = record.shape;
 			canon_eeids.add(record.eeid);
+		
 		invalid_eeids = [eeid for eeid in self.shapes if eeid not in canon_eeids];
 		for eeid in invalid_eeids:
 			del self.shapes[eeid];

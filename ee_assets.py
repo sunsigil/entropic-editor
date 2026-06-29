@@ -3,10 +3,38 @@ import json;
 import ee_types;
 import copy;
 
+def load_typefile(path):
+	file = open(path, "r");
+	data = json.load(file);
+	file.close();
+
+	for name,expr in data.items():
+		T = ee_types.construct_type(expr["type"]);
+		ee_types.TypeRegistry.register(name, T);
+
+	print("[Typefile] Loaded types from", path);
+
 #########################################################
 ## DOCUMENT MODEL
 
 class AssetDocument:
+	def is_file_asset_document(path):
+		path = Path(path);
+		file = open(path, "r");
+		data = json.load(file);
+		file.close();
+
+		if not isinstance(data, dict):
+			return False;
+		type_name = next(k for k in data.keys());
+		if not isinstance(data[type_name], dict):
+			return False;
+		if not "type" in data[type_name]:
+			return False;
+		if not "instances" in data:
+			return False;
+		return True;
+	
 	def __init__(self, path):
 		self.path = Path(path);
 		self.directory = self.path.parent;
@@ -38,22 +66,12 @@ class AssetDocument:
 		return M+1;
 	
 	def spawn_entry(self, source=None):
-		new = self.type_helper.abstract_tree.prototype();
+		new = copy.deepcopy(source) if source != None else self.type_helper.abstract_tree.prototype();
 
 		new["name"] = f"new_{self.type_name}";
 		if "id" in new:
 			new["id"] = self.take_free_id();
-		
-		if source != None:
-			for k,v in source.items():
-				new[k] = copy.deepcopy(v);
 
-		self.instances.append(new);
-	
-	def duplicate_entry(self, entry):
-		new = copy.deepcopy(entry);
-		if "id" in new:
-			new["id"] = self.take_free_id();
 		self.instances.append(new);
 	
 	def delete_entry(self, entry):

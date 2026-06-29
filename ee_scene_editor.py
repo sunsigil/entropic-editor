@@ -27,16 +27,13 @@ def get_entity_aabb(entity):
 	if prototype != None:
 		sprite = SpriteBank.search(prototype["sprite"], safe=False);
 		if sprite != None:
-			return [x, y, x+sprite.frame_width, y+sprite.frame_height];
+			dx, dy = prototype["sprite_offset"];
+			return [x+dx, y+dy, x+dx+sprite.frame_width, y+dy+sprite.frame_height];
 	
-		if len(prototype["boxes"]) > 0:
-			x0, y0, x1, y1 = math.inf, math.inf, -math.inf, -math.inf;
-			for box in prototype["boxes"]:
-				x0 = min(x0, box["aabb"][0]);
-				y0 = min(y0, box["aabb"][1]);
-				x1 = max(x1, box["aabb"][2]);
-				y1 = max(y1, box["aabb"][3]);
-			return [x0+x, y0+y, x1+x, y1+y];
+		if prototype["has_blocker"]:
+			return prototype["blocker"];
+		elif prototype["has_trigger"]:
+			return prototype["trigger"];
 
 	return [x, y, x+16, y+16];
 
@@ -57,8 +54,9 @@ class EditMode(Enum):
 	TILEMAP = 1,
 	WALLS = 2,
 	DOORS = 3,
-	TEXTS = 4,
-	PROPERTIES = 4
+	NAVLISTS = 4,
+	TEXTS = 5,
+	PROPERTIES = 6
 
 class TilemapEditor:
 	def __init__(self, parent):
@@ -571,9 +569,8 @@ class DoorEditor:
 					x, y = door.entity["position"];
 
 					prototype = AssetManager.search("prototype", door.entity["prototype"]);
-					box = next((x for x in prototype["boxes"] if x["type"] == "trigger"), None);
-					if box != None:
-						x0, y0, x1, y1 = box["aabb"];
+					if prototype["has_trigger"]:
+						x0, y0, x1, y1 = prototype["trigger"];
 						w, h = x1-x0, y1-y0;
 						x = x + x0 + w/2;
 						y = y + y1;
@@ -601,6 +598,171 @@ class DoorEditor:
 						case 4:
 							y_off += door_gizmo.frame_height/2+arrow_gizmo.frame_height/2;
 					self.parent.canvas.draw_image(x+x_off, y+y_off, arrow_gizmo.frame_images[orientation["value"]], c=(255, 128, 0));
+
+class NavlistEditor:
+	class Navlist:
+		def __init__(self, entity):
+			self.entity = entity;
+			self.asset = AssetManager.search("navlist", get_script_data(entity, "navlist")["value"]);
+		def __eq__(self, value):
+			if not isinstance(value, NavlistEditor.Navlist):
+				return False;
+			return self.entity == value.entity;
+		def get_anchor(self):
+			return get_script_data(self.entity, "anchor")["value"];
+		def set_anchor(self, anchor):
+			get_script_data(self.entity, "anchor")["value"] = anchor;
+		def get_aabb(self):
+			ox, oy = self.get_anchor();
+			x0, y0, x1, y1 = math.inf, math.inf, -math.inf, -math.inf;
+			for node in self.asset["nodes"]:
+				x, y = node["position"];
+				x += ox;
+				y += oy;
+				x0 = min(x0, x);
+				y0 = min(y0, y);
+				x1 = max(x1, x);
+				y1 = max(y1, y);
+			return [x0, y0, x1, y1];
+	
+	class ManipIndex:
+		def __init__(self, navlist, node_idx):
+			self.navlist = navlist;
+			self.node_idx = node_idx;
+		def __eq__(self, value):
+			if not isinstance(value, NavlistEditor.ManipIndex):
+				return False;
+			return self.navlist == value.navlist and self.node_idx == value.node_idx;
+
+	class ManipMode(Enum):
+		MOVE = 0,
+		EDIT = 1
+
+	def __init__(self, parent):
+		self.parent = parent;
+		self.navlists = [];
+		self.event_queue = [];
+		self.canvas_manip = CanvasManipulator(parent.canvas_io, self.event_queue);
+		self.manip_registry = CanvasManipRegistry();
+		self.selection_context = SelectionContext();
+		self.manip_mode = NavlistEditor.ManipMode.MOVE;
+
+	def poll_all_navlists(self):
+		self.navlists = [];
+		for entity in self.parent.scene["entities"]:
+			navlist_data = get_script_data(entity, "navlist");
+			if navlist_data == None:
+				continue;
+			self.navlists.append(NavlistEditor.Navlist(entity));
+	
+	def synchronize_manip(self):
+		objects = [];
+		shapes = [];
+
+		match self.manip_mode:
+			case NavlistEditor.ManipMode.MOVE:
+				for navlist in self.navlists:
+					objects.append(NavlistEditor.ManipIndex(navlist, 0));
+				def make_shape(manip_idx):
+					return CanvasManipRect(manip_idx.navlist.get_aabb());
+				shapes = [make_shape(x) for x in objects];
+			case NavlistEditor.ManipMode.EDIT:
+				for navlist in self.navlists:
+					for idx,node in enumerate(navlist.asset["nodes"]):
+						objects.append(NavlistEditor.ManipIndex(navlist, idx));
+				def make_shape(manip_idx):
+					x0, y0 = manip_idx.navlist.get_anchor();
+					node = manip_idx.navlist.asset["nodes"][manip_idx.node_idx];
+					x, y = node["position"];
+					return CanvasManipPoint([x0+x, y0+y], 8);
+				shapes = [make_shape(x) for x in objects];
+		
+		self.manip_registry.update(objects, shapes);
+		self.canvas_manip.synchronize(self.manip_registry);
+	
+	def logic(self):
+		self.poll_all_navlists();
+		self.synchronize_manip();
+		self.canvas_manip.tick();
+
+		while len(self.event_queue) > 0:
+			event = self.event_queue.pop(0);
+
+			if isinstance(event, CanvasManipClick):
+				if event.eeid == None:
+					self.selection_context.clear();
+				else:
+					idx = self.manip_registry.search(event.eeid);
+					self.selection_context.select(idx, exclusive=True);
+
+			if isinstance(event, CanvasManipDrag):
+				if event.eeid == None:
+					continue;
+				if event.signal == CanvasManipDrag.Signal.TICK:
+					idx = self.manip_registry.search(event.eeid);
+					navlist = idx.navlist;
+					node = navlist.asset["nodes"][idx.node_idx];
+					match self.manip_mode:
+						case NavlistEditor.ManipMode.MOVE:
+							navlist.set_anchor(event.point);
+						case NavlistEditor.ManipMode.EDIT:
+							x0, y0 = navlist.get_anchor();
+							x, y = event.point;
+							node["position"] = self.parent.canvas_grid.snap_point((x-x0, y-y0));
+
+	def draw_gui(self):
+		selection = self.selection_context.get_selection(single=True);
+		if selection != None:
+			navlist = selection.navlist;
+			idx = selection.node_idx;
+			node = navlist.asset["nodes"][idx];
+			imgui.text(f"{navlist.entity["name"]} ({idx})");
+
+			node["position"] = eegui_input_vec2("Position", node["position"]);
+			node["wait_frames"] = eegui_input_int("Wait frames", node["wait_frames"]);
+
+			if imgui.button("Insert after"):
+				insert_idx = idx+1;
+				insert_position = list(node["position"]);
+				if insert_idx < len(navlist.asset["nodes"])-1:
+					next_node = navlist.asset["nodes"][idx+1];
+					delta = np.array(next_node["position"]) - np.array(insert_position);
+					insert_position[0] += delta[0]/2;
+					insert_position[1] += delta[1]/2;
+				navlist.asset["nodes"].insert(insert_idx, {
+					"position": insert_position,
+					"wait_frames": 0
+				});
+
+	def draw_canvas(self):
+		node_colour = (128, 255, 255);
+		edge_colour = node_colour;
+		special_colour = (0, 255, 255);
+
+		selection = self.selection_context.get_selection(single=True);
+		selected_navlist = selection.navlist if selection != None else None;
+
+		for navlist in self.navlists:
+			x0, y0 = navlist.get_anchor();
+			V = navlist.asset["nodes"];
+			N = len(V);
+
+			for i in range(N):
+				a = V[i]["position"];
+				b = V[(i+1)%N]["position"];
+				self.parent.canvas.draw_circle(x0+a[0], y0+a[1], 8, node_colour);
+				if navlist == selected_navlist:
+					if i == 0:
+						self.parent.canvas.draw_circle(x0+a[0], y0+a[1], 12, special_colour);
+					if i == selection.node_idx:
+						self.parent.canvas.draw_circle(x0+a[0], y0+a[1], 12, (255, 255, 255));
+				if i == N-1 and not navlist.asset["loop"]:
+					break;
+				self.parent.canvas.draw_line(x0+a[0], y0+a[1], x0+b[0], y0+b[1], edge_colour);
+				self.parent.canvas.draw_circle(x0+b[0], y0+b[1], 8, node_colour);
+
+		if self.manip_mode == NavlistEditor.ManipMode.MOVE and selected_navlist != None:
+			self.parent.canvas.draw_aabb(selected_navlist.get_aabb(), (255, 255, 255));	
 
 class SceneViewer:
 	def __init__(self, parent):
@@ -662,30 +824,37 @@ class SceneViewer:
 			y_offset = prototype["y_sort_offset"] if prototype != None else 0;
 			return base_y+y_offset;
 		y_sorted = self.parent.scene["entities"];
-		y_sorted = sorted(y_sorted, key=lambda x: x["layer"]);
 		y_sorted = sorted(y_sorted, key=sort_y);
 
 		for entity in y_sorted:
 			prototype = AssetManager.search("prototype", entity["prototype"]);
 			sprite = SpriteBank.search(prototype["sprite"], safe=False) if prototype != None else None;
+
+			x, y = entity["position"];
+			dx, dy = prototype["sprite_offset"];
 			aabb = get_entity_aabb(entity);
 			
 			if sprite != None:
-				x, y = entity["position"];
 				frame_idx = clamp(entity["frame_idx"], 0, sprite.frame_count-1);
-				self.parent.canvas.draw_image(x, y, sprite.frame_images[frame_idx]);
+				self.parent.canvas.draw_image(x+dx, y+dy, sprite.frame_images[frame_idx]);
 			else:
 				self.parent.canvas.draw_aabb(aabb, (255, 255, 0));
 
 			if prototype != None and self.show_boxes:
-				for box in prototype["boxes"]:
-					colour = (255, 0, 0) if box["type"] == "blocker" else (0, 255, 0);
-					x0, y0, x1, y1 = box["aabb"];
+				if prototype["has_blocker"]:
+					colour = (255, 0, 0);
+					x0, y0, x1, y1 = prototype["blocker"];
 					x0, y0, x1, y1 = x0+x, y0+y, x1+x, y1+y;
 					self.parent.canvas.draw_aabb((x0, y0, x1, y1), colour);
+				if prototype["has_trigger"]:
+					colour = (0, 255, 0);
+					x0, y0, x1, y1 = prototype["trigger"];
+					x0, y0, x1, y1 = x0+x, y0+y, x1+x, y1+y;
+					self.parent.canvas.draw_aabb((x0, y0, x1, y1), colour);				
 
 			if self.parent.selection_context.is_selected(entity):
 				self.parent.canvas.draw_aabb(aabb, (255, 255, 255));
+				self.parent.canvas.draw_circle(x, y, 4, (192, 192, 255));
 	
 	def draw_texts(self):
 		for text in self.parent.scene["texts"]:
@@ -713,6 +882,7 @@ class SceneViewer:
 			self.draw_tiles();
 		if self.show_grid:
 			self.parent.canvas_grid.draw_lines((64, 64, 64));
+		self.parent.canvas.draw_guides((128, 128, 128));
 		
 		if self.show_entities:
 			self.draw_entities();
@@ -723,6 +893,7 @@ class SceneViewer:
 
 		if self.show_gizmos:
 			self.parent.door_editor.draw_canvas();
+			self.parent.navlist_editor.draw_canvas();
 
 class SceneEditor:
 	def _load_scene(self, scene):		
@@ -764,8 +935,9 @@ class SceneEditor:
 		self.tilemap_editor = TilemapEditor(self);
 		self.wall_editor = WallEditor(self);
 		self.text_editor = TextEditor(self);
-		self.scene_viewer = SceneViewer(self);
 		self.door_editor = DoorEditor(self);
+		self.navlist_editor = NavlistEditor(self);
+		self.scene_viewer = SceneViewer(self);
 
 		self._load_scene(AssetManager.get_first("scene"));
 	
@@ -925,12 +1097,11 @@ class SceneEditor:
 					entity["name"] = entity["prototype"];
 
 				entity["frame_idx"] = eegui_input_int("Frame", entity["frame_idx"], EEGUIIntStyle.SLIDER, 0, sprite.frame_count-1);
-				entity["layer"] = eegui_input_int("Layer", entity["layer"], 0, 255);
 				
 				if imgui.tree_node("Script data"):
 					for data in entity["script_data"]:
 						if imgui.tree_node(f"{data["key"]}####{id(data)}"):
-							data_type = ee_types.TypeRegistry.get(data["type"]);
+							data_type = ee_types.construct_type(data["type"]);
 							data["value"] = eegui_typed_input(data["key"], data_type, data["value"]);
 							imgui.tree_pop();
 					imgui.tree_pop();
@@ -946,17 +1117,18 @@ class SceneEditor:
 		self.scene["free_camera"] = eegui_input_bool("Free camera", self.scene["free_camera"]);
 	
 	def scene_context_menu(self):
-		selection = self.selection_context.get_selection(single=True);
-		hovered = selection != None and aabb_contains_point(self.canvas_io.get_cursor(), get_entity_aabb(selection));
-		if hovered:
-			if imgui.menu_item_simple("Delete"):
-				self.trash.trash_item(self.scene["entities"], selection);
-		
-		if imgui.menu_item_simple("Spawn"):
-			entity = AssetManager.get_document("scene").type_helper.search("entities").T.get_inmost_type().prototype();
-			entity["name"] = "New entity";
-			entity["position"] = self.canvas_io.get_cursor();
-			self.scene["entities"].append(entity);
+		if self.edit_mode == EditMode.ENTITIES:
+			selection = self.selection_context.get_selection(single=True);
+			hovered = selection != None and aabb_contains_point(self.canvas_io.get_cursor(), get_entity_aabb(selection));
+			if hovered:
+				if imgui.menu_item_simple("Delete"):
+					self.trash.trash_item(self.scene["entities"], selection);
+			
+			if imgui.menu_item_simple("Spawn"):
+				entity = AssetManager.get_document("scene").type_helper.search("entities").T.get_inmost_type().prototype();
+				entity["name"] = "New entity";
+				entity["position"] = self.canvas_io.get_cursor();
+				self.scene["entities"].append(entity);
 
 	def draw(self):
 		self.draw_menu_bar();
@@ -1008,6 +1180,10 @@ class SceneEditor:
 			self.door_editor.logic();
 			self.door_editor.draw_gui();
 		
+		def navlists_tick():
+			self.navlist_editor.logic();
+			self.navlist_editor.draw_gui();
+		
 		def texts_tick():
 			self.text_editor.tick();
 			self.text_editor.draw_gui();
@@ -1024,6 +1200,8 @@ class SceneEditor:
 				run_left_panel(walls_tick);
 			case EditMode.DOORS:
 				run_left_panel(doors_tick);
+			case EditMode.NAVLISTS:
+				run_left_panel(navlists_tick);
 			case EditMode.TEXTS:
 				run_left_panel(texts_tick);
 			case EditMode.PROPERTIES:
