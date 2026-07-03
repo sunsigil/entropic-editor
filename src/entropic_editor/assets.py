@@ -3,17 +3,6 @@ import json;
 import asset_types;
 import copy;
 
-def load_typefile(path):
-	file = open(path, "r");
-	data = json.load(file);
-	file.close();
-
-	for name,expr in data.items():
-		T = asset_types.construct_type(expr["type"]);
-		asset_types.TypeRegistry.register(name, T);
-
-	print("[Typefile] Loaded asset_types from", path);
-
 #########################################################
 ## DOCUMENT MODEL
 
@@ -44,11 +33,12 @@ class AssetDocument:
 		
 		keys = self.data.keys();
 		self.type_name = next(k for k in keys if k != "instances");
-		self.type_helper = asset_types.TypeHelper(self.type_name, self.data[self.type_name]);
+		self.type_tree = asset_types.construct_element(self.type_name, self.data[self.type_name]);
+		self.type_helper = asset_types.TypeHelper(self.type_tree);
 		self.instances = self.data["instances"];
 	
 		self.id_set = set();
-		if self.type_helper.search("id") != None:
+		if self.type_tree.search("id") != None:
 			for entry in self.instances:
 				self.id_set.add(entry["id"]);
 	
@@ -66,13 +56,14 @@ class AssetDocument:
 		return M+1;
 	
 	def spawn_entry(self, source=None):
-		new = copy.deepcopy(source) if source != None else self.type_helper.abstract_tree.prototype();
+		new = copy.deepcopy(source) if source != None else self.type_tree.prototype();
 
 		new["name"] = f"new_{self.type_name}";
 		if "id" in new:
 			new["id"] = self.take_free_id();
 
 		self.instances.append(new);
+		return new;
 	
 	def delete_entry(self, entry):
 		if "id" in entry:
@@ -92,23 +83,33 @@ class AssetDocument:
 			file.close();
 
 class AssetManager:
-	directories = [];
+	document_map = {};
 	documents = [];
 
 	def load_document(path):
 		try:
 			document = AssetDocument(path);
 			AssetManager.documents.append(document);
+			AssetManager.document_map[document.type_name] = document;
 			print(f"[AssetManager] Loaded {path}");
 		except Exception as e:
 			print(f"[AssetManager] Failed to load {path}!\n\t({e})");
 			raise(e);			
 
 	def get_document(asset_type) -> AssetDocument:
-		return next((x for x in AssetManager.documents if x.type_name == asset_type), None);
+		if asset_type not in AssetManager.document_map:
+			return None;
+		return AssetManager.document_map[asset_type];
+
+	def get_tree(asset_type) -> asset_types.Element:
+		if asset_type not in AssetManager.document_map:
+			return None;
+		return AssetManager.document_map[asset_type].type_tree;
 
 	def get_all(asset_type):
-		return next((x.instances for x in AssetManager.documents if x.type_name == asset_type), None);
+		if asset_type not in AssetManager.document_map:
+			return None;
+		return AssetManager.document_map[asset_type].instances;
 
 	def get_first(asset_type):
 		assets = AssetManager.get_all(asset_type);

@@ -38,12 +38,12 @@ class DocumentEditor:
 		working_list = DocumentEditor.search_cache if len(DocumentEditor.search_cache) > 0 else DocumentEditor.active_document.instances;
 		for instance in working_list:
 			gui_id = f"{instance["name"]}####{id(instance)}" if "name" in instance else id(instance);
-			eegui_typed_input(
+			typed_input(
 				gui_id,
-				DocumentEditor.active_document.type_helper.abstract_tree.T, instance,
+				DocumentEditor.active_document.type_tree.T, instance,
 				previews=True, tooltip=DocumentEditor.show_typetip
 			);
-			if EEGUIContextMenu.begin(gui_id):
+			if ContextMenu.begin(gui_id):
 				if imgui.menu_item_simple("Delete"):
 					DocumentEditor.active_document.delete_entry(instance);
 				imgui.end_popup();

@@ -85,7 +85,7 @@ class Canvas:
 		glBindTexture(GL_TEXTURE_2D, self.texture);
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, self.width, self.height, GL_RGBA, GL_UNSIGNED_BYTE, self.image.tobytes());
 		imgui.image(imgui.ImTextureRef(self.texture), imgui.ImVec2(self.width * self.scale, self.height * self.scale));
-		EEGUIContextMenu.ping(gui_id);
+		ContextMenu.ping(gui_id);
 		self.has_mouse = imgui.is_item_hovered();
 
 class CanvasIO:
@@ -179,65 +179,83 @@ class CanvasGrid:
 class CanvasManipRect:
 	def __init__(self, aabb):
 		x0, y0, x1, y1 = aabb;
-		self.aabb = x0, y0, x1, y1;
+		self.geometry = x0, y0, x1, y1;
 
 	def distance(self, point):
-		return aabb_point_sdf(self.aabb, point);
+		return aabb_point_sdf(self.geometry, point);
 
 	def delta(self, point):
-		return self.aabb[0] - point[0], self.aabb[1] - point[1];
+		return self.geometry[0] - point[0], self.geometry[1] - point[1];
 
 	def update(self, aabb):
 		x0, y0, x1, y1 = aabb;
-		self.aabb = x0, y0, x1, y1;
+		self.geometry = x0, y0, x1, y1;
+
+	def is_inside(self, point):
+		return self.distance(point) <= -2;
 
 class CanvasManipSegment:
 	def __init__(self, segment, radius=4):
-		self.segment = segment;
+		self.geometry = segment;
 		self.radius = radius;
 
 	def distance(self, point):
-		return segment_point_sdf(self.segment, point)-self.radius;
+		return segment_point_sdf(self.geometry, point)-self.radius;
 
 	def delta(self, point):
-		return self.segment[0][0] - point[0], self.segment[0][1] - point[1];
+		return self.geometry[0][0] - point[0], self.geometry[0][1] - point[1];
 
 	def update(self, segment):
-		self.segment = segment;
+		self.geometry = segment;
 
+	def is_inside(self, point):
+		if self.distance(point) >= self.radius:
+			return False;
+		da = point_point_dist(point, self.geometry[0]);
+		db = point_point_dist(point, self.geometry[1]);
+		l = point_point_dist(self.geometry[0], self.geometry[1]);
+		return da >= l * 0.25 and db >= l * 0.25;
+	
 class CanvasManipPoint:
 	def __init__(self, point, radius=4):
-		self.point = point;
+		self.geometry = point;
 		self.radius = radius;
 
 	def distance(self, point):
-		return point_point_dist(self.point, point)-self.radius;
+		return point_point_dist(self.geometry, point)-self.radius;
 
 	def delta(self, point):
-		return self.point[0] - point[0], self.point[1] - point[1];
+		return self.geometry[0] - point[0], self.geometry[1] - point[1];
 
 	def update(self, point):
+		self.geometry = point;
+
+	def is_inside(self, point):
+		return point_point_dist(self.geometry, point) < self.radius*0.5;
+
+class CanvasManipEvent:
+	def __init__(self, eeid, start, point, geometry=None, delta=None, distance=None, inside=None):
+		self.eeid = eeid;
+		self.start = start;
 		self.point = point;
 
-class CanvasManipClick:
-	def __init__(self, eeid, point, delta=None, distance=None):
-		self.eeid = eeid;
-		self.point = point;
+		self.geometry = geometry;
 		self.delta = delta;
 		self.distance = distance;
+		self.inside = inside;
 
-class CanvasManipDrag:
+class CanvasManipClick(CanvasManipEvent):
+	def __init__(self, eeid, point, geometry=None, delta=None, distance=None, inside=None):
+		super().__init__(eeid, point, point, geometry, delta, distance, inside);
+
+class CanvasManipDrag(CanvasManipEvent):
 	class Signal(Enum):
 		START = 0,
 		TICK = 1,
 		END = 2
-	def __init__(self, signal, eeid, start, point, delta=None, distance=None):
-		self.eeid = eeid;
+	def __init__(self, signal, eeid, start, point, geometry=None, delta=None, distance=None, inside=None):
 		self.signal = signal;
-		self.start = start;
-		self.point = point;
-		self.delta = delta;
-		self.distance = distance;
+		super().__init__(eeid, start, point, geometry, delta, distance, inside);
 
 class CanvasManipRecord:
 	def __init__(self, object, shape, eeid):
@@ -282,15 +300,12 @@ class CanvasManipulator:
 	def __init__(self, canvas_io, event_queue):
 		self.canvas_io = canvas_io;
 		self.event_queue = event_queue;
+		self.event_log = [];
 
 		self.eeid = iter(EEID());
 		self.shapes = {};
 
-		self.clicked_point = None;
-		self.clicked_eeid = None;
-		self.clicked_delta = None;
-		self.clicked_distance = None;
-
+		self.event = None;
 		self.dragging = False;
 
 	def _spatial_search(self, point):
@@ -306,8 +321,7 @@ class CanvasManipulator:
 	def clear(self):
 		self.eeid = iter(EEID());
 		self.shapes = {};
-		
-		self.clicked_point = None;
+		self.event = None;
 	
 	def synchronize(self, registry: CanvasManipRegistry):
 		canon_eeids = set();
@@ -327,8 +341,9 @@ class CanvasManipulator:
 		return None;
 
 	def tick(self):
-		cursor = self.canvas_io.get_bounded_cursor();
+		self.event_log.clear();
 
+		cursor = self.canvas_io.get_bounded_cursor();
 		cancel = (
 			InputManager.is_released(glfw.MOUSE_BUTTON_LEFT) or
 			not self.canvas_io.is_cursor_in_bounds()
@@ -336,31 +351,76 @@ class CanvasManipulator:
 
 		if cancel:
 			if self.dragging:
-				self.event_queue.append(CanvasManipDrag(CanvasManipDrag.Signal.END, self.clicked_eeid, self.clicked_point, self.canvas_io.get_bounded_cursor()));
-			self.dragging = False;
+				self.event_queue.append(CanvasManipDrag(
+					CanvasManipDrag.Signal.END, self.event.eeid,
+					self.event.start, cursor
+				));
+				self.event_log.append(self.event_queue[-1]);
 			
-			self.clicked_point = None;
+			self.event = None;
+			self.dragging = False;
 		
 		else:
 			if InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
-				self.clicked_point = cursor;
-				self.clicked_eeid = self._spatial_search(cursor);
-				if self.clicked_eeid == None:
-					self.event_queue.append(CanvasManipClick(self.clicked_eeid, self.clicked_point));
+				self.event = CanvasManipEvent(self._spatial_search(cursor), cursor, cursor);
+				if self.event.eeid == None:
+					self.event_queue.append(CanvasManipClick(None, self.event.point));
+					self.event_log.append(self.event_queue[-1]);
 					return;
-				shape = self.shapes[self.clicked_eeid];
-				self.clicked_delta = shape.delta(cursor);
-				self.clicked_distance = shape.distance(cursor);
-				self.event_queue.append(CanvasManipClick(self.clicked_eeid, self.clicked_point, self.clicked_delta, self.clicked_distance));
+			
+				shape = self.shapes[self.event.eeid];
+				self.event.geometry = shape.geometry;
+				self.event.delta = shape.delta(cursor);
+				self.event.distance = shape.distance(cursor);
+				self.event.inside = shape.is_inside(cursor);
+
+				self.event_queue.append(CanvasManipClick(
+					self.event.eeid,
+					self.event.point,
+					self.event.geometry,
+					self.event.delta,
+					self.event.distance,
+					self.event.inside
+				));
+				self.event_log.append(self.event_queue[-1]);
 		
-			if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT) and self.clicked_point != None:
+			if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT) and self.event != None:
+				drag = CanvasManipDrag(
+					None,
+					self.event.eeid,
+					self.event.point,
+					cursor,
+					self.event.geometry,
+					self.event.delta,
+					self.event.distance,
+					self.event.inside,
+				);
+
 				if not self.dragging:
-					movement = point_point_dist(cursor, self.clicked_point);
+					movement = point_point_dist(cursor, self.event.point);
 					if movement >= 2:
-						self.event_queue.append(CanvasManipDrag(CanvasManipDrag.Signal.START, self.clicked_eeid, self.clicked_point, cursor, self.clicked_delta, self.clicked_distance));
+						drag.signal = CanvasManipDrag.Signal.START;
+						self.event_queue.append(drag);
+						self.event_log.append(self.event_queue[-1]);
 						self.dragging = True;
 				else:
-					self.event_queue.append(CanvasManipDrag(CanvasManipDrag.Signal.TICK, self.clicked_eeid, self.clicked_point, cursor, self.clicked_delta, self.clicked_distance));
+					drag.signal = CanvasManipDrag.Signal.TICK;
+					self.event_queue.append(drag);
+					self.event_log.append(self.event_queue[-1]);
+
+	def draw(self, canvas: Canvas, colour):
+		for event in self.event_log:
+			if isinstance(event, CanvasManipClick):
+				x, y = event.point;
+				canvas.draw_circle(x, y, 4, colour);
+			if isinstance(event, CanvasManipDrag):
+				x0, y0 = event.start;
+				x, y = event.point;
+				canvas.draw_circle(x0, y0, 2, colour);
+				canvas.draw_circle(x, y, 4, colour);
+				canvas.draw_line(x0, y0, x, y, colour);
+				
+
 					
 		
 		

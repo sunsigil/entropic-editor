@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
-
 import abc;
 import re;
 import glob;
 import pathlib;
+import json
 
 class Type(abc.ABC):
 	@abc.abstractmethod
@@ -144,6 +143,12 @@ class Asset(Type):
 class List(Type):
 	def __init__(self, T):
 		self.T = T;
+		
+		T = self.T;
+		while isinstance(T, List):
+			T = T.T;
+		self.inmost = T;
+
 	def __repr__(self):
 		return f"List({self.T})";
 
@@ -163,12 +168,6 @@ class List(Type):
 
 	def rectify(self, value):
 		return [self.T.rectify(x) for x in value];
-
-	def get_inmost_type(self):
-		T = self.T;
-		while isinstance(T, List):
-			T = T.T;
-		return T;
 
 class Object(Type):
 	def __init__(self, elements):
@@ -221,6 +220,21 @@ class Object(Type):
 
 		return value;
 
+	def search(self, path):
+		if isinstance(path, str):
+			path = pathlib.PurePosixPath(path);
+		if isinstance(path, pathlib.PurePosixPath):
+			path = [x for x in list(path.parts) if x != "."];
+		if len(path) == 0:
+			return self;
+	
+		part = path.pop(0);
+		for child in self.elements:
+			if child.name == part:
+				return child.search(path);
+
+		return None;
+
 class TypeRegistry:
 	entries = {};
 
@@ -228,12 +242,23 @@ class TypeRegistry:
 		TypeRegistry.entries.clear();
 
 	def register(key, value):
-		TypeRegistry.entries[key] = value;
+		TypeRegistry.entries[key] = value;	
 
 	def search(key):
 		if key in TypeRegistry.entries:
 			return TypeRegistry.entries[key];
-		return None;
+		return None;	
+
+def load_typefile(path):
+	file = open(path, "r");
+	data = json.load(file);
+	file.close();
+
+	for name,expr in data.items():
+		T = construct_type(expr["type"]);
+		TypeRegistry.register(name, T);
+
+	print("[Typefile] Loaded asset_types from", path);
 
 class Element:
 	def __init__(self, name, T, attributes = [], conditions = []):
@@ -268,19 +293,10 @@ class Element:
 		return self.T.validate(value);
 
 	def search(self, path):
-		if isinstance(path, str):
-			path = pathlib.PurePosixPath(path);
-		if isinstance(path, pathlib.PurePosixPath):
-			path = [x for x in list(path.parts) if x != "."];
 		if len(path) == 0:
 			return self;
-		
-		part = path.pop(0);
 		if isinstance(self.T, Object):
-			for child in self.T.elements:
-				if child.name == part:
-					return child.search(path);
-		
+			return self.T.search(path);
 		return None;
 
 def construct_type(expr) -> Type:
@@ -406,11 +422,11 @@ class TNode:
 		return None;
 
 class TypeHelper:
-	def __init__(self, name, expr):
-		self.abstract_tree = construct_element(name, expr);
+	def __init__(self, element):
+		self.root = element;
 	
 	def search(self, path):
-		return self.abstract_tree.search(path);
+		return self.root.search(path);
 
 	def _evaluate_conditions(self, tnode) -> bool:
 		conditions = tnode.enode.conditions;
@@ -455,9 +471,9 @@ class TypeHelper:
 		# Sparingly correcting primitives and lists of primitives
 		# Be really careful trying to do this to more complex types
 		if isinstance(tnode.enode.T, Primitive) or (
-			isinstance(tnode.enode.T, List) and isinstance(tnode.enode.T.get_inmost_type(), Primitive)
+			isinstance(tnode.enode.T, List) and isinstance(tnode.enode.T.inmost, Primitive)
 		):
 			tnode.inode = tnode.enode.T.rectify(tnode.inode);
 
 	def rectify(self, instance):
-		self._rectify(TNode(None, self.abstract_tree, instance));
+		self._rectify(TNode(None, self.root, instance));

@@ -4,50 +4,50 @@ from OpenGL.GL import *;
 from imgui_bundle import imgui;
 from enum import Enum;
 
-import context as context;
+import context;
 from assets import AssetManager;
 from tool_window import ToolWindowRegistry;
 from file_explorer import FileExplorer;
 from asset_explorer import AssetExplorer;
-import types as types;
-import sprites as sprites;
+import sprites;
+import asset_types;
 
 # Not Even Input
 
-class EEGUITooltip:
+class Tooltip:
 	tooltip = None;
 
 	def ping():
-		if EEGUITooltip.tooltip == None:
+		if Tooltip.tooltip == None:
 			return;
 		if imgui.is_item_hovered():
-			imgui.set_tooltip(str(EEGUITooltip.tooltip));
-		EEGUITooltip.tooltip = None;
+			imgui.set_tooltip(str(Tooltip.tooltip));
+		Tooltip.tooltip = None;
 
-class EEGUIContextMenu:
+class ContextMenu:
 	gui_id = None;
 
 	def _make_id(gui_id):
 		return f"##context-menu-{gui_id}";
 
 	def ping(gui_id):
-		window_id = EEGUIContextMenu._make_id(gui_id);
+		window_id = ContextMenu._make_id(gui_id);
 		if imgui.is_popup_open(window_id):
 			return;
 	
 		if imgui.begin_popup_context_item(window_id):
 			imgui.open_popup(window_id);
-			EEGUIContextMenu.gui_id = gui_id;
+			ContextMenu.gui_id = gui_id;
 			imgui.end_popup();
 
 	def begin(gui_id):
-		if EEGUIContextMenu.gui_id == None or EEGUIContextMenu.gui_id != gui_id:
+		if ContextMenu.gui_id != gui_id:
 			return;
-		return imgui.begin_popup(EEGUIContextMenu._make_id(gui_id));
-
+		return imgui.begin_popup(ContextMenu._make_id(gui_id));
+	
 # Even More Primitive
 
-def eegui_combo(gui_id, value, values, fmt=lambda x: x):
+def combo(gui_id, value, values, fmt=lambda x: x):
 	if imgui.begin_combo(str(gui_id), str(fmt(value))):
 		for candidate in values:
 			selected = candidate == value;
@@ -56,8 +56,8 @@ def eegui_combo(gui_id, value, values, fmt=lambda x: x):
 			if selected:
 				imgui.set_item_default_focus();
 		imgui.end_combo();
-	EEGUITooltip.ping();
-	EEGUIContextMenu.ping(gui_id);
+	Tooltip.ping();
+	ContextMenu.ping(gui_id);
 	return value;
 
 # Primitives
@@ -66,7 +66,7 @@ class EEGUIIntStyle(Enum):
 	DEFAULT = 0
 	SLIDER = 1
 
-def eegui_input_int(gui_id, value, style=EEGUIIntStyle.DEFAULT, low_bound=None, high_bound=None):
+def input_int(gui_id, value, style=EEGUIIntStyle.DEFAULT, low_bound=None, high_bound=None):
 	match style:
 		case EEGUIIntStyle.DEFAULT:
 			_, value = imgui.input_int(str(gui_id), int(value));
@@ -76,42 +76,42 @@ def eegui_input_int(gui_id, value, style=EEGUIIntStyle.DEFAULT, low_bound=None, 
 				value = min(value, high_bound);
 		case EEGUIIntStyle.SLIDER:
 			_, value = imgui.slider_int(str(gui_id), value, low_bound, high_bound);
-	EEGUITooltip.ping();
-	EEGUIContextMenu.ping(gui_id);
+	Tooltip.ping();
+	ContextMenu.ping(gui_id);
 	return value;
 
-def eegui_input_float(gui_id, value):
+def input_float(gui_id, value):
 	_, value = imgui.input_float(str(gui_id), value);
-	EEGUITooltip.ping();
-	EEGUIContextMenu.ping(gui_id);
+	Tooltip.ping();
+	ContextMenu.ping(gui_id);
 	return value;
 
-def eegui_input_bool(gui_id, value):
+def input_bool(gui_id, value):
 	_, value = imgui.checkbox(str(gui_id), bool(value));
-	EEGUITooltip.ping();
-	EEGUIContextMenu.ping(gui_id);
+	Tooltip.ping();
+	ContextMenu.ping(gui_id);
 	return value;
 
-def eegui_input_string(gui_id, value):
+def input_string(gui_id, value):
 	_, value = imgui.input_text(str(gui_id), str(value));
-	EEGUITooltip.ping();
-	EEGUIContextMenu.ping(gui_id);
+	Tooltip.ping();
+	ContextMenu.ping(gui_id);
 	return value;
 
-def eegui_input_colour(gui_id, value):
+def input_colour(gui_id, value):
 	r, g, b = value;
 	_, (r, g, b) = imgui.color_edit3(str(gui_id), (r/255, g/255, b/255));
-	EEGUITooltip.ping();
-	EEGUIContextMenu.ping(gui_id);
+	Tooltip.ping();
+	ContextMenu.ping(gui_id);
 	return int(r*255), int(g*255), int(b*255);
 
-def eegui_input_any(gui_id, value):
-	value = eegui_input_string(gui_id, value);
+def input_any(gui_id, value):
+	value = input_string(gui_id, value);
 	return value;
 
-def eegui_input_vec2(gui_id, value):
+def input_vec2(gui_id, value):
 	_, value = imgui.input_int2(gui_id, [int(value[0]), int(value[1])]);
-	EEGUIContextMenu.ping(gui_id);
+	ContextMenu.ping(gui_id);
 	return value;
 
 # Enums
@@ -120,7 +120,7 @@ class EEGUIEnumStyle(Enum):
 	COMBO = 0
 	RADIO_BUTTONS = 1
 
-def eegui_input_enum(gui_id, value, values, style=EEGUIEnumStyle.COMBO):
+def input_enum(gui_id, value, values, style=EEGUIEnumStyle.COMBO):
 	enum_class = values if isinstance(values, type) and issubclass(values, Enum) else None;
 	if enum_class != None:
 		value = value.name;
@@ -128,7 +128,7 @@ def eegui_input_enum(gui_id, value, values, style=EEGUIEnumStyle.COMBO):
 	
 	match style:
 		case EEGUIEnumStyle.COMBO:
-			value = eegui_combo(gui_id, value, values);
+			value = combo(gui_id, value, values);
 		case EEGUIEnumStyle.RADIO_BUTTONS:
 			selected_idx = values.index(value) if value in values else -1;
 			for idx,v in enumerate(values):
@@ -143,19 +143,19 @@ def eegui_input_enum(gui_id, value, values, style=EEGUIEnumStyle.COMBO):
 
 # Flags
 
-def eegui_input_flags(gui_id, value, values):
+def input_flags(gui_id, value, values):
 	for candidate in values:
 		_, included = imgui.checkbox(candidate, candidate in value);
 		if included and not candidate in value:
 			value.append(candidate);
 		elif not included and candidate in value:
 			value.remove(candidate);
-	EEGUITooltip.ping();
-	EEGUIContextMenu.ping(gui_id);
+	Tooltip.ping();
+	ContextMenu.ping(gui_id);
 	return value;
 
-def eegui_input_file(gui_id, value, pattern, directory=None, asset_type=None):
-	value = eegui_input_string(gui_id, value);
+def input_file(gui_id, value, pattern, directory=None, asset_type=None):
+	value = input_string(gui_id, value);
 
 	imgui.same_line();
 	imgui.push_id(gui_id);
@@ -181,8 +181,8 @@ def eegui_input_file(gui_id, value, pattern, directory=None, asset_type=None):
 
 # Special Data
 
-def eegui_input_asset(gui_id, value, asset_type):
-	value = eegui_input_string(gui_id, value);
+def input_asset(gui_id, value, asset_type):
+	value = input_string(gui_id, value);
 
 	imgui.same_line();
 	imgui.push_id(gui_id);
@@ -203,28 +203,28 @@ def eegui_input_asset(gui_id, value, asset_type):
 
 # Structured Data
 
-def eegui_typed_input(gui_id, T, value, previews=False, tooltip=False):
+def typed_input(gui_id, T, value, previews=False, tooltip=False):
 	gui_id = str(gui_id);
 
 	if tooltip:
-		EEGUITooltip.tooltip = T;
+		Tooltip.tooltip = T;
 
-	if isinstance(T, types.Object):
+	if isinstance(T, asset_types.Object):
 		node_open = imgui.tree_node(gui_id);
-		EEGUITooltip.ping();
-		EEGUIContextMenu.ping(gui_id);
+		Tooltip.ping();
+		ContextMenu.ping(gui_id);
 
 		if node_open:
 			for element in T.elements:
 				if element.name in value:
-					value[element.name] = eegui_typed_input(element.name, element.T, value[element.name], previews, tooltip);
+					value[element.name] = typed_input(element.name, element.T, value[element.name], previews, tooltip);
 			imgui.tree_pop();
 
-	if isinstance(T, types.List):
+	if isinstance(T, asset_types.List):
 		node_open = imgui.tree_node(gui_id);
-		EEGUITooltip.ping();
-		EEGUIContextMenu.ping(gui_id);
-		if EEGUIContextMenu.begin(gui_id):
+		Tooltip.ping();
+		ContextMenu.ping(gui_id);
+		if ContextMenu.begin(gui_id):
 			if imgui.menu_item_simple("Add"):
 				value.append(T.T.prototype());
 			imgui.end_popup();
@@ -234,8 +234,8 @@ def eegui_typed_input(gui_id, T, value, previews=False, tooltip=False):
 
 			N = len(value);
 			for i in range(N):
-				value[i] = eegui_typed_input(f"[{i}]", T.T, value[i]);
-				if EEGUIContextMenu.begin(f"[{i}]"):
+				value[i] = typed_input(f"[{i}]", T.T, value[i]);
+				if ContextMenu.begin(f"[{i}]"):
 					if imgui.menu_item_simple("Delete"):
 						trash.append(i);
 					imgui.end_popup();
@@ -246,45 +246,45 @@ def eegui_typed_input(gui_id, T, value, previews=False, tooltip=False):
 
 			imgui.tree_pop();
 	
-	if isinstance(T, types.Asset):
+	if isinstance(T, asset_types.Asset):
 		if previews:
 			match T.name:
 				case "sprite":
 					sprites.SpritePreview.draw(value);
-		value = eegui_input_asset(gui_id, value, T.name);
+		value = input_asset(gui_id, value, T.name);
 	
-	if isinstance(T, types.File):
+	if isinstance(T, asset_types.File):
 		directory = None;
 		if T.pattern == "*.png":
 			if previews:
 				sprites.SpritePreview.draw(value);
 			directory = context.get().directory/"assets/sprites";
-		value = eegui_input_file(gui_id, value, T.pattern, directory=directory);
+		value = input_file(gui_id, value, T.pattern, directory=directory);
 	
-	if isinstance(T, types.Flags):
-		value = eegui_input_flags(gui_id, value, T.values);
-	if isinstance(T, types.Enum):
-		value = eegui_input_enum(gui_id, value, T.values);
-	if isinstance(T, types.Any):
-		value = eegui_input_any(gui_id, value);
-	if isinstance(T, types.Vec2):
-		value = eegui_input_vec2(gui_id, value);
-	if isinstance(T, types.Colour):
-		value = eegui_input_colour(gui_id, value);
-	if isinstance(T, types.String):
-		value = eegui_input_string(gui_id, value);
-	if isinstance(T, types.Bool):
-		value = eegui_input_bool(gui_id, value);
-	if isinstance(T, types.Float):
-		value = eegui_input_float(gui_id, value);
-	if isinstance(T, types.Int):
-		value = eegui_input_int(gui_id, value);
+	if isinstance(T, asset_types.Flags):
+		value = input_flags(gui_id, value, T.values);
+	if isinstance(T, asset_types.Enum):
+		value = input_enum(gui_id, value, T.values);
+	if isinstance(T, asset_types.Any):
+		value = input_any(gui_id, value);
+	if isinstance(T, asset_types.Vec2):
+		value = input_vec2(gui_id, value);
+	if isinstance(T, asset_types.Colour):
+		value = input_colour(gui_id, value);
+	if isinstance(T, asset_types.String):
+		value = input_string(gui_id, value);
+	if isinstance(T, asset_types.Bool):
+		value = input_bool(gui_id, value);
+	if isinstance(T, asset_types.Float):
+		value = input_float(gui_id, value);
+	if isinstance(T, asset_types.Int):
+		value = input_int(gui_id, value);
 
 	return value;
 
 # External to the type system
 
-def eegui_input_aabb(gui_id, value, mode="xyxy"):
+def input_aabb(gui_id, value, mode="xyxy"):
 	imgui.begin_group();
 	match mode:
 		case "xyxy":
@@ -297,10 +297,10 @@ def eegui_input_aabb(gui_id, value, mode="xyxy"):
 			w, h = imgui.input_int2(f"W H##{gui_id}", [int(w), int(h)])[1];
 			value = [x0, y0, x0+w, x0+h];
 	imgui.end_group();
-	EEGUIContextMenu.ping(gui_id);
+	ContextMenu.ping(gui_id);
 	return value;
 
-def eegui_input_orientation(gui_id, value):
+def input_orientation(gui_id, value):
 	arrow = sprites.SpriteBank.search("editor_arrow");
 	orientations = [
 		-1, 2, -1,
@@ -334,7 +334,7 @@ def eegui_input_orientation(gui_id, value):
 
 # Layout
 
-def eegui_begin_column(imgui_id, w=None):
+def begin_column(imgui_id, w=None):
 	w = imgui.get_content_region_avail().x if w == None else w;
 	h = imgui.get_content_region_avail().y;
 	imgui.begin_child(
@@ -342,7 +342,7 @@ def eegui_begin_column(imgui_id, w=None):
 		imgui.ImVec2(w, h),
 		0, 0
 	);
-def eegui_end_column():
+def end_column():
 	imgui.end_child();
 	imgui.same_line();
 	

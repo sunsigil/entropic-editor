@@ -15,11 +15,11 @@ from cowtools import *;
 from assets import *;
 from tool_window import ToolWindow, ToolWindowRegistry;
 
-from scene_editor import SceneEditor;
+from scenes.scene_editor import SceneEditor;
 from sprites import SpriteBank;
 from input import InputManager;
-from prototype_editor import PrototypeEditor;
-from dialogue_editor import DialogueGraph, DialogueEditor;
+from scenes.prototype_editor import PrototypeEditor;
+from dialogue_editor import DialogueEditor;
 from recipe_editor import RecipeEditor;
 from coder import EnDeCoder;
 from file_explorer import FileExplorer;
@@ -28,6 +28,7 @@ from document_editor import DocumentEditor;
 from palette_viewer import PaletteViewer;
 from asset_explorer import AssetExplorer;
 from glyph_viewer import GlyphExplorer;
+import asset_types;
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(
@@ -46,7 +47,7 @@ if __name__ == "__main__":
 	InputManager.initialize(context.get().glfw_handle, context.get().imgui_impl);
 
 	if typefile_path != None and typefile_path.is_file():
-		load_typefile(typefile_path);
+		asset_types.load_typefile(typefile_path);
 
 	for path in (game_path/"assets").rglob("*.json"):
 		if AssetDocument.is_file_asset_document(path):
@@ -64,7 +65,7 @@ if __name__ == "__main__":
 	];
 	window_flags = foldl(lambda a, b : a | b, 0, window_flag_list);
 
-	splash_img = Image.open(editor_path/"splash.png");
+	splash_img = Image.open(editor_path/"resources/splash.png");
 	splash_tex = make_texture(splash_img.tobytes(), splash_img.width, splash_img.height);
 	splash_flag_list = [
 		imgui.WindowFlags_.no_scrollbar,
@@ -82,8 +83,7 @@ if __name__ == "__main__":
 
 	ToolWindowRegistry.register(ToolWindow(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolWindowRegistry.register(ToolWindow(SceneEditor, "Scene Editor", size=(1500, 880), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
-	ToolWindowRegistry.register(ToolWindow(DialogueEditor, "Dialogue Editor", size=(1000, 600), flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(DialogueGraph, "Dialogue Graph", size=(1280, 720), flags=tool_flags));
+	ToolWindowRegistry.register(ToolWindow(DialogueEditor, "Dialogue Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolWindowRegistry.register(ToolWindow(RecipeEditor, "Recipe Editor", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(Mesh2DEditor, "Mesh2D Editor", flags=tool_flags));
 	ToolWindowRegistry.register(ToolWindow(PaletteViewer, "Palette Viewer", flags=tool_flags));
