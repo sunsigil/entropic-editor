@@ -9,7 +9,6 @@ class FileExplorer:
 	last = None;
 
 	def __init__(self):
-		self.target = None;
 		self.anchor = None;
 		self.glob = None;
 		self.current = None;
@@ -20,10 +19,9 @@ class FileExplorer:
 	
 		self.result = None;
 	
-	def configure(self, target, anchor, glob, asset_type=None):
+	def configure(self, anchor, glob, asset_type=None):
 		refresh = FileExplorer.last == None or anchor != FileExplorer.last.anchor;
 
-		self.target = target;
 		self.anchor = Path(anchor);
 		self.glob = glob;
 		self.asset_type = asset_type;
@@ -74,9 +72,6 @@ class FileExplorer:
 					self.search = "";
 				else:
 					self.result = Path(os.path.relpath(item.absolute(), self.anchor.absolute()));
-	
-	def is_targeting(self, target):
-		return target == self.target;
 
 	def should_close(self):
 		return self.result != None;

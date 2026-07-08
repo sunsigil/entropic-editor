@@ -5,14 +5,23 @@ from imgui_bundle import imgui;
 from enum import Enum;
 
 import context;
+import sprites;
+import asset_types;
+
 from assets import AssetManager;
 from tool_window import ToolWindowRegistry;
 from file_explorer import FileExplorer;
 from asset_explorer import AssetExplorer;
-import sprites;
-import asset_types;
+from script_editor import ScriptEditor;
 
 # Not Even Input
+
+def get_anchor(gui_id):
+	if not "####" in gui_id:
+		return gui_id;
+	idx = gui_id.find("####");
+	anchor = gui_id[idx+4:];
+	return anchor;
 
 class Tooltip:
 	tooltip = None;
@@ -92,10 +101,21 @@ def input_bool(gui_id, value):
 	ContextMenu.ping(gui_id);
 	return value;
 
-def input_string(gui_id, value):
+def input_string(gui_id, value, long=False):
 	_, value = imgui.input_text(str(gui_id), str(value));
 	Tooltip.ping();
 	ContextMenu.ping(gui_id);
+	
+	if long:
+		imgui.same_line();
+		win_id = imgui.get_id(gui_id);
+		win = ToolWindowRegistry.lookup(ScriptEditor).window(win_id);
+		if imgui.button(f"Edit##{gui_id}") and win == None:
+			win = ToolWindowRegistry.lookup(ScriptEditor).open(win_id);
+			win.configure(gui_id, value);
+		if win != None:
+			value = win.get_text();
+	
 	return value;
 
 def input_colour(gui_id, value):
@@ -114,7 +134,7 @@ def input_vec2(gui_id, value):
 	ContextMenu.ping(gui_id);
 	return value;
 
-# Enums
+# Enums and Flags
 
 class EEGUIEnumStyle(Enum):
 	COMBO = 0
@@ -141,8 +161,6 @@ def input_enum(gui_id, value, values, style=EEGUIEnumStyle.COMBO):
 		value = next((x for x in enum_class if x.name == value), None);
 	return value;
 
-# Flags
-
 def input_flags(gui_id, value, values):
 	for candidate in values:
 		_, included = imgui.checkbox(candidate, candidate in value);
@@ -154,50 +172,43 @@ def input_flags(gui_id, value, values):
 	ContextMenu.ping(gui_id);
 	return value;
 
+# Special Data
+
 def input_file(gui_id, value, pattern, directory=None, asset_type=None):
 	value = input_string(gui_id, value);
 
-	imgui.same_line();
-	imgui.push_id(gui_id);
-
-	explorer = ToolWindowRegistry.lookup(FileExplorer);
-	if explorer.is_open():
-		if explorer.get().is_targeting(gui_id):
-			harvest = explorer.get_result();
-			value = harvest if harvest != None else value;
+	win_id = imgui.get_id(gui_id);
+	win = ToolWindowRegistry.lookup(FileExplorer).window(win_id);
+	if win != None:
+		harvest = win.get_result();
+		value = harvest if harvest != None else value;
 	else:
-		if imgui.button("Browse"):
-			explorer.open();
+		imgui.same_line();
+		if imgui.button(f"Browse##{gui_id}"):
+			win = ToolWindowRegistry.lookup(FileExplorer).open(win_id);
 			if directory == None:
 				if asset_type != None:
 					directory = AssetManager.get_document(asset_type).directory;
 				else:
 					directory = context.get().directory;
-			explorer.get().configure(gui_id, directory, pattern, asset_type);
-	
-	imgui.pop_id();
+			win.configure(gui_id, directory, pattern, asset_type);
 
 	return value;
-
-# Special Data
 
 def input_asset(gui_id, value, asset_type):
 	value = input_string(gui_id, value);
 
 	imgui.same_line();
-	imgui.push_id(gui_id);
 
-	explorer = ToolWindowRegistry.lookup(AssetExplorer);
-	if explorer.is_open():
-		if explorer.get().is_targeting(gui_id):
-			harvest = explorer.get_result();
-			value = harvest if harvest != None else value;
+	win_id = imgui.get_id(gui_id);
+	win = ToolWindowRegistry.lookup(AssetExplorer).window(win_id);
+	if win != None:
+		harvest = win.get_result();
+		value = harvest if harvest != None else value;
 	else:
-		if imgui.button("Browse"):
-			explorer.open();
-			explorer.get().configure(gui_id, asset_type);
-	
-	imgui.pop_id();
+		if imgui.button(f"Browse##{gui_id}"):
+			win = ToolWindowRegistry.lookup(AssetExplorer).open(win_id);
+			win.configure(asset_type);
 
 	return value;
 
@@ -205,6 +216,7 @@ def input_asset(gui_id, value, asset_type):
 
 def typed_input(gui_id, T, value, previews=False, tooltip=False):
 	gui_id = str(gui_id);
+	anchor = get_anchor(gui_id);
 
 	if tooltip:
 		Tooltip.tooltip = T;
@@ -217,7 +229,7 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 		if node_open:
 			for element in T.elements:
 				if element.name in value:
-					value[element.name] = typed_input(element.name, element.T, value[element.name], previews, tooltip);
+					value[element.name] = typed_input(f"{element.name}##{anchor}", element.T, value[element.name], previews, tooltip);
 			imgui.tree_pop();
 
 	if isinstance(T, asset_types.List):
@@ -234,8 +246,8 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 
 			N = len(value);
 			for i in range(N):
-				value[i] = typed_input(f"[{i}]", T.T, value[i]);
-				if ContextMenu.begin(f"[{i}]"):
+				value[i] = typed_input(f"[{i}]##{anchor}", T.T, value[i]);
+				if ContextMenu.begin(f"[{i}]##{anchor}"):
 					if imgui.menu_item_simple("Delete"):
 						trash.append(i);
 					imgui.end_popup();

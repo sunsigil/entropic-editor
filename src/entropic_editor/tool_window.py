@@ -1,63 +1,72 @@
 from imgui_bundle import imgui;
 from cowtools import foldl;
 
-class ToolWindow:
-	def __init__(self, T, title, size=(720, 720), flags=[], hidden=False):
+class Window:
+	def __init__(self, instance, gui_id, size):
+		self.instance = instance;
+		self.gui_id = gui_id;
+		self.size = size;
+
+	def __getattr__(self, name):
+		return getattr(self.instance, name, None);
+
+class Tool:
+	def __init__(self, T, title, size=(720, 720), flags=[], hidden=False, singleton=True):
 		self.T = T;
-		self.instance = None;
 
 		self.title = title;
 		self.size = size;
 		self.flags = foldl(lambda a, b : a | b, 0, flags);
+
 		self.hidden = hidden;
-
-	def open(self):
-		if self.instance == None:
-			self.instance = self.T();
+		self.singleton = singleton;
 	
-	def is_open(self):
-		return self.instance != None;
+		self.windows = [];
+	
+	def window(self, gui_id=None):
+		if len(self.windows) > 0:
+			if gui_id == None:
+				return self.windows[-1];
+			else:
+				return next((x for x in self.windows if x.gui_id == gui_id), None);
+		return None;
 
-	def get(self):
-		return self.instance;
+	def is_open(self, gui_id=None):
+		return self.window(gui_id) != None;
 
-	def should_close(self):
-		if self.instance == None:
-			return True;
-		if not callable(getattr(self.instance, "should_close", None)):
-			return False;
-		return self.instance.should_close();
-
-	def get_result(self):
-		if self.instance == None:
-			return None;
-		if not callable(getattr(self.instance, "get_result", None)):
-			return None;
-		return self.instance.get_result();
+	def open(self, gui_id=None):
+		if not (self.singleton and self.is_open(gui_id)):
+			window = Window(self.T(), gui_id, self.size);
+			self.windows.append(window);
+		return self.window(gui_id);
 
 	def draw(self):
-		if self.instance == None:
-			return;
-	
-		imgui.set_next_window_size(self.size);
-		_, open = imgui.begin(self.title, self.instance != None and not self.should_close(), flags=self.flags);
-		self.instance.draw();
-		self.size = imgui.get_window_size();
-		imgui.end();
-		if not open:
-			if callable(getattr(self.instance, "on_close", None)):
-				self.instance.on_close();
-			self.instance = None;
-	
+		trash = [];
+
+		for win in self.windows:
+
+			imgui.set_next_window_size(win.size);
+			_, open = imgui.begin(self.title, True, flags=self.flags);
+			win.draw();
+			win.size = imgui.get_window_size();
+			imgui.end();
+
+			if not open:
+				trash.append(win);
+		
+		while len(trash) > 0:
+			win = trash.pop();
+			self.windows.remove(win);
 
 class ToolWindowRegistry:
 	table = {};
 	
 	def register(tool):
 		ToolWindowRegistry.table[tool.T] = tool;
-
-	def lookup(T):
-		return ToolWindowRegistry.table[T];
+	
+	def lookup(key):
+		if key in ToolWindowRegistry.table:
+			return ToolWindowRegistry.table[key];
 
 	def all():
 		return ToolWindowRegistry.table.values();

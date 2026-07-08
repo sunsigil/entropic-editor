@@ -95,7 +95,7 @@ class PaletteViewer:
 			canvas.render();
 
 			canvas_io.tick();
-			if canvas_io.cursor_in_bounds() and InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
+			if canvas_io.is_cursor_in_bounds() and InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
 				point = canvas_io.get_cursor();
 				point = canvas_grid.transform_point(point);
 				self.cursor = int(point[1] * self.get_cols() + point[0]);

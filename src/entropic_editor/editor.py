@@ -13,7 +13,8 @@ import context;
 
 from cowtools import *;
 from assets import *;
-from tool_window import ToolWindow, ToolWindowRegistry;
+from tool_window import Tool, ToolWindowRegistry;
+import asset_types;
 
 from scenes.scene_editor import SceneEditor;
 from sprites import SpriteBank;
@@ -28,7 +29,7 @@ from document_editor import DocumentEditor;
 from palette_viewer import PaletteViewer;
 from asset_explorer import AssetExplorer;
 from glyph_viewer import GlyphExplorer;
-import asset_types;
+from script_editor import ScriptEditor;
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(
@@ -40,7 +41,7 @@ if __name__ == "__main__":
 	args = parser.parse_args(sys.argv[1:]);
 
 	editor_path = Path(__file__).parent.absolute();
-	game_path = args.game_path;
+	game_path = Path(args.game_path).absolute();
 	typefile_path = args.types;
 
 	context.set(context.Context(game_path, "Entropic Editor", 1920, 1080));
@@ -78,17 +79,18 @@ if __name__ == "__main__":
 		imgui.WindowFlags_.no_collapse,
 	];
 
-	ToolWindowRegistry.register(ToolWindow(FileExplorer, "File Explorer", flags=tool_flags, hidden=True));
-	ToolWindowRegistry.register(ToolWindow(AssetExplorer, "Asset Explorer", flags=tool_flags, hidden=True));
+	ToolWindowRegistry.register(Tool(FileExplorer, "File Explorer", flags=tool_flags, hidden=True));
+	ToolWindowRegistry.register(Tool(AssetExplorer, "Asset Explorer", flags=tool_flags, hidden=True));
+	ToolWindowRegistry.register(Tool(ScriptEditor, "Script Editor", flags=tool_flags, hidden=True, singleton=False));
 
-	ToolWindowRegistry.register(ToolWindow(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
-	ToolWindowRegistry.register(ToolWindow(SceneEditor, "Scene Editor", size=(1500, 880), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
-	ToolWindowRegistry.register(ToolWindow(DialogueEditor, "Dialogue Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
-	ToolWindowRegistry.register(ToolWindow(RecipeEditor, "Recipe Editor", flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(Mesh2DEditor, "Mesh2D Editor", flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(PaletteViewer, "Palette Viewer", flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(EnDeCoder, "EnDeCoder", flags=tool_flags));
-	ToolWindowRegistry.register(ToolWindow(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
+	ToolWindowRegistry.register(Tool(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
+	ToolWindowRegistry.register(Tool(SceneEditor, "Scene Editor", size=(1500, 880), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
+	ToolWindowRegistry.register(Tool(DialogueEditor, "Dialogue Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
+	ToolWindowRegistry.register(Tool(RecipeEditor, "Recipe Editor", flags=tool_flags));
+	ToolWindowRegistry.register(Tool(Mesh2DEditor, "Mesh2D Editor", flags=tool_flags));
+	ToolWindowRegistry.register(Tool(PaletteViewer, "Palette Viewer", flags=tool_flags));
+	ToolWindowRegistry.register(Tool(EnDeCoder, "EnDeCoder", flags=tool_flags));
+	ToolWindowRegistry.register(Tool(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
 
 	while context.get().is_alive():
 		context.get().begin_frame();
@@ -146,6 +148,8 @@ if __name__ == "__main__":
 			tool.draw();
 		
 		imgui.end();
+
+		imgui.show_id_stack_tool_window();
 
 		context.get().end_frame();
 

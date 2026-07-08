@@ -1,12 +1,7 @@
 from imgui_bundle import imgui;
-from assets import AssetManager, AssetDocument;
-from sprites import SpritePreview;
+from assets import AssetDocument;
 import types as types;
-from tool_window import ToolWindow, ToolWindowRegistry;
-from asset_explorer import AssetExplorer;
-from file_explorer import FileExplorer;
-from editor_gui import *;
-import copy;
+import editor_gui as gui;
 
 class DocumentEditor:
 	active_document: AssetDocument = None;
@@ -38,12 +33,12 @@ class DocumentEditor:
 		working_list = DocumentEditor.search_cache if len(DocumentEditor.search_cache) > 0 else DocumentEditor.active_document.instances;
 		for instance in working_list:
 			gui_id = f"{instance["name"]}####{id(instance)}" if "name" in instance else id(instance);
-			typed_input(
+			gui.typed_input(
 				gui_id,
 				DocumentEditor.active_document.type_tree.T, instance,
 				previews=True, tooltip=DocumentEditor.show_typetip
 			);
-			if ContextMenu.begin(gui_id):
+			if gui.ContextMenu.begin(gui_id):
 				if imgui.menu_item_simple("Delete"):
 					DocumentEditor.active_document.delete_entry(instance);
 				imgui.end_popup();

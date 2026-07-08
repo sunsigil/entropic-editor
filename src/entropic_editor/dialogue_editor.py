@@ -2,7 +2,7 @@ from imgui_bundle import imgui, imgui_node_editor as imnodes;
 from assets import AssetManager;
 from cowtools import *;
 import editor_gui as gui;
-import asset_types;
+import random as rand;
 
 
 #########################################################
@@ -95,16 +95,16 @@ def find_sources():
 def populate_tree(node):
 	tree = [];
 	stack = [node];
-	visited = set();
+	visited = set(node["name"]);
 
 	while len(stack) > 0:
 		head = stack.pop(-1);
 		tree.append(head);
-		visited.add(id(head));
 		for edge in head["edges"]:
 			next_node = AssetManager.search("dialogue", edge["node"]);
-			if next_node != None and not id(next_node) in visited:
+			if next_node != None and not next_node["name"] in visited:
 				stack.append(next_node);
+				visited.add(next_node["name"]);
 	
 	return tree;
 
@@ -114,10 +114,11 @@ class DialogueEditor:
 
 		self.node_bank = AssetManager.get_all("dialogue");	
 		self.source_bank = find_sources();
-		self.root = None;
 
+		self.root = None;
 		self.tree = [];
 		self.links = [];
+		self.dirty = False;
 	
 		self.trash = Trash(deferred=True);
 	
@@ -127,6 +128,7 @@ class DialogueEditor:
 	def load_root(self, node):
 		self.root = node;
 		self.tree = populate_tree(self.root);
+		self.dirty = True;
 	
 	def menu_bar(self):
 		if imgui.begin_menu_bar():
@@ -135,13 +137,15 @@ class DialogueEditor:
 
 					if imgui.begin_menu("Source"):
 						for source in self.source_bank:
-							if imgui.menu_item(source["name"], "", source == self.root)[1]:
+							clicked, status = imgui.menu_item(source["name"], "", source == self.root);
+							if clicked and status:
 								self.load_root(source);
 						imgui.end_menu();
 					
 					if imgui.begin_menu("All"):
 						for node in self.node_bank:
-							if imgui.menu_item(node["name"], "", node == self.root)[1]:
+							clicked, status = imgui.menu_item(node["name"], "", node == self.root);
+							if clicked and status:
 								self.load_root(node);
 						imgui.end_menu();
 					
@@ -170,6 +174,7 @@ class DialogueEditor:
 			return n * 8 + pad;
 		def get_edge_width(edge, pad):
 			return len(edge["text"]) * 8 + pad;
+		min_width = 32;
 	
 		imnodes.begin_node(node.node_id);
 		imgui.push_id(str(id(node.asset)));
@@ -185,12 +190,12 @@ class DialogueEditor:
 
 		imgui.begin_group();
 		imgui.push_id("lines");
-		line_w = max(16, get_max_line_width(4));
+		line_w = max(min_width, get_max_line_width(4));
 		for idx, line in enumerate(node.asset["lines"]):
 			imgui.push_id(str(idx));
 
 			imgui.set_next_item_width(line_w);
-			node.asset["lines"][idx] = gui.input_string(f"##line{idx}", line);
+			node.asset["lines"][idx] = gui.input_string(f"##line{idx}", line, long=True);
 
 			imgui.same_line();
 			if imgui.button("-"):
@@ -210,11 +215,11 @@ class DialogueEditor:
 		for idx, edge in enumerate(node.asset["edges"]):
 			imgui.push_id(str(idx));
 
-			edge_w = max(16, get_edge_width(edge, 4));
+			edge_w = max(min_width, get_edge_width(edge, 4));
 			imgui.dummy((line_w-edge_w, 0));
 			imgui.same_line();
 			imgui.set_next_item_width(edge_w);
-			edge["text"] = gui.input_string(f"##edge{idx}", edge["text"]);
+			edge["text"] = gui.input_string(f"##text", edge["text"]);
 
 			imgui.same_line();
 			if imgui.button("-"):
@@ -224,6 +229,12 @@ class DialogueEditor:
 			imnodes.begin_pin(node.out_ids[idx], imnodes.PinKind.output);
 			imgui.text("(Out)");
 			imnodes.end_pin();
+
+			edge_w = max(min_width, get_edge_width(edge, 4));
+			imgui.dummy((line_w-edge_w, 0));
+			imgui.same_line();
+			imgui.set_next_item_width(edge_w);
+			edge["condition"] = gui.input_string(f"##condition", edge["condition"], long=True);
 		
 			imgui.pop_id();
 		
@@ -256,6 +267,25 @@ class DialogueEditor:
 
 		for node in registry.nodes:
 			self.draw_node(node);
+		
+		if self.dirty:
+			visited = [];
+			def recursive_position(node, y0, x, y):
+				if node.asset["name"] in visited:
+					return False;
+				visited.append(node.asset["name"]);
+
+				imnodes.set_node_position(node.node_id, imgui.ImVec2(x, y));
+				w, h = imnodes.get_node_size(node.node_id);
+				children = [registry.search_by_name(x["node"]) for x in node.asset["edges"]];
+				y = y0;
+				for child in children:
+					if child != None:
+						if recursive_position(child, y, x+w+64, y):
+							y += h + 64;
+				return True;
+			recursive_position(registry.nodes[0], 0, 0, 0);
+			self.dirty = False;
 		
 		for edge in registry.edges:
 			imnodes.link(edge.link_id, edge.out_id, edge.in_id);

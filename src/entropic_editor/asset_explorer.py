@@ -5,12 +5,10 @@ import math;
 
 class AssetExplorer:
 	def __init__(self):
-		self.target = None;
 		self.result = None;
 		self.search = "";
 	
-	def configure(self, target, type):
-		self.target = target;
+	def configure(self, type):
 		self.type = type;
 	
 	def _is_private(self, x):
@@ -51,9 +49,6 @@ class AssetExplorer:
 					imgui.same_line();
 				i += 1;
 			imgui.new_line();
-		
-	def is_targeting(self, target):
-		return target == self.target;
 
 	def should_close(self):
 		return self.result != None;

@@ -32,6 +32,13 @@ def foldr(f, acc, xs):
 		h, t = xs[0], xs[1:];
 		return f(h, foldr(f, acc, t));
 
+def dedup(l):
+	l_prime = [];
+	for x in l:
+		if not x in l_prime:
+			l_prime.append(x);
+	return l_prime;
+
 def clamp(v, a, b):
 	return min(max(v, a), b);
 
