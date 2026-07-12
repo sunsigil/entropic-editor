@@ -46,11 +46,12 @@ class Tool:
 		for win in self.windows:
 
 			imgui.set_next_window_size(win.size);
-			_, open = imgui.begin(self.title, True, flags=self.flags);
+			should_close = getattr(win, "should_close") != None and win.should_close();
+			_, open = imgui.begin(self.title, not should_close, flags=self.flags);
 			win.draw();
 			win.size = imgui.get_window_size();
 			imgui.end();
-
+			
 			if not open:
 				trash.append(win);
 		

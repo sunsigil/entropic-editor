@@ -40,6 +40,10 @@ class AssetDocument:
 		self.id_set = set();
 		if self.type_tree.search("id") != None:
 			for entry in self.instances:
+				if not "id" in entry:
+					entry["id"] = self.take_free_id();
+				if entry["id"] in self.id_set:
+					print(f"[{self.type_name.upper()}] ID {entry["id"]} collides with existing ID set!");
 				self.id_set.add(entry["id"]);
 	
 		self.refresh();
@@ -74,13 +78,14 @@ class AssetDocument:
 		for i in range(len(self.instances)):
 			self.type_helper.rectify(self.instances[i]);
 	
-	def save(self):
-		if self.type_name in self.data and "instances" in self.data:
-			file = open(self.path, "w");
-			file.seek(0);
-			file.truncate();
-			file.write(json.dumps(self.data, indent=4));
-			file.close();
+	def save(self, path=None):
+		if path == None:
+			path = self.path;
+		file = open(path, "w");
+		file.seek(0);
+		file.truncate();
+		file.write(json.dumps(self.data, indent=4));
+		file.close();
 
 class AssetManager:
 	document_map = {};
@@ -120,6 +125,14 @@ class AssetManager:
 	def search(asset_type, asset_name):
 		return next((x for x in AssetManager.get_all(asset_type) if x["name"] == asset_name), None);
 
-	
+def make_backups(dir, cold=True):
+	dir = Path(dir);
+	dir.mkdir(parents=True, exist_ok=True);
 
-	
+	docs: list[AssetDocument] = AssetManager.documents;
+	for doc in docs:
+		path = dir/doc.path.name;
+		if cold:
+			Path.copy(doc.path, path);
+		else:
+			doc.save(path);

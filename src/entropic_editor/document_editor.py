@@ -41,4 +41,6 @@ class DocumentEditor:
 			if gui.ContextMenu.begin(gui_id):
 				if imgui.menu_item_simple("Delete"):
 					DocumentEditor.active_document.delete_entry(instance);
+				if imgui.menu_item_simple("Duplicate"):
+					DocumentEditor.active_document.spawn_entry(instance);
 				imgui.end_popup();

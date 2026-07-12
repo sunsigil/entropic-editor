@@ -68,7 +68,7 @@ class Vec2(Primitive):
 	def prototype(self) -> list[int]:
 		return [0, 0];
 	def validate(self, value) -> bool:
-		return isinstance(value, list[int]) and len(value) == 2;
+		return isinstance(value, int) and len(value) == 2;
 	def rectify(self, value):
 		return value;
 class Any(Primitive):
@@ -437,6 +437,10 @@ class TypeHelper:
 		return evaluation;
 	
 	def _rectify(self, tnode):
+		# God this is hacky
+		# This whole "type system" is diseased
+		if isinstance(tnode.enode.T, List):
+			tnode.enode.T.rectify(tnode.inode);
 		if not isinstance(tnode.enode.T, Object):
 			return;
 	

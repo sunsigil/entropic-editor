@@ -19,8 +19,9 @@ def set_clipboard_text(_ctx: imgui.internal.Context, text: str) -> str:
 	glfw.set_clipboard_string(__context.glfw_handle, text);
 
 class Context:
-	def __init__(self, directory, name, width, height):
-		self.directory = directory;
+	def __init__(self, editor_directory, game_directory, name, width, height):
+		self.editor_directory = editor_directory;
+		self.game_directory = game_directory;
 		
 		self.name = name;
 		self.width = width;

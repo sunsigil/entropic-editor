@@ -12,6 +12,7 @@ from editor_gui import *;
 from geometry import *;
 import scenes.walls;
 import asset_types;
+import scripts;
 
 #########################################################
 ## HELPERS
@@ -33,11 +34,13 @@ def get_entity_aabb(entity):
 			return [x+dx, y+dy, x+dx+sprite.frame_width, y+dy+sprite.frame_height];
 	
 		if prototype["has_blocker"]:
-			return prototype["blocker"];
+			x0, y0, x1, y1 = prototype["blocker"];
+			return [x+x0, y+y0, x+x1, y+y1];
 		elif prototype["has_trigger"]:
-			return prototype["trigger"];
+			x0, y0, x1, y1 = prototype["trigger"];
+			return [x+x0, y+y0, x+x1, y+y1];
 
-	return [x, y, x+16, y+16];
+	return [x-8, y-8, x+8, y+8];
 
 def get_text_aabb(text):
 	x0, y0 = text["position"];
@@ -46,7 +49,7 @@ def get_text_aabb(text):
 	return [x0, y0, x1, y1];
 
 def get_script_data(entity, key):
-	return next((x for x in entity["script_data"] if x["key"] == key), None);
+	return next((x for x in entity["script_data"] if x["signature"]["key"] == key), None);
 	
 #########################################################
 ## SCENE EDITOR
@@ -753,15 +756,13 @@ class SceneViewer:
 			sprite = SpriteBank.search(prototype["sprite"], safe=False) if prototype != None else None;
 
 			x, y = entity["position"];
-			dx, dy = prototype["sprite_offset"];
+			dx, dy = prototype["sprite_offset"] if prototype != None else (0, 0);
 			aabb = get_entity_aabb(entity);
 			
 			if sprite != None:
 				frame_idx = clamp(entity["frame_idx"], 0, sprite.frame_count-1);
 				self.parent.canvas.draw_image(x+dx, y+dy, sprite.frame_images[frame_idx]);
 			else:
-				x0, y0, x1, y1 = aabb;
-				aabb = [x0+x, y0+y, x1+x, y1+y];
 				self.parent.canvas.draw_aabb(aabb, (255, 255, 0));
 
 			if prototype != None and self.show_boxes:
@@ -899,58 +900,6 @@ class SceneEditor:
 	def get_entity_sprite(self, entity):
 		prototype = AssetManager.search("prototype", entity["prototype"]);
 		return SpriteBank.search(prototype["sprite"] if prototype != None else "null");
-
-	def get_entity_script_data_signatures(self, entity):
-		script_data = [];
-		prototype = AssetManager.search("prototype", entity["prototype"]);
-		if prototype != None:
-			for script_name in prototype["scripts"]:
-				script = AssetManager.search("script", script_name);
-				script_data += script["script_data"];
-		return script_data;
-
-	def rectify_script_data(self):
-		for entity in self.scene["entities"]:
-			signatures = self.get_entity_script_data_signatures(entity);
-
-			# Remove invalid keys and asset_types
-			trash = [];
-			for data in entity["script_data"]:
-				match = next(
-					(x for x in signatures if x["key"] == data["key"] and x["type"] == data["type"]), 
-					None
-				);
-				if match == None:
-					trash.append(data);
-			process_trash(entity["script_data"], trash);
-		
-			# Deduplicate
-			first = {}
-			for i, data in enumerate(entity["script_data"]):
-				first[data["key"]] = i;
-			trash = [];
-			for i, data in enumerate(entity["script_data"]):
-				if first[data["key"]] != i:
-					trash.append(data);
-			process_trash(entity["script_data"], trash);
-
-			def make_value(type):
-				match type:
-					case "vec2": return [0, 0];
-					case _: return asset_types.construct_type(signature["type"]).prototype();
-		
-			# Add missing signatures
-			for signature in signatures:
-				match = next(
-					(x for x in entity["script_data"] if x["key"] == signature["key"] and x["type"] == signature["type"]), 
-					None
-				);
-				if match == None:
-					entity["script_data"].append({
-						"key": signature["key"],
-						"type": signature["type"],
-						"value": make_value(signature["type"])
-					});
 	
 	def synchronize_manip(self):
 		def make_shape(entity):
@@ -1019,10 +968,10 @@ class SceneEditor:
 				entity["frame_idx"] = input_int("Frame", entity["frame_idx"], EEGUIIntStyle.SLIDER, 0, sprite.frame_count-1);
 				
 				if imgui.tree_node("Script data"):
-					for data in entity["script_data"]:
-						if imgui.tree_node(f"{data["key"]}####{id(data)}"):
-							data_type = asset_types.construct_type(data["type"]);
-							data["value"] = typed_input(data["key"], data_type, data["value"]);
+					for sd_inst in entity["script_data"]:
+						sd = scripts.ScriptData(sd_inst["signature"]["key"], sd_inst["signature"]["type"]);
+						if imgui.tree_node(f"{sd.key}"):
+							sd_inst["value"] = typed_input(f"##{sd.key}", sd.type, sd_inst["value"]);
 							imgui.tree_pop();
 					imgui.tree_pop();
 				imgui.tree_pop();
@@ -1039,7 +988,7 @@ class SceneEditor:
 	def scene_context_menu(self):
 		if self.edit_mode == EditMode.ENTITIES:
 			selection = self.selection_context.get_selection(single=True);
-			hovered = selection != None and aabb_contains_point(self.canvas_io.get_cursor(), get_entity_aabb(selection));
+			hovered = selection != None and aabb_contains_point(get_entity_aabb(selection), self.canvas_io.get_cursor());
 			if hovered:
 				if imgui.menu_item_simple("Delete"):
 					self.trash.trash_item(self.scene["entities"], selection);
@@ -1058,7 +1007,9 @@ class SceneEditor:
 
 		self.canvas_io.tick();
 		self.synchronize_manip();
-		self.rectify_script_data();
+		
+		for entity in self.scene["entities"]:
+			scripts.rectify_entity(entity);
 
 		def run_left_panel(panel_tick):
 			imgui.begin_child(

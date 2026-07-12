@@ -29,7 +29,9 @@ from document_editor import DocumentEditor;
 from palette_viewer import PaletteViewer;
 from asset_explorer import AssetExplorer;
 from glyph_viewer import GlyphExplorer;
-from script_editor import ScriptEditor;
+from text_editor import TextEditor;
+
+from sprites import SpriteImporter;
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(
@@ -44,7 +46,10 @@ if __name__ == "__main__":
 	game_path = Path(args.game_path).absolute();
 	typefile_path = args.types;
 
-	context.set(context.Context(game_path, "Entropic Editor", 1920, 1080));
+	context.set(context.Context(
+		editor_path, game_path,
+		"Entropic Editor", 1920, 1080)
+	);
 	InputManager.initialize(context.get().glfw_handle, context.get().imgui_impl);
 
 	if typefile_path != None and typefile_path.is_file():
@@ -53,6 +58,7 @@ if __name__ == "__main__":
 	for path in (game_path/"assets").rglob("*.json"):
 		if AssetDocument.is_file_asset_document(path):
 			AssetManager.load_document(path);
+	make_backups(game_path/"backups/cold", cold=True);
 
 	window_flag_list = [
 		imgui.WindowFlags_.no_saved_settings,
@@ -81,7 +87,7 @@ if __name__ == "__main__":
 
 	ToolWindowRegistry.register(Tool(FileExplorer, "File Explorer", flags=tool_flags, hidden=True));
 	ToolWindowRegistry.register(Tool(AssetExplorer, "Asset Explorer", flags=tool_flags, hidden=True));
-	ToolWindowRegistry.register(Tool(ScriptEditor, "Script Editor", flags=tool_flags, hidden=True, singleton=False));
+	ToolWindowRegistry.register(Tool(TextEditor, "Script Editor", flags=tool_flags, hidden=True, singleton=False));
 
 	ToolWindowRegistry.register(Tool(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolWindowRegistry.register(Tool(SceneEditor, "Scene Editor", size=(1500, 880), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
@@ -91,6 +97,7 @@ if __name__ == "__main__":
 	ToolWindowRegistry.register(Tool(PaletteViewer, "Palette Viewer", flags=tool_flags));
 	ToolWindowRegistry.register(Tool(EnDeCoder, "EnDeCoder", flags=tool_flags));
 	ToolWindowRegistry.register(Tool(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
+	ToolWindowRegistry.register(Tool(SpriteImporter, "Sprite Importer", flags=tool_flags));
 
 	while context.get().is_alive():
 		context.get().begin_frame();
@@ -100,6 +107,7 @@ if __name__ == "__main__":
 
 		for document in AssetManager.documents:
 			document.refresh();
+		make_backups(game_path/"backups/hot");
 
 		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_S):
 			print(f"Saving...");
@@ -114,7 +122,7 @@ if __name__ == "__main__":
 			if imgui.begin_menu("File"):
 				if imgui.begin_menu("Open"):
 					for document in AssetManager.documents:
-						if imgui.menu_item(str(document.path.relative_to(context.get().directory)), "", document == DocumentEditor.active_document)[1]:
+						if imgui.menu_item(str(document.path.relative_to(context.get().game_directory)), "", document == DocumentEditor.active_document)[1]:
 							if DocumentEditor.active_document != None:
 								DocumentEditor.active_document.save();
 							DocumentEditor.active_document = document;

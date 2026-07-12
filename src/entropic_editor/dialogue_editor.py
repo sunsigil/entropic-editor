@@ -3,7 +3,8 @@ from assets import AssetManager;
 from cowtools import *;
 import editor_gui as gui;
 import random as rand;
-
+import input;
+import glfw;
 
 #########################################################
 ## DIALOGUE GRAPH
@@ -28,12 +29,20 @@ pid = GenID(imnodes.PinId);
 lid = GenID(imnodes.LinkId);
 
 class GraphNode:
-	def __init__(self, node):
+	def __init__(self, node, position=None):
 		self.asset = node;
 		self.node_id = imnodes.NodeId(id(node));
 		self.in_id = next(pid);
 		self.out_ids = [];
 		for edge in node["edges"]:
+			self.out_ids.append(next(pid));
+
+		self.position = position;
+
+	def refresh(self):
+		self.in_id = next(pid);
+		self.out_ids = [];
+		for edge in self.asset["edges"]:
 			self.out_ids.append(next(pid));
 
 class GraphEdge:
@@ -65,7 +74,10 @@ class GraphRegistry:
 		self.by_link_id[edge.link_id.id()] = edge;
 	
 	def search_by_name(self, name):
-		return self.by_name[name];
+		if name in self.by_name:
+			return self.by_name[name];
+		else:
+			return None;
 
 	def search_by_node_id(self, node_id):
 		return self.by_node_id[node_id.id()];
@@ -93,20 +105,20 @@ def find_sources():
 	return sources;
 
 def populate_tree(node):
-	tree = [];
+	graph = [];
 	stack = [node];
 	visited = set(node["name"]);
 
 	while len(stack) > 0:
 		head = stack.pop(-1);
-		tree.append(head);
+		graph.append(GraphNode(head));
 		for edge in head["edges"]:
 			next_node = AssetManager.search("dialogue", edge["node"]);
 			if next_node != None and not next_node["name"] in visited:
 				stack.append(next_node);
 				visited.add(next_node["name"]);
 	
-	return tree;
+	return graph;
 
 class DialogueEditor:
 	def __init__(self):
@@ -116,7 +128,7 @@ class DialogueEditor:
 		self.source_bank = find_sources();
 
 		self.root = None;
-		self.tree = [];
+		self.nodes = [];
 		self.links = [];
 		self.dirty = False;
 	
@@ -127,7 +139,7 @@ class DialogueEditor:
 	
 	def load_root(self, node):
 		self.root = node;
-		self.tree = populate_tree(self.root);
+		self.nodes = populate_tree(self.root);
 		self.dirty = True;
 	
 	def menu_bar(self):
@@ -154,27 +166,18 @@ class DialogueEditor:
 			imgui.end_menu_bar();
 	
 	def draw_inspector(self):
-		if imgui.begin_menu("Add node"):
-			if imgui.begin_menu("Existing"):
-				for node in self.node_bank:
-					if imgui.menu_item_simple(node["name"]):
-						tree = populate_tree(node);
-						for x in tree:
-							if not x in self.tree:
-								self.tree.append(x);
+		if imgui.begin_menu("Graph"):
+			if imgui.begin_menu("Add"):
+				if imgui.menu_item_simple("New node"):
+					new = AssetManager.get_document("dialogue").spawn_entry();
+					size = imnodes.get_screen_size();
+					w, h = size;
+					self.nodes.append(GraphNode(new, imnodes.screen_to_canvas(imgui.ImVec2(w/2, h/2))));
 				imgui.end_menu();
-			if imgui.menu_item_simple("New"):
-				new = AssetManager.get_document("dialogue").spawn_entry();
-				self.tree.append(new);
 			imgui.end_menu();
 	
 	def draw_node(self, node):
-		def get_max_line_width(pad):
-			n = max([len(x) for x in node.asset["lines"]]) if len(node.asset["lines"]) > 0 else 0;
-			return n * 8 + pad;
-		def get_edge_width(edge, pad):
-			return len(edge["text"]) * 8 + pad;
-		min_width = 32;
+		line_width = 256;
 	
 		imnodes.begin_node(node.node_id);
 		imgui.push_id(str(id(node.asset)));
@@ -184,17 +187,22 @@ class DialogueEditor:
 		imnodes.end_pin();
 
 		imgui.same_line();
-		name_w = len(node.asset["name"]) * 8 + 36;
-		imgui.set_next_item_width(name_w);
+		node.asset["face"] = gui.input_sprite("##face", node.asset["face"], (32, 32));
+
+		imgui.same_line();
+		imgui.set_next_item_width(line_width);
 		node.asset["name"] = gui.input_string("##name", node.asset["name"]);
+
+		imgui.set_next_item_width(line_width);
+		node.asset["script"] = gui.input_string(f"##script", node.asset["script"], long=True);
+		imgui.dummy((line_width, 8));
 
 		imgui.begin_group();
 		imgui.push_id("lines");
-		line_w = max(min_width, get_max_line_width(4));
 		for idx, line in enumerate(node.asset["lines"]):
 			imgui.push_id(str(idx));
 
-			imgui.set_next_item_width(line_w);
+			imgui.set_next_item_width(line_width);
 			node.asset["lines"][idx] = gui.input_string(f"##line{idx}", line, long=True);
 
 			imgui.same_line();
@@ -208,17 +216,17 @@ class DialogueEditor:
 		
 		imgui.pop_id();
 		imgui.end_group();
-		imgui.dummy((line_w, 0));
+		imgui.dummy((line_width, 8));
 
 		imgui.begin_group();
 		imgui.push_id("edges");
 		for idx, edge in enumerate(node.asset["edges"]):
 			imgui.push_id(str(idx));
 
-			edge_w = max(min_width, get_edge_width(edge, 4));
-			imgui.dummy((line_w-edge_w, 0));
+			edge_width = max(64, len(edge["text"]) * 8 + 32);
+			imgui.dummy((line_width-edge_width, 0));
 			imgui.same_line();
-			imgui.set_next_item_width(edge_w);
+			imgui.set_next_item_width(edge_width);
 			edge["text"] = gui.input_string(f"##text", edge["text"]);
 
 			imgui.same_line();
@@ -230,10 +238,9 @@ class DialogueEditor:
 			imgui.text("(Out)");
 			imnodes.end_pin();
 
-			edge_w = max(min_width, get_edge_width(edge, 4));
-			imgui.dummy((line_w-edge_w, 0));
+			imgui.dummy((line_width-edge_width, 0));
 			imgui.same_line();
-			imgui.set_next_item_width(edge_w);
+			imgui.set_next_item_width(edge_width);
 			edge["condition"] = gui.input_string(f"##condition", edge["condition"], long=True);
 		
 			imgui.pop_id();
@@ -243,7 +250,6 @@ class DialogueEditor:
 		
 		imgui.pop_id();
 		imgui.end_group();
-		imgui.dummy((line_w, 0));
 
 		imgui.pop_id();
 		imnodes.end_node();
@@ -252,8 +258,9 @@ class DialogueEditor:
 		GenID.reset_frame_ids();
 
 		registry = GraphRegistry();
-		for node in self.tree:
-			registry.register_node(GraphNode(node));
+		for node in self.nodes:
+			node.refresh();
+			registry.register_node(node);
 		
 		for node in registry.nodes:
 			for idx, edge in enumerate(node.asset["edges"]):
@@ -267,25 +274,6 @@ class DialogueEditor:
 
 		for node in registry.nodes:
 			self.draw_node(node);
-		
-		if self.dirty:
-			visited = [];
-			def recursive_position(node, y0, x, y):
-				if node.asset["name"] in visited:
-					return False;
-				visited.append(node.asset["name"]);
-
-				imnodes.set_node_position(node.node_id, imgui.ImVec2(x, y));
-				w, h = imnodes.get_node_size(node.node_id);
-				children = [registry.search_by_name(x["node"]) for x in node.asset["edges"]];
-				y = y0;
-				for child in children:
-					if child != None:
-						if recursive_position(child, y, x+w+64, y):
-							y += h + 64;
-				return True;
-			recursive_position(registry.nodes[0], 0, 0, 0);
-			self.dirty = False;
 		
 		for edge in registry.edges:
 			imnodes.link(edge.link_id, edge.out_id, edge.in_id);
@@ -312,6 +300,33 @@ class DialogueEditor:
 					out_idx = out_node.out_ids.index(edge.out_id);
 					out_node.asset["edges"][out_idx]["node"] = "";
 			imnodes.end_delete();
+		
+		if self.dirty:
+			visited = [];
+			def recursive_position(node, y0, x, y):
+				if node.asset["name"] in visited:
+					return False;
+				visited.append(node.asset["name"]);
+
+				node.position = imgui.ImVec2(x, y);
+				w, h = imnodes.get_node_size(node.node_id);
+				children = [registry.search_by_name(x["node"]) for x in node.asset["edges"]];
+				y = y0;
+				for child in children:
+					if child != None:
+						if recursive_position(child, y, x+w+64, y):
+							y += h + 64;
+				return True;
+			recursive_position(registry.nodes[0], 0, 0, 0);
+			self.dirty = False;
+		for node in registry.nodes:
+			if not node.position is None:
+				imnodes.set_node_position(node.node_id, node.position);
+				node.position = None;
+		
+		if input.InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
+			cursor = input.InputManager.get_imgui_cursor();
+			cursor = imnodes.screen_to_canvas(cursor);
 		
 		imnodes.end();
 

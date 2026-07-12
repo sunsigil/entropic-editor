@@ -2,7 +2,7 @@ from imgui_bundle import imgui, imgui_color_text_edit as te;
 import glfw;
 import input;
 
-class ScriptEditor:
+class TextEditor:
 	def __init__(self):	
 		self.text_editor = te.TextEditor();
 	

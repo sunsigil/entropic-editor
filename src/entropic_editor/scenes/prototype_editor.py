@@ -10,29 +10,32 @@ from input import InputManager;
 from editor_gui import *;
 from geometry import *;
 import scenes.walls;
+import scripts;
 
 class PrototypeSpawner:
 	def __init__(self):
 		self.size = (512, 256);
-		self.prototype = AssetManager.get_document("prototype").type_helper.root.prototype();
+		self.sprite = "";
 		self.finished = False;
-	
-	def autofill(self):
-		if len(self.prototype["sprite"]) > 0:
-			self.prototype["name"] = self.prototype["sprite"];
 
 	def draw(self):
 		imgui.set_next_window_size(self.size);
 		_, open = imgui.begin("Create prototype", not self.finished);
 
-		self.prototype["sprite"] = input_asset("sprite", self.prototype["sprite"], "sprite");
+		self.sprite = input_asset("sprite", self.sprite, "sprite");
 	
-		if AssetManager.search("sprite", self.prototype["sprite"]) != None:
+		if AssetManager.search("sprite", self.sprite) != None:
 			if imgui.button("Create"):
-				self.autofill();
-				AssetManager.get_document("prototype").spawn_entry(source=self.prototype);
+				prototype = AssetManager.get_document("prototype").spawn_entry();
+				prototype["name"] = self.sprite;
+				prototype["sprite"] = self.sprite;
+				sprite = SpriteBank.search(self.sprite);
+				prototype["sprite_offset"] = [-sprite.frame_width//2, -sprite.frame_height];
+				prototype["has_blocker"] = True;
+				prototype["blocker"] = [-sprite.frame_width//2, -8, sprite.frame_width//2, 0];
 				self.finished = True;
 			imgui.same_line();
+		
 		if imgui.button("Cancel"):
 			self.finished = True;
 		
@@ -100,8 +103,10 @@ class PrototypeEditor:
 		if self.prototype["has_trigger"]:
 			self.prototype["trigger"] = input_aabb("Trigger", self.prototype["trigger"]);
 			self.prototype["trigger_orientation"] = input_enum("Trigger orientation", self.prototype["trigger_orientation"], ["none", "east", "north", "west", "south"]);
+			if self.prototype["has_blocker"] and imgui.button("Conform to blocker"):
+				self.prototype["trigger"] = list(self.prototype["blocker"]);
 	
-	def gui_draw_scripts(self):
+	def gui_draw_scripts(self):	
 		scripts_open = imgui.tree_node("Scripts");
 		if imgui.begin_popup_context_item():
 			if imgui.menu_item_simple("New script"):
@@ -111,8 +116,10 @@ class PrototypeEditor:
 		if scripts_open:
 			trash = [];
 			for i in range(len(self.prototype["scripts"])):
-				self.prototype["scripts"][i] = input_asset(f"Script {i}", self.prototype["scripts"][i], "script");
-				if ContextMenu.begin(f"Script {i}"):
+				script = self.prototype["scripts"][i];
+
+				self.prototype["scripts"][i] = input_asset(f"##script {i}", self.prototype["scripts"][i], "script");
+				if ContextMenu.begin(f"##script {i}"):
 					if imgui.menu_item_simple("Delete"):
 						trash.append(i);
 					imgui.end_popup();
@@ -120,6 +127,17 @@ class PrototypeEditor:
 			while len(trash) > 0:
 				i = trash.pop();
 				del self.prototype["scripts"][i];
+			imgui.tree_pop();
+
+		if imgui.tree_node("Script Data"):
+			scripts.rectify_prototype(self.prototype);
+
+			for sd_inst in self.prototype["script_data"]:
+				sd = scripts.ScriptData(sd_inst["signature"]["key"], sd_inst["signature"]["type"]);
+				label = f"{sd.key} ({sd.type})";
+				sd_inst = next(x for x in self.prototype["script_data"] if x["signature"]["key"] == sd.key);
+				sd_inst["value"] = typed_input(label, sd.type, sd_inst["value"]);
+					
 			imgui.tree_pop();
 	
 	def canvas_draw_boxes(self):

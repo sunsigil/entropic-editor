@@ -3,6 +3,10 @@ from pathlib import Path;
 
 from assets import *;
 from cowtools import *;
+import editor_gui as gui;
+from imgui_bundle import imgui;
+from pathlib import Path;
+import context;
 
 def _is_image_black(img):
 	pixels = img.load();
@@ -104,3 +108,32 @@ class SpritePreview:
 		sprite = SpriteBank.search(name);
 		aspect = sprite.frame_width / sprite.frame_height;
 		imgui.image(imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(aspect * size, size));
+
+class SpriteImporter:
+	def __init__(self):
+		self.root = context.get().directory/"assets/sprites";
+		self.pattern = None;
+
+		self.candidates = [];
+	
+	def get_candidates(self):
+		self.candidates = [];
+		for entry in self.root.glob(self.pattern):
+			self.candidates.append(entry.relative_to(self.root));
+	
+	def draw(self):
+		self.pattern = gui.input_string("Glob", self.pattern);
+
+		if imgui.button("Preview"):
+			self.get_candidates();
+		imgui.same_line();
+		if imgui.button("Import"):
+			self.get_candidates();
+			for path in self.candidates:
+				sprite = AssetManager.get_document("sprite").spawn_entry();
+				sprite["path"] = str(path);
+				sprite["name"] = "_".join(path.parts);
+
+		if self.candidates != None:
+			for path in self.candidates:
+				imgui.text(str(path));
