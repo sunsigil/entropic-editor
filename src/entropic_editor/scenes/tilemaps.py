@@ -81,8 +81,8 @@ def export_tilemap(tilemap, csv_path):
 		writer.writerows(rows);
 
 def spatial_search(tilemap, x, y):
-	x = cowtools.align(x, 16);
-	y = cowtools.align(y, 16);
+	x = cowtools.align(x, 16, mapping=math.floor);
+	y = cowtools.align(y, 16, mapping=math.floor);
 	match tilemap["type"]:
 		case "dense":
 			idx = y * tilemap["dense"]["columns"] + x;
@@ -90,16 +90,16 @@ def spatial_search(tilemap, x, y):
 				return tilemap["dense"]["frame_indices"][idx];
 			return None;
 		case "sparse":
-			return next((x for x in tilemap["sparse"] if x["position"][0] == x and x["position"][1] == y), None);
+			return next((t for t in tilemap["sparse"] if t["position"][0] == x and t["position"][1] == y), None);
 
 def place_tile(tilemap, frame_idx, x, y):
 	x = cowtools.align(x, 16, mapping=math.floor);
 	y = cowtools.align(y, 16, mapping=math.floor);
 	match tilemap["type"]:
 		case "dense":
-			idx = y * tilemap["dense"]["columns"] + x;
+			idx = (y//16) * tilemap["dense"]["columns"] + (x//16);
 			if idx >= 0 and idx < len(tilemap["dense"]["frame_indices"]):
-				tilemap["dense"]["frame_indices"][idx] = frame_idx;
+				tilemap["dense"]["frame_indices"][idx] = frame_idx+1;
 		case "sparse":
 			existing = spatial_search(tilemap, x, y);
 			if existing == None:
@@ -116,7 +116,7 @@ def clear_tile(tilemap, x, y):
 	match tilemap["type"]:
 		case "dense":
 			data = tilemap["dense"];
-			idx = y * data["columns"] + x;
+			idx = (y//16) * data["columns"] + (x//16);
 			if idx >= 0 and idx < len(data["frame_indices"]):
 				data["frame_indices"][idx] = 0;
 		case "sparse":
