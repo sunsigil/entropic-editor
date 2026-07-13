@@ -107,13 +107,14 @@ class TilemapEditor:
 		if type_last == "dense" and self.tilemap["type"] == "sparse":
 			self.tilemap["sparse"] = scenes.tilemaps.dense_to_sparse(self.tilemap["dense"]);
 
-		self.tilemap["csv"] = input_file("CSV", self.tilemap["csv"], "*.csv", "assets/scenes/tilemaps");
+		self.tilemap["csv"] = input_file("CSV", self.tilemap["csv"], "*.csv", "assets/scenes/tilemaps", return_absolute=True);
 		if self.tilemap["type"] == "dense":
 			if imgui.button("Import"):
 				imported = scenes.tilemaps.import_tilemap(self.tilemap["csv"]);
 				self.tilemap["dense"]["rows"] = imported["rows"];
-				self.tilemap["dense"]["columns"] = imported["rows"];
+				self.tilemap["dense"]["columns"] = imported["columns"];
 				self.tilemap["dense"]["frame_indices"] = imported["frame_indices"];
+			imgui.same_line();
 			if imgui.button("Export"):
 				scenes.tilemaps.export_tilemap(self.tilemap, self.tilemap["csv"]);
 	

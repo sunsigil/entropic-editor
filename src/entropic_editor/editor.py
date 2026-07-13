@@ -85,7 +85,7 @@ if __name__ == "__main__":
 		imgui.WindowFlags_.no_collapse,
 	];
 
-	ToolWindowRegistry.register(Tool(FileExplorer, "File Explorer", flags=tool_flags, hidden=True));
+	ToolWindowRegistry.register(Tool(FileExplorer, "File Explorer", flags=tool_flags+[imgui.WindowFlags_.menu_bar], hidden=True));
 	ToolWindowRegistry.register(Tool(AssetExplorer, "Asset Explorer", flags=tool_flags, hidden=True));
 	ToolWindowRegistry.register(Tool(TextEditor, "Script Editor", flags=tool_flags, hidden=True, singleton=False));
 

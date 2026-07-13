@@ -15,15 +15,18 @@ class FileExplorer:
 		self.search = "";
 		self.asset_type = None;
 		self.filter_unused = False;
+
+		self.new_file_name = "";
 	
 		self.result = None;
 	
-	def configure(self, anchor, glob, asset_type=None):
+	def configure(self, anchor, glob, asset_type=None, return_absolute=False):
 		refresh = FileExplorer.last == None or anchor != FileExplorer.last.anchor;
 
 		self.anchor = Path(anchor);
 		self.glob = glob;
 		self.asset_type = asset_type;
+		self.return_absolute = return_absolute;
 
 		if refresh:
 			self.current = self.anchor;
@@ -38,6 +41,18 @@ class FileExplorer:
 		FileExplorer.last = copy.copy(self);
 	
 	def draw(self):
+		if imgui.begin_menu_bar():
+			if imgui.begin_menu("File"):
+				if imgui.begin_menu("New"):
+					imgui.set_next_item_width(128);
+					_, self.new_file_name = imgui.input_text("Name", self.new_file_name);
+					imgui.same_line();
+					if imgui.button("Add"):
+						Path(Path(self.current)/self.new_file_name).touch();
+					imgui.end_menu();
+				imgui.end_menu();
+			imgui.end_menu_bar();
+
 		listings = [self.current.parent.absolute()];
 		for entry in self.current.iterdir():
 			hidden = entry.name.startswith(".") or entry.name.startswith("__");
@@ -71,6 +86,9 @@ class FileExplorer:
 					self.search = "";
 				else:
 					self.result = Path(os.path.relpath(item.absolute(), self.anchor.absolute()));
+	
+		if self.result != None:
+			self.result = (self.current/self.result).absolute();
 
 	def should_close(self):
 		return self.result != None;

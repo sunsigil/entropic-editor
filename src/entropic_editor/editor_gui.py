@@ -3,6 +3,7 @@ OpenGL.FULL_LOGGING = True;
 from OpenGL.GL import *;
 from imgui_bundle import imgui;
 from enum import Enum;
+import pathlib;
 
 import context;
 import sprites;
@@ -180,7 +181,7 @@ def input_flags(gui_id, value, values):
 
 # Special Data
 
-def input_file(gui_id, value, pattern, directory=None, asset_type=None):
+def input_file(gui_id, value, pattern, directory=None, asset_type=None, return_absolute=False):
 	value = input_string(gui_id, value);
 
 	imgui.same_line();
@@ -199,7 +200,7 @@ def input_file(gui_id, value, pattern, directory=None, asset_type=None):
 					directory = AssetManager.get_document(asset_type).directory;
 				else:
 					directory = context.get().game_directory;
-			win.configure(directory, pattern, asset_type);
+			win.configure(directory, pattern, asset_type, return_absolute);
 
 	return value;
 

@@ -52,7 +52,7 @@ def sparse_to_dense(src):
 	return dst;
 
 def import_tilemap(csv_path):
-	with open(csv_path) as file:
+	with open(csv_path, "r") as file:
 		reader = csv.reader(file);
 		asset_data = {
 			"rows": 0,
@@ -61,20 +61,20 @@ def import_tilemap(csv_path):
 		};
 		for row in reader:
 			for col in row:
-				["frame_indices"].append(int(col));
+				asset_data["frame_indices"].append(int(col));
 			asset_data["rows"] += 1;
 			asset_data["columns"] = len(row);
 		return asset_data;
 
 def export_tilemap(tilemap, csv_path):
-	with open(csv_path) as file:
+	with open(csv_path, "w") as file:
 		rows = [];
 		match tilemap["type"]:
 			case "dense":
 				for row_idx in range(tilemap["dense"]["rows"]):
 					row = [];
-					for col_idx in range(tilemap["dense"]["cols"]):
-						idx = row_idx * tilemap["dense"]["cols"] + col_idx;
+					for col_idx in range(tilemap["dense"]["columns"]):
+						idx = row_idx * tilemap["dense"]["columns"] + col_idx;
 						row.append(tilemap["dense"]["frame_indices"][idx]);
 					rows.append(row);
 		writer = csv.writer(file);
@@ -155,7 +155,8 @@ def canvas_draw(canvas, tilemap, cursor=None):
 				y = y0 + row * 16;
 				for col in range(w):
 					x = x0 + col * 16;
-					frame_idx = tilemap["dense"]["frame_indices"][row * w + col]-1;
+					idx = row * w + col;
+					frame_idx = tilemap["dense"]["frame_indices"][idx]-1;
 					if frame_idx >= 0:
 						frame_idx = cowtools.clamp(frame_idx, 0, palette.frame_count-1);
 						canvas.draw_image(
