@@ -42,6 +42,9 @@ def dedup(l):
 def clamp(v, a, b):
 	return min(max(v, a), b);
 
+def align(x, n, mapping=round):
+	return int(mapping(x/n) * n);
+
 def get_by_path(structure, path):
 	if isinstance(path, str):
 		path = pathlib.PurePosixPath(path);

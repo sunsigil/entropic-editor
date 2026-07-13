@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "entropic_editor"
-version = "0.0.4"
+version = "0.0.5"
 description = "An interactive editor for game data"
 requires-python = ">=3.12"
 classifiers = [ "Programming Language :: Python :: 3", "Operating System :: MacOS",]

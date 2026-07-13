@@ -6,12 +6,12 @@ import copy;
 from cowtools import *;
 from canvas import *;
 from assets import *;
-from sprites import SpriteBank, EditorSprite, SpritePreview;
+from sprites import SpriteBank;
 from input import InputManager;
 from editor_gui import *;
 from geometry import *;
 import scenes.walls;
-import asset_types;
+import scenes.tilemaps;
 import scripts;
 
 #########################################################
@@ -67,35 +67,20 @@ class TilemapEditor:
 	def __init__(self, parent):
 		self.parent = parent;
 		self.tilemap = None;
+		
 		self.selected_frame = 0;
-	
-	def _type(self):
-		return self.tilemap["type"];
-	def _data(self):
-		match self._type():
-			case "sparse":
-				return self.tilemap["sparse"];
-			case "dense":
-				return self.tilemap["dense"];
-	
-	def _spatial_search(self, position):
-		match self._type():
-			case "sparse":
-				x, y = self.parent.canvas_grid.snap_point(position);
-				tile = next((t for t in self._data() if t["position"][0] == x and t["position"][1] == y), None);
-				return tile;
-			case "dense":
-				x, y = self.parent.canvas_grid.snap_point(position);
-				idx = y * self._data()["columns"] + x;
-				return self._data()["frame_indices"][idx] != 0;
-	def _is_occupied(self, position):
-		return self._spatial_search(position) != None;
+		self.cursor = None;
 
 	def on_load_scene(self):
 		self.tilemap = self.parent.scene["tilemap"];
 	
-	def _gui_draw_palette(self):
+	def draw_palette(self):
+		self.tilemap["palette"] = input_asset("Palette", self.tilemap["palette"], "sprite");
+
 		sprite = SpriteBank.search(self.tilemap["palette"]);
+		if sprite == None:
+			return;
+	
 		wdw_w = imgui.get_content_region_avail().x;
 		cols = int(wdw_w // 72);
 		rows = int(math.ceil(sprite.frame_count / cols)) if cols > 0 else 0;
@@ -111,76 +96,56 @@ class TilemapEditor:
 				i += 1;
 			imgui.new_line();
 	
-	def _load_csv(self):
-		with open(self._data()["csv"]) as file:
-			reader = csv.reader(file);
-			self._data()["frame_indices"] = [];
-			rows = 0;
-			for row in reader:
-				for col in row:
-					self._data()["frame_indices"].append(int(col));
-				rows += 1;
-			self._data()["rows"] = rows;
-			self._data()["columns"] = len(self._data()["frame_indices"])//rows;
-	
-	def _gui_draw_csv(self):
-		_, self._data()["position"] = imgui.input_int2("Position", self._data()["position"]);
-		
-		last_csv = self._data()["csv"];
-		self._data()["csv"] = input_file("CSV", self._data()["csv"], "*.csv");
-		if self._data()["csv"] != last_csv:
-			self._load_csv();
-	
 	def draw_gui(self):
 		if self.tilemap == None:
 			return;
-	
-		self.tilemap["palette"] = input_asset("##palette", self.tilemap["palette"], "sprite");
-		if self.tilemap["palette"] == "":
-			return;
 
-		match self._type():
-			case "sparse":
-				self._gui_draw_palette();
-			case "dense":
-				self._gui_draw_csv();
+		type_last = self.tilemap["type"];
+		self.tilemap["type"] = input_enum("Type", self.tilemap["type"], ["sparse", "dense"]);
+		if type_last == "sparse" and self.tilemap["type"] == "dense":
+			self.tilemap["dense"] = scenes.tilemaps.sparse_to_dense(self.tilemap["sparse"]);
+		if type_last == "dense" and self.tilemap["type"] == "sparse":
+			self.tilemap["sparse"] = scenes.tilemaps.dense_to_sparse(self.tilemap["dense"]);
+
+		self.tilemap["csv"] = input_file("CSV", self.tilemap["csv"], "*.csv", "assets/scenes/tilemaps");
+		if self.tilemap["type"] == "dense":
+			if imgui.button("Import"):
+				imported = scenes.tilemaps.import_tilemap(self.tilemap["csv"]);
+				self.tilemap["dense"]["rows"] = imported["rows"];
+				self.tilemap["dense"]["columns"] = imported["rows"];
+				self.tilemap["dense"]["frame_indices"] = imported["frame_indices"];
+			if imgui.button("Export"):
+				scenes.tilemaps.export_tilemap(self.tilemap, self.tilemap["csv"]);
 	
-	def _paint_tick(self):
+		self.draw_palette();
+	
+	def paint(self):
+		if self.cursor == None:
+			return;
+	
 		palette = SpriteBank.search(self.tilemap["palette"]);
 		self.selected_frame = clamp(self.selected_frame, 0, palette.frame_count-1);
+		x, y = self.cursor;
 
-		if self.parent.canvas_io.is_cursor_in_bounds():
-			if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT):
-				cursor = self.parent.canvas_io.get_cursor();
-				tile_cursor = self.parent.canvas_grid.snap_point(cursor);
-
-				if InputManager.is_held(glfw.KEY_LEFT_SHIFT):
-					trash = [];
-					for idx, tile in enumerate(self.tilemap["sparse"]):
-						tx, ty = self.parent.canvas_grid.snap_point(tile["position"]);
-						cx, cy = tile_cursor;
-						if int(tx) == int(cx) and int(ty) == int(cy):
-							trash.append(idx);
-					process_trash(self.tilemap["sparse"], trash, indices=True);
-	
-				elif self.selected_frame != None:
-					existing = self._spatial_search(tile_cursor);
-					if existing == None:
-						self.tilemap["sparse"].append({
-							"position": list(tile_cursor),
-							"frame_idx": self.selected_frame
-						});
-					else:
-						existing["frame_idx"] = self.selected_frame;
+		if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT):
+			if InputManager.is_held(glfw.KEY_LEFT_SHIFT):
+				scenes.tilemaps.clear_tile(self.tilemap, x, y);
+			else:
+				scenes.tilemaps.place_tile(self.tilemap, self.selected_frame, x, y);
 
 	def tick(self):
 		if self.tilemap == None:
 			return;
-		if self.tilemap["palette"] == "":
-			return;
-		match self._type():
-			case "sparse":
-				self._paint_tick();
+		
+		if self.parent.canvas_io.is_cursor_in_bounds():
+			x, y = self.parent.canvas_io.get_cursor();
+			if self.tilemap["type"] == "dense":
+				dx, dy = self.tilemap["dense"]["position"];
+				x -= dx;
+				y -= dy;
+			self.cursor = (x, y);
+		
+		self.paint();
 
 class WallEditor:
 	def __init__(self, parent):
@@ -701,46 +666,6 @@ class SceneViewer:
 		self.show_walls = True;
 		self.show_boxes = False;
 		self.show_gizmos = True;
-
-	def draw_tiles(self):
-		tilemap = self.parent.scene["tilemap"];
-		palette = SpriteBank.search(tilemap["palette"]);
-
-		match tilemap["type"]:
-			case "sparse":
-				for tile in tilemap["sparse"]:
-					frame_idx = clamp(tile["frame_idx"], 0, palette.frame_count-1);
-					self.parent.canvas.draw_image(
-						tile["position"][0], tile["position"][1],
-						palette.frame_images[frame_idx]
-					);
-
-				if self.parent.edit_mode == EditMode.TILEMAP:
-					cursor = self.parent.canvas_io.get_cursor();
-					grid_cursor = self.parent.canvas_grid.snap_point(cursor);
-					x0, y0 = grid_cursor;
-					x1, y1 = x0+16, y0+16;
-					self.parent.canvas.draw_aabb(
-						(x0, y0, x1, y1),
-						(255, 255, 255),
-					);
-			
-			case "dense":
-				x0, y0 = tilemap["dense"]["position"];
-				w = tilemap["dense"]["columns"];
-				h = tilemap["dense"]["rows"];
-
-				for row in range(h):
-					y = y0 + row * 16;
-					for col in range(w):
-						x = x0 + col * 16;
-						frame_idx = tilemap["dense"]["frame_indices"][row * w + col]-1;
-						if frame_idx >= 0:
-							frame_idx = clamp(frame_idx, 0, palette.frame_count-1);
-							self.parent.canvas.draw_image(
-								x, y,
-								palette.frame_images[frame_idx]
-							);
 	
 	def draw_entities(self):
 		def sort_y(entity):
@@ -800,7 +725,7 @@ class SceneViewer:
 		self.parent.canvas.clear(tuple(self.parent.scene["background"]));
 
 		if self.show_tiles:
-			self.draw_tiles();
+			scenes.tilemaps.canvas_draw(self.parent.canvas, self.parent.scene["tilemap"], self.parent.tilemap_editor.cursor);
 		if self.show_grid:
 			self.parent.canvas_grid.draw_lines((64, 64, 64));
 		self.parent.canvas.draw_guides((128, 128, 128));
@@ -810,7 +735,7 @@ class SceneViewer:
 		if self.show_texts:
 			self.draw_texts();
 		if self.show_walls:
-			self.draw_walls();	
+			self.draw_walls();
 
 		if self.show_gizmos:
 			self.parent.door_editor.draw();
@@ -973,6 +898,8 @@ class SceneEditor:
 						if imgui.tree_node(f"{sd.key}"):
 							sd_inst["value"] = typed_input(f"##{sd.key}", sd.type, sd_inst["value"]);
 							imgui.tree_pop();
+					if imgui.button("Reset to defaults"):
+						entity["script_data"] = [];
 					imgui.tree_pop();
 				imgui.tree_pop();
 	

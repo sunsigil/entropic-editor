@@ -103,7 +103,10 @@ def input_bool(gui_id, value):
 	return value;
 
 def input_string(gui_id, value, long=False):
-	_, value = imgui.input_text(str(gui_id), str(value));
+	text_id = str(gui_id);
+	if not text_id.startswith("##") and long:
+		text_id = f"##{text_id}";
+	_, value = imgui.input_text(text_id, str(value));
 	Tooltip.ping();
 	ContextMenu.ping(gui_id);
 	
@@ -111,7 +114,9 @@ def input_string(gui_id, value, long=False):
 		imgui.same_line();
 		win_id = imgui.get_id(gui_id);
 		win = ToolWindowRegistry.lookup(TextEditor).window(win_id);
-		if imgui.button(f"Edit##{gui_id}") and win == None:
+
+		button = f"Edit{gui_id}" if gui_id.startswith("##") else f"{gui_id}##edit_button";
+		if imgui.button(button) and win == None:
 			win = ToolWindowRegistry.lookup(TextEditor).open(win_id);
 			win.configure(gui_id, value);
 		if win != None:
@@ -193,7 +198,7 @@ def input_file(gui_id, value, pattern, directory=None, asset_type=None):
 				if asset_type != None:
 					directory = AssetManager.get_document(asset_type).directory;
 				else:
-					directory = context.get().directory;
+					directory = context.get().game_directory;
 			win.configure(directory, pattern, asset_type);
 
 	return value;
@@ -295,7 +300,7 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 		if T.pattern == "*.png":
 			if previews:
 				sprites.SpritePreview.draw(value);
-			directory = context.get().directory/"assets/sprites";
+			directory = context.get().game_directory/"assets/sprites";
 		value = input_file(gui_id, value, T.pattern, directory=directory);
 	
 	if isinstance(T, asset_types.Flags):

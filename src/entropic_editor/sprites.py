@@ -111,7 +111,7 @@ class SpritePreview:
 
 class SpriteImporter:
 	def __init__(self):
-		self.root = context.get().directory/"assets/sprites";
+		self.root = context.get().game_directory/"assets/sprites";
 		self.pattern = None;
 
 		self.candidates = [];

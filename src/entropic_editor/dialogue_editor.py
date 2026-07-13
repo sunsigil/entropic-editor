@@ -194,7 +194,7 @@ class DialogueEditor:
 		node.asset["name"] = gui.input_string("##name", node.asset["name"]);
 
 		imgui.set_next_item_width(line_width);
-		node.asset["script"] = gui.input_string(f"##script", node.asset["script"], long=True);
+		node.asset["script"] = gui.input_string(f"Script", node.asset["script"], long=True);
 		imgui.dummy((line_width, 8));
 
 		imgui.begin_group();
@@ -203,7 +203,7 @@ class DialogueEditor:
 			imgui.push_id(str(idx));
 
 			imgui.set_next_item_width(line_width);
-			node.asset["lines"][idx] = gui.input_string(f"##line{idx}", line, long=True);
+			node.asset["lines"][idx] = gui.input_string(f"##Line {idx}", line, long=True);
 
 			imgui.same_line();
 			if imgui.button("-"):
@@ -227,7 +227,7 @@ class DialogueEditor:
 			imgui.dummy((line_width-edge_width, 0));
 			imgui.same_line();
 			imgui.set_next_item_width(edge_width);
-			edge["text"] = gui.input_string(f"##text", edge["text"]);
+			edge["text"] = gui.input_string("##Text", edge["text"]);
 
 			imgui.same_line();
 			if imgui.button("-"):
@@ -241,7 +241,7 @@ class DialogueEditor:
 			imgui.dummy((line_width-edge_width, 0));
 			imgui.same_line();
 			imgui.set_next_item_width(edge_width);
-			edge["condition"] = gui.input_string(f"##condition", edge["condition"], long=True);
+			edge["condition"] = gui.input_string("Condition", edge["condition"], long=True);
 		
 			imgui.pop_id();
 		
@@ -323,10 +323,6 @@ class DialogueEditor:
 			if not node.position is None:
 				imnodes.set_node_position(node.node_id, node.position);
 				node.position = None;
-		
-		if input.InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
-			cursor = input.InputManager.get_imgui_cursor();
-			cursor = imnodes.screen_to_canvas(cursor);
 		
 		imnodes.end();
 
