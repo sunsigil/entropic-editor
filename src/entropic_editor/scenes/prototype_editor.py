@@ -16,14 +16,16 @@ class PrototypeSpawner:
 	def __init__(self):
 		self.size = (512, 256);
 		self.sprite = "";
+		self.static = True;
 		self.finished = False;
 
 	def draw(self):
 		imgui.set_next_window_size(self.size);
 		_, open = imgui.begin("Create prototype", not self.finished);
 
-		self.sprite = input_asset("sprite", self.sprite, "sprite");
-	
+		self.sprite = input_asset("Sprite", self.sprite, "sprite");
+		self.static = input_bool("Static", self.static);
+
 		if AssetManager.search("sprite", self.sprite) != None:
 			if imgui.button("Create"):
 				prototype = AssetManager.get_document("prototype").spawn_entry();
@@ -31,8 +33,15 @@ class PrototypeSpawner:
 				prototype["sprite"] = self.sprite;
 				sprite = SpriteBank.search(self.sprite);
 				prototype["sprite_offset"] = [-sprite.frame_width//2, -sprite.frame_height];
-				prototype["has_blocker"] = True;
-				prototype["blocker"] = [-sprite.frame_width//2, -8, sprite.frame_width//2, 0];
+
+				if self.static:
+					prototype["walls"].append({
+						"type": "aabb",
+						"aabb": [-sprite.frame_width//2, -8, sprite.frame_width//2, 0]
+					});
+				else:
+					prototype["has_blocker"] = True;
+					prototype["blocker"] = [-sprite.frame_width//2, -8, sprite.frame_width//2, 0];
 				self.finished = True;
 			imgui.same_line();
 		
@@ -164,15 +173,17 @@ class PrototypeEditor:
 			self.canvas.draw_guides((192, 192, 192));
 
 		if self.prototype != None:
-			sprite = SpriteBank.search(self.prototype["sprite"]);
-			x, y = self.prototype["sprite_offset"];
-			self.canvas.draw_image(x, y, sprite.frame_images[0]);
-			if self.draw_outlines:
-				self.canvas.draw_aabb((x, y, x+sprite.frame_width, y+sprite.frame_height), (255, 255, 255));
+			sprite = SpriteBank.search(self.prototype["sprite"], safe=False);
+			if sprite != None:
+				x, y = self.prototype["sprite_offset"];
 
-			y = self.prototype["sprite_offset"][1] + sprite.frame_height + self.prototype["y_sort_offset"];
-			w = self.canvas.width;
-			self.canvas.draw_line(-w, y, w, y, (255, 255, 0));
+				self.canvas.draw_image(x, y, sprite.frame_images[0]);
+				if self.draw_outlines:
+					self.canvas.draw_aabb((x, y, x+sprite.frame_width, y+sprite.frame_height), (255, 255, 255));
+
+				y = self.prototype["sprite_offset"][1] + sprite.frame_height + self.prototype["y_sort_offset"];
+				w = self.canvas.width;
+				self.canvas.draw_line(-w, y, w, y, (255, 255, 0));
 
 			if self.prototype["override_prompt_position"]:
 				x, y = self.prototype["prompt_position"];

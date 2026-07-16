@@ -31,9 +31,8 @@ class AssetDocument:
 		self.data = json.load(file);
 		file.close();
 		
-		keys = self.data.keys();
-		self.type_name = next(k for k in keys if k != "instances");
-		self.type_tree = asset_types.construct_element(self.type_name, self.data[self.type_name]);
+		self.type_name, type_expr = next((k,v) for (k,v) in self.data.items() if k != "instances");
+		self.type_tree = asset_types.construct_type(type_expr["type"]);
 		self.type_helper = asset_types.TypeHelper(self.type_tree);
 		self.instances = self.data["instances"];
 	
@@ -106,7 +105,7 @@ class AssetManager:
 			return None;
 		return AssetManager.document_map[asset_type];
 
-	def get_tree(asset_type) -> asset_types.Element:
+	def get_tree(asset_type) -> asset_types.Type:
 		if asset_type not in AssetManager.document_map:
 			return None;
 		return AssetManager.document_map[asset_type].type_tree;

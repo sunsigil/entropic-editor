@@ -45,6 +45,13 @@ def clamp(v, a, b):
 def align(x, n, mapping=round):
 	return int(mapping(x/n) * n);
 
+def enforce_length(l, n, default=None):
+	if len(l) > n:
+		del l[:n];
+	else:
+		dl = n-len(l);
+		l.extend([default for i in range(dl)]);
+
 def get_by_path(structure, path):
 	if isinstance(path, str):
 		path = pathlib.PurePosixPath(path);

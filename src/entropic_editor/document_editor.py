@@ -35,7 +35,7 @@ class DocumentEditor:
 			gui_id = f"{instance["name"]}####{id(instance)}" if "name" in instance else id(instance);
 			gui.typed_input(
 				gui_id,
-				DocumentEditor.active_document.type_tree.T, instance,
+				DocumentEditor.active_document.type_tree, instance,
 				previews=True, tooltip=DocumentEditor.show_typetip
 			);
 			if gui.ContextMenu.begin(gui_id):

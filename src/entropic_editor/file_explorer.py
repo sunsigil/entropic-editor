@@ -87,7 +87,7 @@ class FileExplorer:
 				else:
 					self.result = Path(os.path.relpath(item.absolute(), self.anchor.absolute()));
 	
-		if self.result != None:
+		if self.result != None and self.return_absolute:
 			self.result = (self.current/self.result).absolute();
 
 	def should_close(self):

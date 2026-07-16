@@ -66,13 +66,15 @@ class EditMode(Enum):
 class TilemapEditor:
 	def __init__(self, parent):
 		self.parent = parent;
+		self.tilemaps = None;
 		self.tilemap = None;
 		
 		self.selected_frame = 0;
 		self.cursor = None;
 
 	def on_load_scene(self):
-		self.tilemap = self.parent.scene["tilemap"];
+		self.tilemaps = self.parent.scene["tilemaps"];
+		self.tilemap = self.tilemaps[0] if len(self.tilemaps) > 0 else None;
 	
 	def draw_palette(self):
 		self.tilemap["palette"] = input_asset("Palette", self.tilemap["palette"], "sprite");
@@ -97,6 +99,7 @@ class TilemapEditor:
 			imgui.new_line();
 	
 	def draw_gui(self):
+		self.tilemap = combo("Tilemap", self.tilemap, self.tilemaps, lambda x: self.tilemaps.index(x) if x != None else None);
 		if self.tilemap == None:
 			return;
 
@@ -106,19 +109,23 @@ class TilemapEditor:
 			self.tilemap["dense"] = scenes.tilemaps.sparse_to_dense(self.tilemap["sparse"]);
 		if type_last == "dense" and self.tilemap["type"] == "sparse":
 			self.tilemap["sparse"] = scenes.tilemaps.dense_to_sparse(self.tilemap["dense"]);
+		
+		if self.tilemap["type"] == "dense":
+			self.tilemap["dense"]["position"] = input_vec2("Position", self.tilemap["dense"]["position"]);
+			self.tilemap["dense"]["rows"] = input_int("Rows", self.tilemap["dense"]["rows"]);
+			self.tilemap["dense"]["columns"] = input_int("Columns", self.tilemap["dense"]["columns"]);
+			enforce_length(self.tilemap["dense"]["frame_indices"], self.tilemap["dense"]["rows"] * self.tilemap["dense"]["columns"], 0);
+		
+		self.tilemap["is_foreground"] = input_bool("Is Foreground", self.tilemap["is_foreground"]);
+
+		self.draw_palette();
 
 		self.tilemap["csv"] = input_file("CSV", self.tilemap["csv"], "*.csv", "assets/scenes/tilemaps", return_absolute=True);
-		if self.tilemap["type"] == "dense":
-			if imgui.button("Import"):
-				imported = scenes.tilemaps.import_tilemap(self.tilemap["csv"]);
-				self.tilemap["dense"]["rows"] = imported["rows"];
-				self.tilemap["dense"]["columns"] = imported["columns"];
-				self.tilemap["dense"]["frame_indices"] = imported["frame_indices"];
-			imgui.same_line();
-			if imgui.button("Export"):
-				scenes.tilemaps.export_tilemap(self.tilemap, self.tilemap["csv"]);
-	
-		self.draw_palette();
+		if imgui.button("Import"):
+			scenes.tilemaps.import_tilemap(self.tilemap, self.tilemap["csv"]);
+		imgui.same_line();
+		if imgui.button("Export"):
+			scenes.tilemaps.export_tilemap(self.tilemap, self.tilemap["csv"]);
 	
 	def paint(self):
 		if self.cursor == None:
@@ -139,12 +146,9 @@ class TilemapEditor:
 			return;
 		
 		if self.parent.canvas_io.is_cursor_in_bounds():
-			x, y = self.parent.canvas_io.get_cursor();
-			if self.tilemap["type"] == "dense":
-				dx, dy = self.tilemap["dense"]["position"];
-				x -= dx;
-				y -= dy;
-			self.cursor = (x, y);
+			self.cursor = self.parent.canvas_io.get_cursor();
+		else:
+			self.cursor = None;
 		
 		self.paint();
 
@@ -180,7 +184,7 @@ class WallEditor:
 
 			if imgui.begin_popup_context_item():
 				if imgui.menu_item_simple("Delete"):
-					self.trash.trash_index(idx);
+					self.trash.trash_index(self.walls, idx);
 					imgui.close_current_popup();
 				imgui.end_popup();
 			self.trash.flush();
@@ -230,9 +234,10 @@ class WallEditor:
 			return;
 	
 		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_D):
-			if self.selected != None:
-				self.scenes.walls.remove(self.selected);
-				self.selection_context.clear();
+			selected = self.selection_context.get_selection(True);
+			self.trash.trash_item(self.walls, selected);
+			self.trash.flush();
+			self.selection_context.clear();
 		
 		self.synchronize_manip();
 		self.canvas_manip.tick();
@@ -374,15 +379,14 @@ class DoorEditor:
 		def draw(self):
 			_, self.open = imgui.begin("Select door", self.open);
 			for scene in self.parent.door_hierarchy:
-				if imgui.collapsing_header(scene):
-					imgui.push_id(scene);
+				if imgui.tree_node(f"{scene}##{id(scene)}"):
 					for door in self.parent.door_hierarchy[scene]:
 						if door == self.door:
 							continue;
 						to_scene = get_script_data(self.door.entity, "to_scene");
 						to_entity = get_script_data(self.door.entity, "to_entity");
 						was_selected = door.entity["name"] == to_entity["value"];
-						clicked, value = imgui.menu_item(door.entity["name"], "", was_selected);
+						clicked, value = imgui.menu_item(f"{door.entity["name"]}##{id(door.entity)}", "", was_selected);
 						if clicked:
 							if was_selected:
 								to_scene["value"] = "";
@@ -390,7 +394,7 @@ class DoorEditor:
 							else:
 								to_scene["value"] = door.scene["name"];
 								to_entity["value"] = door.entity["name"];
-					imgui.pop_id();
+					imgui.tree_pop();
 			imgui.end();
 	
 	def __init__(self, parent):
@@ -423,7 +427,7 @@ class DoorEditor:
 		for scene in self.door_hierarchy:
 			if scene == self.parent.scene["name"]:
 				for door in self.door_hierarchy[scene]:
-					if imgui.tree_node(door.entity["name"]):
+					if imgui.tree_node(door.entity["name"]+"##"+str(id(door.entity))):
 						to_scene = get_script_data(door.entity, "to_scene");
 						to_entity = get_script_data(door.entity, "to_entity");
 						if AssetManager.search("scene", to_scene["value"]) == None:
@@ -609,6 +613,8 @@ class NavlistEditor:
 			node = navlist.asset["nodes"][idx];
 			imgui.text(f"{navlist.entity["name"]} ({idx})");
 
+			self.manip_mode = input_enum("Mode", self.manip_mode, NavlistEditor.ManipMode);
+
 			node["position"] = input_vec2("Position", node["position"]);
 			node["wait_frames"] = input_int("Wait frames", node["wait_frames"]);
 
@@ -726,7 +732,8 @@ class SceneViewer:
 		self.parent.canvas.clear(tuple(self.parent.scene["background"]));
 
 		if self.show_tiles:
-			scenes.tilemaps.canvas_draw(self.parent.canvas, self.parent.scene["tilemap"], self.parent.tilemap_editor.cursor);
+			for tilemap in self.parent.scene["tilemaps"]:
+				scenes.tilemaps.canvas_draw(self.parent.canvas, tilemap, self.parent.tilemap_editor.cursor);
 		if self.show_grid:
 			self.parent.canvas_grid.draw_lines((64, 64, 64));
 		self.parent.canvas.draw_guides((128, 128, 128));
@@ -765,7 +772,7 @@ class SceneEditor:
 		self.canvas_io = CanvasIO(self.canvas);
 		self.canvas_grid = CanvasGrid(
 			self.canvas,
-			16
+			4
 		);
 
 		self.event_queue = [];
@@ -887,6 +894,8 @@ class SceneEditor:
 				self.selection_context.select(entity, exclusive=True);
 				
 				entity["name"] = input_string("Name", entity["name"]);
+				imgui.same_line();
+				entity["enabled"] = input_bool("##enabled", entity["enabled"]);
 				entity["prototype"] = input_asset("Prototype", entity["prototype"], "prototype");
 				if len(entity["prototype"]) > 0 and len(entity["name"]) <= 0:
 					entity["name"] = entity["prototype"];
@@ -922,8 +931,9 @@ class SceneEditor:
 					self.trash.trash_item(self.scene["entities"], selection);
 			
 			if imgui.menu_item_simple("Spawn"):
-				entity = AssetManager.get_tree("scene").search("entities").T.inmost.prototype();
-				entity["name"] = "New entity";
+				print(AssetManager.get_tree("scene").search("entities"));
+				entity = AssetManager.get_tree("scene").search("entities").inmost.prototype();
+				entity["name"] = "";
 				entity["position"] = self.canvas_io.get_cursor();
 				self.scene["entities"].append(entity);
 

@@ -3,7 +3,6 @@ OpenGL.FULL_LOGGING = True;
 from OpenGL.GL import *;
 from imgui_bundle import imgui;
 from enum import Enum;
-import pathlib;
 
 import context;
 import sprites;
@@ -243,6 +242,9 @@ def input_sprite(gui_id, value, size=(64, 64)):
 # Structured Data
 
 def typed_input(gui_id, T, value, previews=False, tooltip=False):
+	if getattr(T, "read_only", False):
+		typed_display(gui_id, T, value, previews, tooltip);
+	
 	gui_id = str(gui_id);
 	anchor = get_anchor(gui_id);
 
@@ -255,12 +257,12 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 		ContextMenu.ping(gui_id);
 
 		if node_open:
-			for element in T.elements:
-				if element.name in value:
-					if element.get_attribute("read-only"):
-						typed_display(f"{element.name}##{anchor}", element.T, value[element.name], previews, tooltip);
+			for key,element in T.elements.items():
+				if key in value:
+					if getattr(element, "read_only", False):
+						typed_display(f"{key}##{anchor}", T, value[key], previews, tooltip);
 					else:
-						value[element.name] = typed_input(f"{element.name}##{anchor}", element.T, value[element.name], previews, tooltip);
+						value[key] = typed_input(f"{key}##{anchor}", T, value[key], previews, tooltip);
 			imgui.tree_pop();
 
 	if isinstance(T, asset_types.List):
@@ -273,19 +275,21 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 			imgui.end_popup();
 
 		if node_open:
-			trash = [];
-
 			N = len(value);
-			for i in range(N):
-				value[i] = typed_input(f"[{i}]##{anchor}", T.T, value[i]);
-				if ContextMenu.begin(f"[{i}]##{anchor}"):
-					if imgui.menu_item_simple("Delete"):
-						trash.append(i);
-					imgui.end_popup();
-			
-			for i in trash:
-				del value[i];
-			trash = [];
+
+			if getattr(T, "read_only", False):
+				typed_display(f"[{i}]##{anchor}", T.T, value[i], previews, tooltip);
+			else:
+				trash = [];
+				for i in range(N):
+					value[i] = typed_input(f"[{i}]##{anchor}", T.T, value[i], previews, tooltip);
+					if ContextMenu.begin(f"[{i}]##{anchor}"):
+						if imgui.menu_item_simple("Delete"):
+							trash.append(i);
+						imgui.end_popup();
+				for i in trash:
+					del value[i];
+				trash = [];
 
 			imgui.tree_pop();
 	
@@ -293,14 +297,14 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 		if previews:
 			match T.name:
 				case "sprite":
-					sprites.SpritePreview.draw(value);
+					sprites.SpritePreview.draw(value, show_dimensions=True);
 		value = input_asset(gui_id, value, T.name);
 	
 	if isinstance(T, asset_types.File):
 		directory = None;
 		if T.pattern == "*.png":
 			if previews:
-				sprites.SpritePreview.draw(value);
+				sprites.SpritePreview.draw(value, show_dimensions=True);
 			directory = context.get().game_directory/"assets/sprites";
 		value = input_file(gui_id, value, T.pattern, directory=directory);
 	
@@ -338,8 +342,8 @@ def typed_display(gui_id, T, value, previews=False, tooltip=False):
 
 		if node_open:
 			for element in T.elements:
-				if element.name in value:
-					value[element.name] = typed_display(f"{element.name}##{anchor}", element.T, value[element.name], previews, tooltip);
+				if key in value:
+					value[key] = typed_display(f"{key}##{anchor}", element.T, value[key], previews, tooltip);
 			imgui.tree_pop();
 
 	if isinstance(T, asset_types.List):

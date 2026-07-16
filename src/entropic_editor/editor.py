@@ -115,6 +115,7 @@ if __name__ == "__main__":
 				document.save();
 
 		imgui.set_next_window_pos((0, 0));
+		imgui.set_next_window_size(imgui.ImVec2(1920*0.8, 1080*0.8));
 		imgui.begin(context.get().name, flags=window_flags | (splash_flags if DocumentEditor.active_document == None else 0));
 
 		if imgui.begin_main_menu_bar():

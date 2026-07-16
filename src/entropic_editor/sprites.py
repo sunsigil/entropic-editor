@@ -13,7 +13,7 @@ def _is_image_black(img):
 	for y in range(img.height):
 		for x in range(img.width):
 			p = pixels[x, y];
-			if p[3] >= 128 and p[0] > 16 or p[1] > 16 or p[2] > 16:
+			if p[3] >= 128 and p[0] > 32 or p[1] > 32 or p[2] > 32:
 				return False;
 	return True;
 

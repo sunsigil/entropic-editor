@@ -25,6 +25,9 @@ def sparse_to_dense(src):
 		"frame_indices": []
 	};
 
+	if len(src) == 0:
+		return dst;
+
 	min_x = math.inf;
 	min_y = math.inf;
 	max_x = -math.inf;
@@ -51,7 +54,7 @@ def sparse_to_dense(src):
 
 	return dst;
 
-def import_tilemap(csv_path):
+def _import_dense(csv_path):
 	with open(csv_path, "r") as file:
 		reader = csv.reader(file);
 		asset_data = {
@@ -66,19 +69,33 @@ def import_tilemap(csv_path):
 			asset_data["columns"] = len(row);
 		return asset_data;
 
-def export_tilemap(tilemap, csv_path):
+def import_tilemap(tilemap, csv_path):
+	match tilemap["type"]:
+		case "dense":
+			tilemap["dense"].update(_import_dense(csv_path));
+		case "sparse":
+			dense = _import_dense(csv_path);
+			dense["position"] = [0, 0];
+			tilemap["sparse"] = dense_to_sparse(dense);
+
+def _export_dense(dense, csv_path):
 	with open(csv_path, "w") as file:
 		rows = [];
-		match tilemap["type"]:
-			case "dense":
-				for row_idx in range(tilemap["dense"]["rows"]):
-					row = [];
-					for col_idx in range(tilemap["dense"]["columns"]):
-						idx = row_idx * tilemap["dense"]["columns"] + col_idx;
-						row.append(tilemap["dense"]["frame_indices"][idx]);
-					rows.append(row);
+		for row_idx in range(dense["rows"]):
+			row = [];
+			for col_idx in range(dense["columns"]):
+				idx = row_idx * dense["columns"] + col_idx;
+				row.append(dense["frame_indices"][idx]);
+			rows.append(row);
 		writer = csv.writer(file);
 		writer.writerows(rows);
+
+def export_tilemap(tilemap, csv_path):
+	match tilemap["type"]:
+		case "dense":
+			_export_dense(tilemap["dense"]);
+		case "sparse":
+			_export_dense(sparse_to_dense(tilemap["sparse"]));
 
 def spatial_search(tilemap, x, y):
 	x = cowtools.align(x, 16, mapping=math.floor);
@@ -97,9 +114,15 @@ def place_tile(tilemap, frame_idx, x, y):
 	y = cowtools.align(y, 16, mapping=math.floor);
 	match tilemap["type"]:
 		case "dense":
-			idx = (y//16) * tilemap["dense"]["columns"] + (x//16);
-			if idx >= 0 and idx < len(tilemap["dense"]["frame_indices"]):
+			dx, dy = tilemap["dense"]["position"];
+			x, y = (x-dx)//16, (y-dy)//16;
+			w, h = tilemap["dense"]["columns"], tilemap["dense"]["rows"];
+			if x >= 0 and x < w and y >= 0 and y < h:
+				idx = y * w + x;
 				tilemap["dense"]["frame_indices"][idx] = frame_idx+1;
+			else:
+				print("Rejecting", x, y);
+		
 		case "sparse":
 			existing = spatial_search(tilemap, x, y);
 			if existing == None:
@@ -115,10 +138,13 @@ def clear_tile(tilemap, x, y):
 	y = cowtools.align(y, 16, mapping=math.floor);
 	match tilemap["type"]:
 		case "dense":
-			data = tilemap["dense"];
-			idx = (y//16) * data["columns"] + (x//16);
-			if idx >= 0 and idx < len(data["frame_indices"]):
-				data["frame_indices"][idx] = 0;
+			dx, dy = tilemap["dense"]["position"];
+			x, y = (x-dx)//16, (y-dy)//16;
+			w, h = tilemap["dense"]["columns"], tilemap["dense"]["rows"];
+			if x >= 0 and x < w and y >= 0 and y < h:
+				idx = y * w + x;
+				tilemap["dense"]["frame_indices"][idx] = 0;
+		
 		case "sparse":
 			existing = spatial_search(tilemap, x, y);
 			if existing != None:
@@ -135,22 +161,13 @@ def canvas_draw(canvas, tilemap, cursor=None):
 					tile["position"][0], tile["position"][1],
 					palette.frame_images[frame_idx]
 				);
-
-			if cursor != None:
-				x, y = cursor;
-				x0 = cowtools.align(x, 16, mapping=math.floor);
-				y0 = cowtools.align(y, 16, mapping=math.floor);
-				x1, y1 = x0+16, y0+16;
-				canvas.draw_aabb(
-					(x0, y0, x1, y1),
-					(255, 255, 255),
-				);
 		
 		case "dense":
 			x0, y0 = tilemap["dense"]["position"];
 			w = tilemap["dense"]["columns"];
 			h = tilemap["dense"]["rows"];
 
+			canvas.draw_circle(x0, y0, 4, (255, 255, 255));
 			for row in range(h):
 				y = y0 + row * 16;
 				for col in range(w):
@@ -163,3 +180,14 @@ def canvas_draw(canvas, tilemap, cursor=None):
 							x, y,
 							palette.frame_images[frame_idx]
 						);
+			canvas.draw_aabb((x0, y0, x0+w*16, y0+h*16), (255, 255, 255));
+
+	if cursor != None:
+		x, y = cursor;
+		x0 = cowtools.align(x, 16, mapping=math.floor);
+		y0 = cowtools.align(y, 16, mapping=math.floor);
+		x1, y1 = x0+16, y0+16;
+		canvas.draw_aabb(
+			(x0, y0, x1, y1),
+			(255, 255, 255),
+		);
