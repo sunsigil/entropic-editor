@@ -223,11 +223,9 @@ class WallEditor:
 					self.selection_context.select(new_wall);
 
 			if isinstance(event, CanvasManipDrag):
-				if event.eeid == None:
-					self.parent.view_drag_handler(event);
-					continue;
-				wall = self.manip_registry.search(event.eeid);
-				scenes.walls.canvas_drag(wall, event, self.parent.canvas_grid);		
+				if event.eeid != None:
+					wall = self.manip_registry.search(event.eeid);
+					scenes.walls.canvas_drag(wall, event, self.parent.canvas_grid);
 	
 	def tick(self):
 		if self.walls == None:
@@ -794,16 +792,6 @@ class SceneEditor:
 		self.scene_viewer = SceneViewer(self);
 
 		self._load_scene(AssetManager.get_first("scene"));
-	
-	def view_drag_handler(self, event):
-		match event.signal:
-			case CanvasManipDrag.Signal.TICK:
-				x0, y0 = event.start;
-				x, y = event.point;
-				dx, dy = x-x0, y-y0;
-				
-				ox, oy = self.canvas.origin;
-				self.canvas.origin = ox+dx, oy+dy;
 
 	def handle_events(self):
 		while len(self.event_queue) > 0:
@@ -827,8 +815,9 @@ class SceneEditor:
 							if self.snap:
 								position = self.canvas_grid.snap_point(position);
 							entity["position"] = position;
-				else:
-					self.view_drag_handler(event);
+			
+			if isinstance(event, CanvasManipViewDrag):
+				CanvasManipulator.default_view_drag_handler(self.canvas, event);
 	
 	def get_entity_sprite(self, entity):
 		prototype = AssetManager.search("prototype", entity["prototype"]);
@@ -931,7 +920,6 @@ class SceneEditor:
 					self.trash.trash_item(self.scene["entities"], selection);
 			
 			if imgui.menu_item_simple("Spawn"):
-				print(AssetManager.get_tree("scene").search("entities"));
 				entity = AssetManager.get_tree("scene").search("entities").inmost.prototype();
 				entity["name"] = "";
 				entity["position"] = self.canvas_io.get_cursor();
@@ -1033,9 +1021,6 @@ class SceneEditor:
 
 		self.scene_viewer.draw();
 		self.canvas.render(gui_id="canvas");
-		if ContextMenu.begin("canvas"):
-			self.scene_context_menu();
-			imgui.end_popup();
 		
 		imgui.end_child();
 		

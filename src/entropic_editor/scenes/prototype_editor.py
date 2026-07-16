@@ -235,16 +235,6 @@ class PrototypeEditor:
 		self.manip_registry.update(paths, shapes);
 		self.canvas_manip.synchronize(self.manip_registry);
 	
-	def view_drag_handler(self, event):
-		match event.signal:
-			case CanvasManipDrag.Signal.TICK:
-				x0, y0 = event.start;
-				x, y = event.point;
-				dx, dy = x-x0, y-y0;
-				
-				ox, oy = self.canvas.origin;
-				self.canvas.origin = ox+dx, oy+dy;
-	
 	def draw(self):
 		if imgui.begin_menu_bar():
 			if imgui.begin_menu("Asset"):
@@ -284,15 +274,15 @@ class PrototypeEditor:
 			imgui.end_tab_bar();
 
 		self.gui_draw_canvas();
-		if ContextMenu.begin("prototype-canvas"):
-			if self.tab == "walls":
+		if self.tab == "walls":
+			if ContextMenu.begin("prototype-canvas"):
 				if imgui.begin_menu("New wall"):
 					if imgui.menu_item_simple("AABB"):
 						self.prototype["walls"].append(scenes.walls.canvas_place(self.canvas_io.get_cursor(), "aabb", self.canvas_grid));
 					if imgui.menu_item_simple("Segment"):
 						self.prototype["walls"].append(scenes.walls.canvas_place(self.canvas_io.get_cursor(), "segment", self.canvas_grid));
 					imgui.end_menu();
-			imgui.end_popup();
+				imgui.end_popup();
 
 		self.prototype["sprite"] = input_asset("Sprite", self.prototype["sprite"], "sprite");
 		self.prototype["sprite_offset"] = input_vec2("Sprite offset", self.prototype["sprite_offset"]);
@@ -360,3 +350,6 @@ class PrototypeEditor:
 					
 					case CanvasManipDrag.Signal.END:
 						self.selection_context.clear();
+
+			if isinstance(event, CanvasManipViewDrag):
+				CanvasManipulator.default_view_drag_handler(self.canvas, event);

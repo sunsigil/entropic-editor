@@ -40,6 +40,9 @@ class Tool:
 			self.windows.append(window);
 		return self.window(gui_id);
 
+	def close(self):
+		self.windows.pop();
+
 	def draw(self):
 		trash = [];
 

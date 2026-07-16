@@ -45,12 +45,21 @@ if __name__ == "__main__":
 	editor_path = Path(__file__).parent.absolute();
 	game_path = Path(args.game_path).absolute();
 	typefile_path = args.types;
-
+	
 	context.set(context.Context(
 		editor_path, game_path,
 		"Entropic Editor", 1920, 1080)
 	);
 	InputManager.initialize(context.get().glfw_handle, context.get().imgui_impl);
+
+	def window_close_callback(handle):
+		for tool in ToolWindowRegistry.all():
+			if tool.is_open():
+				tool.close();
+				glfw.set_window_should_close(handle, False);
+				return;
+		glfw.set_window_should_close(handle, True);
+	glfw.set_window_close_callback(context.get().glfw_handle, window_close_callback);
 
 	if typefile_path != None and typefile_path.is_file():
 		asset_types.load_typefile(typefile_path);

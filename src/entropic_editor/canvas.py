@@ -257,6 +257,10 @@ class CanvasManipDrag(CanvasManipEvent):
 		self.signal = signal;
 		super().__init__(eeid, start, point, geometry, delta, distance, inside);
 
+class CanvasManipViewDrag(CanvasManipEvent):
+	def __init__(self, start, point):
+		super().__init__(None, start, point);
+
 class CanvasManipRecord:
 	def __init__(self, object, shape, eeid):
 		self.object = object;
@@ -297,6 +301,14 @@ class CanvasManipRegistry:
 				return record.object;
 
 class CanvasManipulator:
+	def default_view_drag_handler(canvas, event):
+		x0, y0 = event.start;
+		x, y = event.point;
+		dx, dy = x-x0, y-y0;
+		
+		ox, oy = canvas.origin;
+		canvas.origin = ox+dx, oy+dy;
+	
 	def __init__(self, canvas_io, event_queue):
 		self.canvas_io = canvas_io;
 		self.event_queue = event_queue;
@@ -344,23 +356,19 @@ class CanvasManipulator:
 		self.event_log.clear();
 
 		cursor = self.canvas_io.get_bounded_cursor();
-		cancel = (
-			InputManager.is_released(glfw.MOUSE_BUTTON_LEFT) or
-			not self.canvas_io.is_cursor_in_bounds()
-		);
-
-		if cancel:
-			if self.dragging:
-				self.event_queue.append(CanvasManipDrag(
-					CanvasManipDrag.Signal.END, self.event.eeid,
-					self.event.start, cursor
-				));
-				self.event_log.append(self.event_queue[-1]);
-			
-			self.event = None;
-			self.dragging = False;
+		in_bounds = self.canvas_io.is_cursor_in_bounds();
 		
-		else:
+		if in_bounds:
+			if InputManager.is_pressed(glfw.MOUSE_BUTTON_RIGHT):
+				self.event = CanvasManipEvent(self._spatial_search(cursor), cursor, cursor);
+			if InputManager.is_held(glfw.MOUSE_BUTTON_RIGHT) and self.event != None:
+				self.event_queue.append(CanvasManipViewDrag(
+					self.event.start,
+					cursor
+				));
+			if InputManager.is_released(glfw.MOUSE_BUTTON_RIGHT):
+				self.event = None;
+			
 			if InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
 				self.event = CanvasManipEvent(self._spatial_search(cursor), cursor, cursor);
 				if self.event.eeid == None:
@@ -407,6 +415,16 @@ class CanvasManipulator:
 					drag.signal = CanvasManipDrag.Signal.TICK;
 					self.event_queue.append(drag);
 					self.event_log.append(self.event_queue[-1]);
+	
+		if not in_bounds or InputManager.is_released(glfw.MOUSE_BUTTON_LEFT):
+			if self.dragging:
+				self.event_queue.append(CanvasManipDrag(
+					CanvasManipDrag.Signal.END, self.event.eeid,
+					self.event.start, cursor
+				));
+				self.event_log.append(self.event_queue[-1]);
+			self.event = None;
+			self.dragging = False;
 
 	def draw(self, canvas: Canvas, colour):
 		for event in self.event_log:
@@ -419,8 +437,6 @@ class CanvasManipulator:
 				canvas.draw_circle(x0, y0, 2, colour);
 				canvas.draw_circle(x, y, 4, colour);
 				canvas.draw_line(x0, y0, x, y, colour);
-				
-
 					
 		
 		
