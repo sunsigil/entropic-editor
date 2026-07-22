@@ -50,8 +50,8 @@ if __name__ == "__main__":
 		editor_path, game_path,
 		"Entropic Editor", 1920, 1080)
 	);
-	InputManager.initialize(context.get().glfw_handle, context.get().imgui_impl);
 
+	InputManager.initialize(context.get().glfw_handle, context.get().imgui_impl);
 	def window_close_callback(handle):
 		for tool in ToolWindowRegistry.all():
 			if tool.is_open():
@@ -62,13 +62,14 @@ if __name__ == "__main__":
 	glfw.set_window_close_callback(context.get().glfw_handle, window_close_callback);
 
 	if typefile_path != None and typefile_path.is_file():
-		asset_types.load_typefile(typefile_path);
-
+			asset_types.load_typefile(typefile_path);
 	for path in (game_path/"assets").rglob("*.json"):
 		if AssetDocument.is_file_asset_document(path):
 			AssetManager.load_document(path);
 	make_backups(game_path/"backups/cold", cold=True);
 
+	document_editors = [];
+	
 	window_flag_list = [
 		imgui.WindowFlags_.no_saved_settings,
 		imgui.WindowFlags_.no_move,
@@ -110,41 +111,40 @@ if __name__ == "__main__":
 
 	while context.get().is_alive():
 		context.get().begin_frame();
-		
-		SpriteBank.update();
-		InputManager.update();
+
+		SpriteBank.refresh();
+		InputManager.tick();
 
 		for document in AssetManager.documents:
 			document.refresh();
 		make_backups(game_path/"backups/hot");
-
 		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_S):
-			print(f"Saving...");
 			for document in AssetManager.documents:
 				document.save();
 
+		de_trash = [de for de in document_editors if not de.open];
+		for de in de_trash:
+			document_editors.remove(de);
+		def doc_is_open(doc):
+			return next((x for x in document_editors if x.document.type_name == doc.type_name), None) != None;
+
 		imgui.set_next_window_pos((0, 0));
 		imgui.set_next_window_size(imgui.ImVec2(1920*0.8, 1080*0.8));
-		imgui.begin(context.get().name, flags=window_flags | (splash_flags if DocumentEditor.active_document == None else 0));
+		imgui.begin(context.get().name, flags=window_flags | splash_flags);
 
 		if imgui.begin_main_menu_bar():
-
 			if imgui.begin_menu("File"):
 				if imgui.begin_menu("Open"):
 					for document in AssetManager.documents:
-						if imgui.menu_item(str(document.path.relative_to(context.get().game_directory)), "", document == DocumentEditor.active_document)[1]:
-							if DocumentEditor.active_document != None:
-								DocumentEditor.active_document.save();
-							DocumentEditor.active_document = document;
+						if imgui.menu_item(document.type_name, "", doc_is_open(document))[1]:
+							if not doc_is_open(document):
+								document_editors.append(DocumentEditor(document));
 					imgui.end_menu();
 				
 				if imgui.menu_item_simple("Save all"):
 					print("Saving...");
 					for document in AssetManager.documents:
 						document.save();
-				
-				if imgui.menu_item_simple("Close", enabled=DocumentEditor.active_document != None):
-					DocumentEditor.active_document = None;	
 				imgui.end_menu();
 			
 			if imgui.begin_menu("Tools"):
@@ -152,21 +152,17 @@ if __name__ == "__main__":
 					if not tool.hidden and imgui.menu_item_simple(tool.title):
 						tool.open();
 				imgui.end_menu();
-			
 			imgui.end_main_menu_bar();
-		
-		if DocumentEditor.active_document == None:
+
 			imgui.set_scroll_x(0);
 			imgui.set_scroll_y(0);
 			imgui.image(imgui.ImTextureRef(splash_tex), imgui.ImVec2(splash_img.width, splash_img.height));
-		else:
-			DocumentEditor.draw();
-		
-		for tool in ToolWindowRegistry.all():
-			tool.draw();
-		
 		imgui.end();
 
+		for de in document_editors:
+			de.draw();
+		for tool in ToolWindowRegistry.all():
+			tool.draw();
 		imgui.show_id_stack_tool_window();
 
 		context.get().end_frame();

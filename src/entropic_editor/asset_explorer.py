@@ -29,7 +29,7 @@ class AssetExplorer:
 		wdw_w = imgui.get_content_region_avail().x/1.25;
 		sprite_w = 64;
 		cols = int(wdw_w // sprite_w);
-		rows = int(math.ceil(len(listings) / cols));
+		rows = int(math.ceil(len(listings) / cols)) if cols > 0 else 0;
 	
 		i = 0;
 		for r in range(rows):

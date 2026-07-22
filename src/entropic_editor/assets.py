@@ -89,6 +89,7 @@ class AssetDocument:
 class AssetManager:
 	document_map = {};
 	documents = [];
+	command_log = [];
 
 	def load_document(path):
 		try:
@@ -123,6 +124,47 @@ class AssetManager:
 
 	def search(asset_type, asset_name):
 		return next((x for x in AssetManager.get_all(asset_type) if x["name"] == asset_name), None);
+
+	def rename(asset_type, asset_name, new_name):
+		asset = AssetManager.search(asset_type, asset_name);
+		if asset == None:
+			return;
+		AssetManager.command_log.append(({
+			"op": "rename",
+			"args": {
+				"asset_type": asset_type,
+				"asset_name": asset_name,
+				"new_name": new_name
+			}
+		}));
+
+		asset["name"] = new_name;
+
+		for doc in AssetManager.documents:
+			assets = AssetManager.get_all(doc.type_name);
+			for asset in assets:
+				nodes = doc.type_helper.flatten(asset);
+				for node in nodes:
+					if isinstance(node.T, asset_types.List) and node.T.T == asset_types.Asset(asset_type):
+						for i,v in enumerate(node.I):
+							if v == asset_name:
+								node.I[i]= new_name;
+					if isinstance(node.T, asset_types.Object):
+						for key in node.children:
+							child = node.children[key];
+							if child.T == asset_types.Asset(asset_type) and node.I[key] == asset_name:
+								node.I[key] = new_name;
+
+	def undo():
+		if len(AssetManager.command_log) > 0:
+			command = AssetManager.command_log.pop();
+			match command["op"]:
+				case "rename":
+					AssetManager.rename(
+						command["args"]["asset_type"],
+						command["args"]["new_name"],
+						command["args"]["asset_name"]
+					);
 
 def make_backups(dir, cold=True):
 	dir = Path(dir);

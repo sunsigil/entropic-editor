@@ -3,6 +3,7 @@ from imgui_bundle import imgui;
 import os;
 from assets import AssetManager;
 import copy;
+import sprites;
 
 class FileExplorer:
 	last = None;
@@ -66,14 +67,11 @@ class FileExplorer:
 		if len(self.search) > 0:
 			listings = list(filter(lambda x: self.search in str(x.name), listings));
 		
-		if self.asset_type != None:
-			assets = AssetManager.get_all(self.asset_type);
-			if len(assets) > 0 and "path" in assets[0]:
-				_, self.filter_unused = imgui.checkbox("Unused", self.filter_unused);
-				if self.filter_unused:
-					paths = [x["path"] for x in assets];
-					unused = [x for x in listings if not str(Path(os.path.relpath(x.absolute(), self.anchor.absolute()))) in paths];
-					listings = unused;
+		if self.asset_type == "sprite":
+			_, self.filter_unused = imgui.checkbox("Unused", self.filter_unused);
+			if self.filter_unused:
+				unused = [x for x in listings if not sprites.is_image_sprite(Path(os.path.relpath(x.absolute(), self.anchor.absolute())))];
+				listings = unused;
 
 		listings.sort();
 		

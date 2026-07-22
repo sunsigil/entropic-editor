@@ -42,12 +42,16 @@ class Tool:
 
 	def close(self):
 		self.windows.pop();
+	
+	def handle_modal_queue(self):
+		while len(self.modal_queue) > 0:
+			modal_id = self.modal_queue.pop(0);
+			imgui.open_popup(modal_id);	
 
-	def draw(self):
+	def draw(self):		
 		trash = [];
 
 		for win in self.windows:
-
 			imgui.set_next_window_size(win.size);
 			should_close = getattr(win, "should_close") != None and win.should_close();
 			_, open = imgui.begin(self.title, not should_close, flags=self.flags);
@@ -68,7 +72,7 @@ class ToolWindowRegistry:
 	def register(tool):
 		ToolWindowRegistry.table[tool.T] = tool;
 	
-	def lookup(key):
+	def search(key):
 		if key in ToolWindowRegistry.table:
 			return ToolWindowRegistry.table[key];
 

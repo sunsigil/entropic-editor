@@ -723,8 +723,6 @@ class SceneViewer:
 		for wall in self.parent.scene["walls"]:
 			colour = (255, 255, 0) if self.parent.wall_editor.selection_context.is_selected(wall) else (255, 0, 0);
 			scenes.walls.canvas_draw(self.parent.canvas, wall, colour);
-		
-		self.parent.wall_editor.canvas_manip.draw(self.parent.canvas, (255, 255, 255));
 	
 	def draw(self):
 		self.parent.canvas.clear(tuple(self.parent.scene["background"]));
@@ -748,6 +746,36 @@ class SceneViewer:
 			self.parent.navlist_editor.draw_canvas();
 
 class SceneEditor:
+	class SpawnPopup:
+		def __init__(self, parent):
+			self.parent = parent;
+			self.is_open = False;
+			self.prototype = "";
+			self.position = None;
+		
+		def open(self):
+			self.is_open = True;
+			if self.parent.canvas_io.is_cursor_in_bounds():
+				self.position = list(self.parent.canvas_io.get_cursor());
+			else:
+				self.position = [0, 0];
+
+		def draw(self):
+			if self.is_open:
+				_, self.is_open = imgui.begin("Spawn", self.is_open);
+				self.prototype = input_asset("##prototype", self.prototype, "prototype");
+				if imgui.button("Spawn"):
+					entity = AssetManager.get_tree("scene").search("entities").inmost.prototype();
+					entity["name"] = "";
+					entity["position"] = self.position;
+					entity["prototype"] = self.prototype;
+					self.parent.scene["entities"].append(entity);
+					self.is_open = False;
+				imgui.same_line();
+				if imgui.button("Cancel"):
+					self.is_open = False;
+				imgui.end();
+	
 	def _load_scene(self, scene):		
 		self.scene = scene;
 
@@ -790,6 +818,8 @@ class SceneEditor:
 		self.door_editor = DoorEditor(self);
 		self.navlist_editor = NavlistEditor(self);
 		self.scene_viewer = SceneViewer(self);
+
+		self.spawn_popup = SceneEditor.SpawnPopup(self);
 
 		self._load_scene(AssetManager.get_first("scene"));
 
@@ -910,20 +940,6 @@ class SceneEditor:
 		if self.scene["has_bounds"]:
 			self.scene["bounds"] = input_aabb("Bounds", self.scene["bounds"]);
 		self.scene["free_camera"] = input_bool("Free camera", self.scene["free_camera"]);
-	
-	def scene_context_menu(self):
-		if self.edit_mode == EditMode.ENTITIES:
-			selection = self.selection_context.get_selection(single=True);
-			hovered = selection != None and aabb_contains_point(get_entity_aabb(selection), self.canvas_io.get_cursor());
-			if hovered:
-				if imgui.menu_item_simple("Delete"):
-					self.trash.trash_item(self.scene["entities"], selection);
-			
-			if imgui.menu_item_simple("Spawn"):
-				entity = AssetManager.get_tree("scene").search("entities").inmost.prototype();
-				entity["name"] = "";
-				entity["position"] = self.canvas_io.get_cursor();
-				self.scene["entities"].append(entity);
 
 	def draw(self):
 		self.draw_menu_bar();
@@ -952,12 +968,17 @@ class SceneEditor:
 			if InputManager.is_command(glfw.KEY_V):
 				self.clipboard.paste(self.scene["entities"]);
 			
+			if InputManager.is_command(glfw.KEY_A):
+				self.spawn_popup.open();
 			if InputManager.is_command(glfw.KEY_D):
 				selection = self.selection_context.get_selection(single=True);
 				if selection != None:
 					self.trash.trash_item(self.scene["entities"], selection);
+			
 			if InputManager.is_command(glfw.KEY_Z):
 				self.trash.restore();
+			
+			self.spawn_popup.draw();
 			
 			self.canvas_manip.tick();
 			self.handle_events();
@@ -1023,4 +1044,3 @@ class SceneEditor:
 		self.canvas.render(gui_id="canvas");
 		
 		imgui.end_child();
-		

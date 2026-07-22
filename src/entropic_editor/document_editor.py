@@ -1,46 +1,75 @@
 from imgui_bundle import imgui;
-from assets import AssetDocument;
+from assets import AssetDocument, AssetManager;
 import types as types;
 import editor_gui as gui;
+import input;
+import glfw;
 
 class DocumentEditor:
-	active_document: AssetDocument = None;
+	def __init__(self, document):
+		self.document = document;
+		self.open = True;
+		self.size = imgui.ImVec2(1280, 720);
 
-	show_typetip = False;
+		self.show_typetip = False;
 
-	search_term = "";
-	search_cache = [];
+		self.search_term = "";
+		self.search_cache = [];
 
-	def draw():
-		if imgui.begin_main_menu_bar():
+		self.rename_from = "";
+		self.rename_to = "";
+
+	def draw(self):
+		imgui.set_next_window_size(self.size);
+		_, self.open = imgui.begin(self.document.type_name, self.open);
+
+		if imgui.begin_menu_bar():
 			if imgui.begin_menu("Asset"):
 				if imgui.menu_item_simple("New"):
-					DocumentEditor.active_document.spawn_entry();
+					self.document.spawn_entry();
+				if imgui.begin_menu("Rename"):
+					imgui.set_next_item_width(128);
+					_, self.rename_from = imgui.input_text("From", self.rename_from);
+					imgui.set_next_item_width(128);
+					_, self.rename_to = imgui.input_text("To", self.rename_to);
+					if imgui.button("Commit"):
+						AssetManager.rename(self.document.type_name, self.rename_from, self.rename_to);
+						self.rename_from = "";
+						self.rename_to = "";
+					imgui.end_menu();
 				imgui.end_menu();
+			
 			if imgui.begin_menu("View"):
-				_, DocumentEditor.show_typetip = imgui.menu_item("Show typetip", "", DocumentEditor.show_typetip);
+				_, self.show_typetip = imgui.menu_item("Show typetip", "", self.show_typetip);
 				imgui.end_menu();
-			imgui.end_main_menu_bar();
-
-		search_refresh, DocumentEditor.search_term = imgui.input_text("Search", DocumentEditor.search_term);
-		if search_refresh:
-			DocumentEditor.search_term = DocumentEditor.search_term.strip();
-			DocumentEditor.search_cache = [];
-			for instance in DocumentEditor.active_document.instances:
-				if "name" in instance and DocumentEditor.search_term in instance["name"]:
-					DocumentEditor.search_cache.append(instance);
+			imgui.end_menu_bar();
 		
-		working_list = DocumentEditor.search_cache if len(DocumentEditor.search_cache) > 0 else DocumentEditor.active_document.instances;
+		if input.InputManager.is_command(glfw.KEY_Z):
+			AssetManager.undo();
+
+		search_refresh, self.search_term = imgui.input_text("Search", self.search_term);
+		if search_refresh:
+			self.search_term = self.search_term.strip();
+			self.search_cache = [];
+			for instance in self.document.instances:
+				if "name" in instance and self.search_term in instance["name"]:
+					self.search_cache.append(instance);
+		
+		working_list = self.search_cache if len(self.search_cache) > 0 else self.document.instances;
 		for instance in working_list:
 			gui_id = f"{instance["name"]}####{id(instance)}" if "name" in instance else id(instance);
 			gui.typed_input(
 				gui_id,
-				DocumentEditor.active_document.type_tree, instance,
-				previews=True, tooltip=DocumentEditor.show_typetip
+				self.document.type_tree, instance,
+				previews=True, tooltip=self.show_typetip
 			);
 			if gui.ContextMenu.begin(gui_id):
 				if imgui.menu_item_simple("Delete"):
-					DocumentEditor.active_document.delete_entry(instance);
+					self.document.delete_entry(instance);
 				if imgui.menu_item_simple("Duplicate"):
-					DocumentEditor.active_document.spawn_entry(instance);
+					self.document.spawn_entry(instance);
 				imgui.end_popup();
+
+		self.size = imgui.get_window_size();
+		imgui.end();
+		

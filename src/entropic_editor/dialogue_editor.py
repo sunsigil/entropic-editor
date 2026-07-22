@@ -212,7 +212,7 @@ class DialogueEditor:
 			imgui.pop_id();
 
 		if imgui.button("New line"):
-			node.asset["lines"].append(AssetManager.get_tree("dialogue").search("lines").T.inmost.prototype());
+			node.asset["lines"].append(AssetManager.get_tree("dialogue").search("lines").inmost.prototype());
 		
 		imgui.pop_id();
 		imgui.end_group();

@@ -8,22 +8,13 @@ class InputManager:
 	_glfw_io = {};
 	_imgui_io = None;
 
-	_scroll_dx = None;
-	_scroll_dy = None;
-
-	def _scroll_callback(handle, dx, dy):
-		InputManager._scroll_dx = dx;
-		InputManager._scroll_dy = dy;
-
 	def initialize(glfw_handle, imgui_impl):
 		InputManager._glfw_handle = glfw_handle;
 		InputManager._imgui_impl = imgui_impl;
 		InputManager._imgui_io = imgui.get_io();
 		InputManager._glfw_io = {};
-	
-		glfw.set_scroll_callback(InputManager._glfw_handle, InputManager._scroll_callback);
 
-	def update():
+	def tick():
 		for key in range(glfw.KEY_SPACE, glfw.KEY_LAST+1):
 			if not key in InputManager._glfw_io:
 				InputManager._glfw_io[key] = [glfw.get_key(InputManager._glfw_handle, key), False];
@@ -61,6 +52,3 @@ class InputManager:
 		if not InputManager.is_pressed(keys):
 			return False;
 		return True;
-
-	def get_scroll_offset():
-		return (InputManager._scroll_dx, InputManager._scroll_dy);

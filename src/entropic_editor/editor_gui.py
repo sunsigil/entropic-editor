@@ -113,32 +113,22 @@ def input_string(gui_id, value, long=False):
 	if long:
 		imgui.same_line();
 		win_id = imgui.get_id(gui_id);
-		win = ToolWindowRegistry.lookup(TextEditor).window(win_id);
+		win = ToolWindowRegistry.search(TextEditor).window(win_id);
 
 		button = f"Edit{gui_id}" if gui_id.startswith("##") else f"{gui_id}##edit_button";
 		if imgui.button(button) and win == None:
-			win = ToolWindowRegistry.lookup(TextEditor).open(win_id);
+			win = ToolWindowRegistry.search(TextEditor).open(win_id);
 			win.configure(gui_id, value);
 		if win != None:
 			value = win.get_text();
 	
 	return value;
 
-def input_colour(gui_id, value):
-	r, g, b = value;
-	_, (r, g, b) = imgui.color_edit3(str(gui_id), (r/255, g/255, b/255));
-	Tooltip.ping();
-	ContextMenu.ping(gui_id);
-	return int(r*255), int(g*255), int(b*255);
-
 def input_any(gui_id, value):
 	value = input_string(gui_id, value);
 	return value;
 
-def input_vec2(gui_id, value):
-	_, value = imgui.input_int2(gui_id, [int(value[0]), int(value[1])]);
-	ContextMenu.ping(gui_id);
-	return value;
+
 
 # Enums and Flags
 
@@ -187,13 +177,13 @@ def input_file(gui_id, value, pattern, directory=None, asset_type=None, return_a
 	browse = imgui.button(f"Browse##{gui_id}");
 
 	win_id = imgui.get_id(gui_id);
-	win = ToolWindowRegistry.lookup(FileExplorer).window(win_id);
+	win = ToolWindowRegistry.search(FileExplorer).window(win_id);
 	if win != None:
 		harvest = win.get_result();
 		value = harvest if harvest != None else value;
 	else:
 		if browse:
-			win = ToolWindowRegistry.lookup(FileExplorer).open(win_id);
+			win = ToolWindowRegistry.search(FileExplorer).open(win_id);
 			if directory == None:
 				if asset_type != None:
 					directory = AssetManager.get_document(asset_type).directory;
@@ -210,13 +200,13 @@ def input_asset(gui_id, value, asset_type):
 	browse = imgui.button(f"Browse##{gui_id}");
 
 	win_id = imgui.get_id(gui_id);
-	win = ToolWindowRegistry.lookup(AssetExplorer).window(win_id);
+	win = ToolWindowRegistry.search(AssetExplorer).window(win_id);
 	if win != None:
 		harvest = win.get_result();
 		value = harvest if harvest != None else value;
 	else:
 		if browse:
-			win = ToolWindowRegistry.lookup(AssetExplorer).open(win_id);
+			win = ToolWindowRegistry.search(AssetExplorer).open(win_id);
 			win.configure(asset_type);
 
 	return value;
@@ -228,13 +218,13 @@ def input_sprite(gui_id, value, size=(64, 64)):
 	clicked = imgui.image_button(gui_id, imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(w, h));
 
 	win_id = imgui.get_id(gui_id);
-	win = ToolWindowRegistry.lookup(AssetExplorer).window(win_id);
+	win = ToolWindowRegistry.search(AssetExplorer).window(win_id);
 	if win != None:
 		harvest = win.get_result();
 		value = harvest if harvest != None else value;
 	else:
 		if clicked:
-			win = ToolWindowRegistry.lookup(AssetExplorer).open(win_id);
+			win = ToolWindowRegistry.search(AssetExplorer).open(win_id);
 			win.configure("sprite");
 
 	return value;
@@ -244,6 +234,7 @@ def input_sprite(gui_id, value, size=(64, 64)):
 def typed_input(gui_id, T, value, previews=False, tooltip=False):
 	if getattr(T, "read_only", False):
 		typed_display(gui_id, T, value, previews, tooltip);
+		return;
 	
 	gui_id = str(gui_id);
 	anchor = get_anchor(gui_id);
@@ -257,12 +248,16 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 		ContextMenu.ping(gui_id);
 
 		if node_open:
+			if previews:
+				if "path" in value and "frames" in value:
+					sprites.SpritePreview.draw(None, value["path"], value["frames"], show_dimensions=True);
+
 			for key,element in T.elements.items():
 				if key in value:
 					if getattr(element, "read_only", False):
-						typed_display(f"{key}##{anchor}", T, value[key], previews, tooltip);
+						typed_display(f"{key}##{anchor}", element, value[key], previews, tooltip);
 					else:
-						value[key] = typed_input(f"{key}##{anchor}", T, value[key], previews, tooltip);
+						value[key] = typed_input(f"{key}##{anchor}", element, value[key], previews, tooltip);
 			imgui.tree_pop();
 
 	if isinstance(T, asset_types.List):
@@ -303,9 +298,7 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 	if isinstance(T, asset_types.File):
 		directory = None;
 		if T.pattern == "*.png":
-			if previews:
-				sprites.SpritePreview.draw(value, show_dimensions=True);
-			directory = context.get().game_directory/"assets/sprites";
+			directory = context.get().game_directory/"assets/sprites";			
 		value = input_file(gui_id, value, T.pattern, directory=directory);
 	
 	if isinstance(T, asset_types.Flags):
@@ -314,10 +307,6 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 		value = input_enum(gui_id, value, T.values);
 	if isinstance(T, asset_types.Any):
 		value = input_any(gui_id, value);
-	if isinstance(T, asset_types.Vec2):
-		value = input_vec2(gui_id, value);
-	if isinstance(T, asset_types.Colour):
-		value = input_colour(gui_id, value);
 	if isinstance(T, asset_types.String):
 		value = input_string(gui_id, value);
 	if isinstance(T, asset_types.Bool):
@@ -379,10 +368,6 @@ def typed_display(gui_id, T, value, previews=False, tooltip=False):
 		imgui.text(value);
 	if isinstance(T, asset_types.Any):
 		imgui.text(value);
-	if isinstance(T, asset_types.Vec2):
-		imgui.text(f"({value[0]}, {value[1]})");
-	if isinstance(T, asset_types.Colour):
-		input_colour(gui_id, value);
 	if isinstance(T, asset_types.String):
 		imgui.text(value);
 	if isinstance(T, asset_types.Bool):
@@ -393,6 +378,11 @@ def typed_display(gui_id, T, value, previews=False, tooltip=False):
 		imgui.text(str(value));
 
 # External to the type system
+
+def input_vec2(gui_id, value):
+	_, value = imgui.input_int2(gui_id, [int(value[0]), int(value[1])]);
+	ContextMenu.ping(gui_id);
+	return value;
 
 def input_aabb(gui_id, value, mode="xyxy"):
 	imgui.begin_group();
@@ -441,6 +431,13 @@ def input_orientation(gui_id, value):
 	imgui.pop_id();	
 
 	return value;
+
+def input_colour(gui_id, value):
+	r, g, b = value;
+	_, (r, g, b) = imgui.color_edit3(str(gui_id), (r/255, g/255, b/255));
+	Tooltip.ping();
+	ContextMenu.ping(gui_id);
+	return int(r*255), int(g*255), int(b*255);
 
 # Layout
 

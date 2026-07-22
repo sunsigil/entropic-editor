@@ -4,9 +4,37 @@ import pathlib;
 import json
 
 class Type():
-	def __init__(self, **kwargs):
-		for key in kwargs:
-			setattr(self, key, kwargs[key]);
+	def __init__(self, attributes={}):
+		for key in attributes:
+			setattr(self, key, attributes[key]);
+	
+	def __eq__(self, value):
+		if type(self) == type(value):
+			if isinstance(self, Object):
+				if len(self.elements) != len(value.elements):
+					return False;
+				equal = True;
+				for i in range(len(self.elements)):
+					equal &= self.elements[i].T == value.elements[i].T;
+				return equal;
+		
+			elif isinstance(self, List):
+				return self.T == value.T;
+		
+			elif isinstance(self, Asset):
+				return self.name == value.name;
+		
+			elif isinstance(self, File):
+				return self.pattern == value.pattern;
+		
+			elif isinstance(self, Flags) or isinstance(self, Enum):
+				equal = True;
+				for i in range(len(self.values)):
+					equal &= self.values[i] == value.values[i];
+				return equal;
+			return True;
+
+		return False;
 
 	def _prototype(self):
 		raise NotImplementedError();
@@ -87,30 +115,6 @@ class String(Primitive):
 	def rectify(self, value):
 		return str(value);
 
-class Colour(Primitive):
-	def __repr__(self):
-		return "Colour";
-
-	def _prototype(self):
-		return [int(255), int(255), int(255)];
-
-	def validate(self, value):
-		return isinstance(value, list[int]) and len(value) == 3;
-	def rectify(self, value):
-		return value;
-
-class Vec2(Primitive):
-	def __repr__(self):
-		return f"Vec2";
-
-	def _prototype(self):
-		return [int(0), int(0)];
-
-	def validate(self, value):
-		return isinstance(value, int) and len(value) == 2;
-	def rectify(self, value):
-		return value;
-
 class Any(Primitive):
 	def __repr__(self):
 		return "Any";
@@ -124,8 +128,8 @@ class Any(Primitive):
 		return value;
 
 class Enum(Type):
-	def __init__(self, expression, **kwargs):
-		super().__init__(kwargs=kwargs);
+	def __init__(self, expression, attributes={}):
+		super().__init__(attributes=attributes);
 		parse_regex = r"enum|\(|,|\s|\)";
 		values = re.split(parse_regex, expression);
 		values = [v for v in values if len(v) > 0];
@@ -144,8 +148,8 @@ class Enum(Type):
 		return value;
 
 class Flags(Type):
-	def __init__(self, expression, **kwargs):
-		super().__init__(kwargs=kwargs);
+	def __init__(self, expression, attributes={}):
+		super().__init__(attributes=attributes);
 		parse_regex = r"flags|\(|,|\s|\)";
 		values = re.split(parse_regex, expression);
 		values = [v for v in values if len(v) > 0];
@@ -164,8 +168,8 @@ class Flags(Type):
 		return value;
 
 class File(Type):
-	def __init__(self, pattern, **kwargs):
-		super().__init__(kwargs=kwargs);
+	def __init__(self, pattern, attributes={}):
+		super().__init__(attributes=attributes);
 		self.pattern = pattern;
 		self.regex = glob.translate(self.pattern);
 	def __repr__(self):
@@ -180,8 +184,8 @@ class File(Type):
 		return value;
 
 class Asset(Type):
-	def __init__(self, name, **kwargs):
-		super().__init__(kwargs=kwargs);
+	def __init__(self, name, attributes={}):
+		super().__init__(attributes=attributes);
 		self.name = name;
 	def __repr__(self):
 		return f"Asset({self.name})";
@@ -195,8 +199,8 @@ class Asset(Type):
 		return value;
 
 class List(Type):
-	def __init__(self, T, **kwargs):
-		super().__init__(kwargs=kwargs);
+	def __init__(self, T, attributes={}):
+		super().__init__(attributes=attributes);
 		self.T = T;
 		T = self.T;
 		while isinstance(T, List):
@@ -227,8 +231,8 @@ class List(Type):
 		return [self.T.rectify(x) for x in value];
 
 class Object(Type):
-	def __init__(self, elements, **kwargs):
-		super().__init__(kwargs=kwargs);
+	def __init__(self, elements, attributes={}):
+		super().__init__(attributes=attributes);
 		self.elements : dict[str, Type] = elements;
 	def __repr__(self):
 		return f"Object({", ".join([str(T) for T in self.elements.values()])})";
@@ -303,81 +307,51 @@ def load_typefile(path):
 
 	print("[Typefile] Loaded asset_types from", path);
 
-def construct_type(expr, **kwargs) -> Type:
+def construct_type(expr, attributes={}) -> Type:
 	if isinstance(expr, list):
-		return List(construct_type(expr[0]), kwargs=kwargs);
+		return List(construct_type(expr[0]), attributes=attributes);
 
 	if isinstance(expr, dict):
 		elements = {};
 		for key in expr:
 			subexpr = expr[key];
 			attrs = subexpr["attributes"] if "attributes" in subexpr else {};
-			elements[key] = construct_type(subexpr["type"], kwargs=attrs);
-		return Object(elements, kwargs=kwargs);
+			elements[key] = construct_type(subexpr["type"], attributes=attrs);
+		return Object(elements, attributes=attributes);
 
 	if isinstance(expr, str):
 		match expr:
 			case "int":
-				return Int();
+				return Int(attributes=attributes);
 			case "float":
-				return Float();
+				return Float(attributes=attributes);
 			case "bool":
-				return Bool();
+				return Bool(attributes=attributes);
 			case "string":
-				return String();
-			case "colour":
-				return Colour();
-			case "vec2":
-				return Vec2();
+				return String(attributes=attributes);
 			case "any":
 				return Any();
 
 		if re.match(r"enum\(([A-z0-9_]+)+(\,+\s*[A-z0-9_]+)*\)", expr):
-			return Enum(expr, kwargs=kwargs);
+			return Enum(expr, attributes=attributes);
 		if re.match(r"flags\(([A-z0-9_]+)+(\,+\s*[A-z0-9_]+)*\)", expr):
-			return Flags(expr, kwargs=kwargs);
+			return Flags(expr, attributes=attributes);
 
 		if re.match(r"\*.[A-z]+", expr):
-			return File(expr, kwargs=kwargs);
+			return File(expr, attributes=attributes);
 
 	registered = TypeRegistry.search(expr);
 	if registered != None:
 		return registered;
 
-	return Asset(expr, kwargs=kwargs);
-
-def compare_types(a, b):
-	if type(a) == type(b):
-		if isinstance(a, Object):
-			if len(a.elements) != len(b.elements):
-				return False;
-			equal = True;
-			for i in range(len(a.elements)):
-				equal &= compare_types(a.elements[i].T, b.elements[i].T);
-			return equal;
-	
-		elif isinstance(a, List):
-			return compare_types(a.T, b.T);
-	
-		elif isinstance(a, Asset):
-			return a.name == b.name;
-	
-		elif isinstance(a, File):
-			return a.pattern == b.pattern;
-	
-		elif isinstance(a, Flags) or isinstance(a, Enum):
-			equal = True;
-			for i in range(len(a.values)):
-				equal &= a.values[i] == b.values[i];
-			return equal;
-		return True;
-
-	return False;
+	return Asset(expr, attributes=attributes);
 
 class MapNode:	
 	def __init__(self, parent: MapNode, T: Type, I):
 		self.parent = parent;
 		self.update(T, I);
+	def __repr__(self):
+		return repr(self.T);
 	
 	def update(self, T: Type, I):
 		self.T = T;
@@ -393,12 +367,13 @@ class MapNode:
 				);
 		if isinstance(T, List):
 			self.children = [];
-			for child in self.I:
-				self.children.append(MapNode(
-					self,
-					T.T,
-					child
-				));
+			if I != None:
+				for child in self.I:
+					self.children.append(MapNode(
+						self,
+						T.T,
+						child
+					));
 
 	def search(self, path):
 		if isinstance(path, str):
@@ -420,9 +395,9 @@ class MapNode:
 			if self.parent != None:
 				return self.parent.search(path);
 		else:
-			if isinstance(self.children, dict):
+			if isinstance(self.children, dict) and part in self.children:
 				return self.children[part].search(path);
-			if isinstance(self.children, list):
+			if isinstance(self.children, list) and int(part) >= 0 and int(part) < len(self.children):
 				return self.children[int(part)].search(path);
 		
 		return None;
@@ -485,3 +460,16 @@ class TypeHelper:
 
 	def rectify(self, instance):
 		self._rectify(MapNode(None, self.root, instance));
+
+	def _flatten(self, node: MapNode, acc):
+		acc.append(node);
+		if isinstance(node.T, List):
+			for child in node.children:
+				self._flatten(child, acc);
+		if isinstance(node.T, Object):
+			for key in node.children:
+				self._flatten(node.children[key], acc);
+	def flatten(self, instance):
+		acc = [];
+		self._flatten(MapNode(None, self.root, instance), acc);
+		return acc;
