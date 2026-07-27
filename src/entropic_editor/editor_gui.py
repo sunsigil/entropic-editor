@@ -7,6 +7,7 @@ from enum import Enum;
 import context;
 import sprites;
 import asset_types;
+import cowtools;
 
 from assets import AssetManager;
 from tool_window import ToolWindowRegistry;
@@ -15,7 +16,7 @@ from asset_explorer import AssetExplorer;
 from text_editor import TextEditor;
 from sprites import SpriteBank;
 
-# Not Even Input
+# Not Actually GUI
 
 def get_anchor(gui_id):
 	if not "####" in gui_id:
@@ -70,6 +71,12 @@ def combo(gui_id, value, values, fmt=lambda x: x):
 	ContextMenu.ping(gui_id);
 	return value;
 
+# Custom Widgets
+
+def edit_button(gui_id, size=(16,16)):
+	edit = sprites.SpriteBank.search("editor_edit");
+	return imgui.image_button(f"##{gui_id}", imgui.ImTextureRef(edit.frame_textures[0]), size);
+
 # Primitives
 
 class EEGUIIntStyle(Enum):
@@ -104,8 +111,6 @@ def input_bool(gui_id, value):
 
 def input_string(gui_id, value, long=False):
 	text_id = str(gui_id);
-	if not text_id.startswith("##") and long:
-		text_id = f"##{text_id}";
 	_, value = imgui.input_text(text_id, str(value));
 	Tooltip.ping();
 	ContextMenu.ping(gui_id);
@@ -115,8 +120,8 @@ def input_string(gui_id, value, long=False):
 		win_id = imgui.get_id(gui_id);
 		win = ToolWindowRegistry.search(TextEditor).window(win_id);
 
-		button = f"Edit{gui_id}" if gui_id.startswith("##") else f"{gui_id}##edit_button";
-		if imgui.button(button) and win == None:
+		hide_id = gui_id.startswith("##");		
+		if edit_button(gui_id if hide_id else f"##{gui_id}") and win == None:
 			win = ToolWindowRegistry.search(TextEditor).open(win_id);
 			win.configure(gui_id, value);
 		if win != None:
@@ -308,7 +313,7 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 	if isinstance(T, asset_types.Any):
 		value = input_any(gui_id, value);
 	if isinstance(T, asset_types.String):
-		value = input_string(gui_id, value);
+		value = input_string(gui_id, value, True);
 	if isinstance(T, asset_types.Bool):
 		value = input_bool(gui_id, value);
 	if isinstance(T, asset_types.Float):

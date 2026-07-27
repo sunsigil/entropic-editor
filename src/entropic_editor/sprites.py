@@ -167,7 +167,8 @@ class SpriteImporter:
 		sprite = AssetManager.get_document("sprite").spawn_entry();
 		path = path.relative_to(AssetManager.get_document("sprite").directory);
 		sprite["path"] = str(path);
-		sprite["name"] = "_".join(path.parts);
+		parts = list(path.parts[:-1]) + [path.stem];
+		sprite["name"] = "_".join(parts);
 	
 	def draw(self):
 		if imgui.collapsing_header("Globs"):

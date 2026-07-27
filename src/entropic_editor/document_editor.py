@@ -19,9 +19,12 @@ class DocumentEditor:
 		self.rename_from = "";
 		self.rename_to = "";
 
+	def close(self):
+		self.open = False;
+
 	def draw(self):
 		imgui.set_next_window_size(self.size);
-		_, self.open = imgui.begin(self.document.type_name, self.open);
+		_, self.open = imgui.begin(self.document.type_name, self.open, flags=imgui.WindowFlags_.menu_bar);
 
 		if imgui.begin_menu_bar():
 			if imgui.begin_menu("Asset"):

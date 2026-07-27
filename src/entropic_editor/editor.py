@@ -136,9 +136,14 @@ if __name__ == "__main__":
 			if imgui.begin_menu("File"):
 				if imgui.begin_menu("Open"):
 					for document in AssetManager.documents:
-						if imgui.menu_item(document.type_name, "", doc_is_open(document))[1]:
+						_, clicked = imgui.menu_item(document.type_name, "", doc_is_open(document));
+						if clicked:
 							if not doc_is_open(document):
 								document_editors.append(DocumentEditor(document));
+							else:
+								for de in document_editors:
+									if de.document == document:
+										de.close();
 					imgui.end_menu();
 				
 				if imgui.menu_item_simple("Save all"):
