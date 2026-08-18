@@ -91,16 +91,8 @@ class PrototypeEditor:
 	
 	def gui_draw_selector(self):
 		protoypes = sorted(AssetManager.get_all("prototype"), key=lambda x: x["name"]);
-
 		for prototype in protoypes:
 			selected = imgui.menu_item_simple(prototype["name"]+f"##{id(prototype)}");
-
-			if imgui.begin_popup_context_item():
-				if imgui.menu_item_simple("Delete"):
-					AssetManager.get_document("prototype").delete_entry(prototype);
-					imgui.close_current_popup();
-				imgui.end_popup();
-			
 			if selected:
 				self._load_prototype(prototype);
 	

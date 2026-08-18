@@ -104,6 +104,8 @@ class Bool(Primitive):
 		return bool(value);
 
 class String(Primitive):
+	def __init__(self, attributes={}):
+		super().__init__(attributes);
 	def __repr__(self):
 		return "String";
 

@@ -17,19 +17,40 @@ class RecipeEditor:
 		self.canvas_grid = CanvasGrid(self.canvas, self.cell_size);
 	
 		self.recipe = None;
-		self.input_coords = None;
-		self.input_idx = None;
-		self.copy_buffer = None;
+		self.selection_context = SelectionContext();
+		self.clipboard = Clipboard();
 	
-	def get_input_cursor(self):
-		cursor = self.canvas_io.get_cursor();
-		if not cursor is None:
-			cursor = self.canvas_grid.transform_point(cursor);
-			x, y = cursor;
-			return x, y;
+	def get_cursor(self):
+		if self.canvas_io.is_cursor_in_bounds():
+			return self.canvas_grid.transform_point(
+				self.canvas_io.get_cursor()
+			);
 		return None;
+
+	def draw_selector(self):
+		recipes = sorted(AssetManager.get_all("recipe"), key=lambda x: x["name"]);
+		for recipe in recipes:
+			selected = imgui.menu_item_simple(recipe["name"]+f"##{id(recipe)}");
+			if selected:
+				self.recipe = recipe;
 	
-	def draw_input_grid(self):
+	def draw_grid(self):
+		self.canvas_io.tick();
+
+		cursor = self.get_cursor();
+		if cursor != None:
+			x, y = cursor;
+			if InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
+				self.selection_context.select(int(y * 3 + x), True);
+
+		if InputManager.is_command(glfw.KEY_D):
+			self.recipe["inputs"][idx] = "";
+		if InputManager.is_command(glfw.KEY_C):
+			self.clipboard.copy(self.recipe["inputs"][idx], exclusive=True);
+		if InputManager.is_command(glfw.KEY_V):
+			if not self.clipboard.is_empty():
+				self.recipe["inputs"][idx] = self.clipboard.contents[0];
+		
 		self.canvas.clear((0, 0, 0));
 		self.canvas_grid.draw_lines((128, 128, 128));
 		
@@ -41,76 +62,56 @@ class RecipeEditor:
 					item = AssetManager.search("item", item_name);
 					if item == None:
 						continue;
+					
 					sprite = SpriteBank.search(item["sprite"]);
-					self.canvas.draw_flags = Canvas.DrawFlags.CENTER_X | Canvas.DrawFlags.CENTER_Y;
 					self.canvas.draw_image(
-						x * self.cell_size + self.cell_size/2,
-						y * self.cell_size + self.cell_size/2,
+						x * self.cell_size + (self.cell_size-sprite.frame_width)/2,
+						y * self.cell_size + (self.cell_size-sprite.frame_height)/2,
 						sprite.frame_images[0]
 					);
-					self.canvas.draw_flags = ();
 		
-		cursor = self.get_input_cursor();
 		if cursor != None:
-			x, y = cursor;
-			if x >= 0 and x < 3 and y >= 0 and y < 3:
-				self.canvas_grid.draw_cell(cursor, (192, 192, 192));
-				if InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
-					self.input_coords = (x, y);	
-					self.input_idx = int(y * 3 + x);
-		if self.input_coords != None:
-			self.canvas_grid.draw_cell(self.input_coords, (255, 255, 255));
+			self.canvas_grid.draw_cell(cursor, (192, 192, 192));
+		if not self.selection_context.is_empty():
+			idx = self.selection_context.get_selection(True);
+			y = idx // 3;
+			x = idx % 3;
+			self.canvas_grid.draw_cell((x, y), (255, 255, 255));
 
 		self.canvas.render();
 	
-	def draw_output_box(self):
-		if self.recipe != None:
-			item_name = self.recipe["output"];
-			item = AssetManager.search("item", item_name);
-			sprite = SpriteBank.search(item["sprite"]) if item != None else SpriteBank.search("null_sprite");
-
-			true_height = sprite.frame_height;
-			display_height = self.cell_size * self.canvas.scale;
-			scale_factor = display_height / true_height;
-			display_width = sprite.frame_width * scale_factor;
-			imgui.image(imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(display_width, display_height));
-
-			imgui.same_line();
-			imgui.set_next_item_width(self.canvas_size[0] * self.canvas.scale - display_width);
-
-			item = imgui_asset_selector(id(item), "item", item);
-			self.recipe["output"] = item["name"] if item != None else "";
-	
-	def draw_input_gui(self):
+	def draw_inspector(self):
 		if self.recipe is None:
 			return;
-		if self.input_idx is None:
-			return;
-		item_name = self.recipe["inputs"][self.input_idx];
+
+		item_name = self.recipe["output"];
 		item = AssetManager.search("item", item_name);
-		item = imgui_asset_selector(id(item), "item", item);
-		self.recipe["inputs"][self.input_idx] = item["name"] if item != None else "";
-		if InputManager.is_pressed(glfw.KEY_X):
-			self.recipe["inputs"][self.input_idx] = "";
-		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_C):
-			self.copy_buffer = self.recipe["inputs"][self.input_idx];
-		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_V):
-			if self.copy_buffer != None:
-				self.recipe["inputs"][self.input_idx] = self.copy_buffer;
+		sprite = SpriteBank.search(item["sprite"]) if item != None else SpriteBank.search("null_sprite");
+
+		true_height = sprite.frame_height;
+		display_height = self.cell_size * self.canvas.scale;
+		scale_factor = display_height / true_height;
+		display_width = sprite.frame_width * scale_factor;
+		imgui.image(imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(display_width, display_height));
+		self.recipe["output"] = input_asset("Output", self.recipe["output"], "item");
+
+		self.recipe["oriented"] = input_bool("Oriented", self.recipe["oriented"]);
+		
+		if not self.selection_context.is_empty():
+			imgui.separator();
+			idx = self.selection_context.get_selection(True);
+			self.recipe["inputs"][idx] = input_asset("Input", self.recipe["inputs"][idx], "item");
 	
 	def draw(self):
-		self.canvas_io.tick();
+		begin_column("selector", imgui.get_content_region_avail().x * 0.15);
+		self.draw_selector();
+		end_column();
 
-		imgui.begin_group();
-		self.draw_input_grid();
-		imgui.end_group();
+		begin_column("inputs", imgui.get_content_region_avail().x * 0.5);
+		self.draw_grid();
+		end_column();
 
-		imgui.same_line();
-
-		imgui.begin_group();
-		imgui.set_next_item_width(self.canvas_size[0] * self.canvas.scale);
-		self.recipe = imgui_asset_selector(id(self.recipe), "recipe", self.recipe);
-		self.draw_output_box();
-		self.draw_input_gui();
-		imgui.end_group();
+		begin_column("inspector", imgui.get_content_region_avail().x);
+		self.draw_inspector();
+		end_column();
 			

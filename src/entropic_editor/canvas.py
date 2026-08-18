@@ -18,7 +18,6 @@ class Canvas:
 		self.image = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0));
 		self.texture = make_texture(self.image.tobytes(), width, height);
 		self.draw = ImageDraw.Draw(self.image);
-		self.draw_flags = ();
 	
 		self.position = None;
 		self.has_mouse = False;

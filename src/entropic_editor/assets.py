@@ -58,10 +58,10 @@ class AssetDocument:
 		self.id_set.add(M+1);
 		return M+1;
 	
-	def spawn_entry(self, source=None):
+	def spawn_entry(self, source=None, name=None):
 		new = copy.deepcopy(source) if source != None else self.type_tree.prototype();
 
-		new["name"] = f"new_{self.type_name}";
+		new["name"] = f"new_{self.type_name}" if name == None else name;
 		if "id" in new:
 			new["id"] = self.take_free_id();
 

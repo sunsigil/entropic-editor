@@ -2,6 +2,7 @@ import asset_types;
 import re;
 import assets;
 import copy;
+from pathlib import Path;
 import context;
 
 class ScriptData:
@@ -24,11 +25,16 @@ class Script:
 		self.refresh();
 	
 	def refresh(self):
-		file = open(context.get().game_directory/"assets"/"scripts"/self.asset["path"], "r");
-		self.text = file.read();
+		file_path = Path(context.get().game_directory/"assets"/"scripts"/self.asset["path"]);
+		if file_path.exists():
+			file = open(file_path, "r");
+			self.text = file.read();
 
-		sd_exprs = re.findall(ScriptData.pattern, self.text);
-		self.script_data = [ScriptData(k, t) for k, t in sd_exprs];
+			sd_exprs = re.findall(ScriptData.pattern, self.text);
+			self.script_data = [ScriptData(k, t) for k, t in sd_exprs];
+		else:
+			self.text = "";
+			self.script_data = [];
 
 	def rectify(self):
 		self.asset["script_data"] = [x.export() for x in self.script_data];

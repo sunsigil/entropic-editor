@@ -1,16 +1,17 @@
 import OpenGL;
 OpenGL.FULL_LOGGING = True;
 from OpenGL.GL import *;
-from imgui_bundle import imgui;
-import math;
 from enum import Enum;
 import copy;
 import numpy as np;
 import pathlib;
 
 class EEID:
+	def __init__(self, start=0):
+		self.start = start;
+		self.eeid = self.start;
+	
 	def __iter__(self):
-		self.eeid = 0;
 		return self;
 
 	def __next__(self):
@@ -133,6 +134,9 @@ class SelectionContext:
 		if single:
 			return self.selections[-1] if len(self.selections) > 0 else None;
 		return self.selections;
+
+	def is_empty(self):
+		return len(self.selections) == 0;
 	
 	def env_set(self, key, value):
 		self.env[key] = value;
@@ -169,6 +173,9 @@ class Clipboard:
 		for entry in self.contents:
 			destination.append(entry);
 
+	def is_empty(self):
+		return len(self.contents) == 0;
+
 class Trash:
 	class DeleteItemRequest:
 		def __init__(self, source, item):
@@ -193,9 +200,16 @@ class Trash:
 		while len(self.buffer) > 0:
 			request = self.buffer.pop(0);
 			if isinstance(request, Trash.DeleteItemRequest):
-				self.contents.append(Trash.Record(request.source, request.item));
+				if not request.item in request.source:
+					continue;
+				try:
+					self.contents.append(Trash.Record(request.source, request.item));
+				except:
+					print("[Trash] failed to non-destructively trash one item");
 				request.source.remove(request.item);
 			elif isinstance(request, Trash.DeleteIndexRequest):
+				if request.index < -len(request.source) or request.index >= len(request.source):
+					continue;
 				self.contents.append(Trash.Record(request.source, request.source[request.index]));
 				del request.source[request.index];
 	

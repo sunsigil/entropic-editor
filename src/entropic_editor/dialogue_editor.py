@@ -2,89 +2,8 @@ from imgui_bundle import imgui, imgui_node_editor as imnodes;
 from assets import AssetManager;
 from cowtools import *;
 import editor_gui as gui;
-import random as rand;
-import input;
+from input import InputManager;
 import glfw;
-
-#########################################################
-## UNIVERSAL DIALOGUE GUI
-
-NODE_WIDTH = 256
-
-def gui_newline(width=NODE_WIDTH):
-	imgui.dummy((width, 8));
-
-def gui_input_line(line, width=NODE_WIDTH):
-	imgui.set_next_item_width(width);
-	imgui.begin_group();
-	imgui.push_id(str(id(line)));
-
-	imgui.set_next_item_width(width);
-	line["text"] = gui.input_string("Text", line["text"], True);
-	imgui.set_next_item_width(width);
-	line["script"] = gui.input_string("Script", line["script"], True);
-
-	imgui.pop_id();
-	imgui.end_group();
-
-def gui_input_edge(edge, pin_id, width=NODE_WIDTH):
-	imgui.set_next_item_width(width);
-	imgui.begin_group();
-	imgui.push_id(str(id(edge)));
-	
-	text_width = max(64, len(edge["text"]) * 8 + 32);
-	imgui.dummy((width-text_width, 0));
-	imgui.same_line();
-	imgui.set_next_item_width(text_width);
-	edge["text"] = gui.input_string("##text", edge["text"]);
-
-	imgui.same_line();
-	imnodes.begin_pin(pin_id, imnodes.PinKind.output);
-	imgui.text("(Out)");
-	imnodes.end_pin();
-
-	imgui.dummy((width-text_width, 0));
-	imgui.same_line();
-	imgui.set_next_item_width(text_width);
-	edge["condition"] = gui.input_string("Condition", edge["condition"], long=True);
-
-	imgui.pop_id();
-	imgui.end_group();
-
-def gui_node(node):
-	imnodes.begin_node(node.node_id);
-	imgui.push_id(str(id(node.asset)));
-	
-	imnodes.begin_pin(node.in_id, imnodes.PinKind.input);
-	imgui.text("(In)");
-	imnodes.end_pin();
-
-	imgui.same_line();
-	node.asset["face"] = gui.input_sprite("##face", node.asset["face"], (32, 32));
-
-	imgui.same_line();
-	imgui.set_next_item_width(NODE_WIDTH);
-	node.asset["name"] = gui.input_string("##name", node.asset["name"]);
-	gui_newline();
-
-	imgui.begin_group();
-	for idx, line in enumerate(node.asset["lines"]):
-		gui_input_line(line);
-	if imgui.button("New line"):
-		node.asset["lines"].append(AssetManager.get_tree("dialogue").search("lines").inmost.prototype());
-	imgui.end_group();
-	gui_newline();
-
-	imgui.begin_group();
-	for idx, edge in enumerate(node.asset["edges"]):
-		gui_input_edge(edge, node.out_ids[idx]);
-	if imgui.button("New edge"):
-		node.asset["edges"].append(AssetManager.get_tree("dialogue").search("edges").inmost.prototype());
-	imgui.end_group();
-	gui_newline();
-
-	imgui.pop_id();
-	imnodes.end_node();
 
 #########################################################
 ## DIALOGUE GRAPH
@@ -109,21 +28,120 @@ pid = GenID(imnodes.PinId);
 lid = GenID(imnodes.LinkId);
 
 class GraphNode:
-	def __init__(self, node, position=None):
-		self.asset = node;
-		self.node_id = imnodes.NodeId(id(node));
+	WIDTH = 256;
+
+	def __init__(self, asset, position=None, is_root=False):
+		self.trash = Trash(deferred=True);
+
+		self.asset = asset;
+
+		self.node_id = imnodes.NodeId(id(asset));
 		self.in_id = next(pid);
 		self.out_ids = [];
-		for edge in node["edges"]:
+		for edge in asset["edges"]:
 			self.out_ids.append(next(pid));
 
 		self.position = position;
+		self.is_root = is_root;
 
 	def refresh(self):
 		self.in_id = next(pid);
 		self.out_ids = [];
 		for edge in self.asset["edges"]:
 			self.out_ids.append(next(pid));
+
+	def _newline(self, width=None):
+		width = GraphNode.WIDTH if width == None else width;
+		imgui.dummy((width, 8));
+
+	def _draw_line(self, idx, width=None):
+		line = self.asset["lines"][idx];
+		width = GraphNode.WIDTH if width == None else width;
+
+		imgui.set_next_item_width(width);
+		imgui.begin_group();
+		imgui.push_id(str(id(line)));
+
+		imgui.set_next_item_width(width);
+		line["text"] = gui.input_string("Text", line["text"], True);
+		imgui.set_next_item_width(width);
+		line["script"] = gui.input_string("Script", line["script"], True);
+
+		imgui.pop_id();
+		imgui.end_group();
+
+		imgui.same_line();
+		if imgui.button(f"-##line_{idx}"):
+			self.trash.trash_index(self.asset["lines"], idx);
+
+	def _draw_edge(self, idx, pin_id, width=None):
+		edge = self.asset["edges"][idx];
+		width = GraphNode.WIDTH if width == None else width;
+
+		imgui.set_next_item_width(width);
+		imgui.begin_group();
+		imgui.push_id(str(id(edge)));
+		
+		text_width = max(64, len(edge["text"]) * 8 + 32);
+		imgui.dummy((width-text_width, 0));
+		imgui.same_line();
+		imgui.set_next_item_width(text_width);
+		edge["text"] = gui.input_string("##text", edge["text"]);
+
+		imgui.same_line();
+		imnodes.begin_pin(pin_id, imnodes.PinKind.output);
+		imgui.text("(Out)");
+		imnodes.end_pin();
+
+		imgui.dummy((width-text_width, 0));
+		imgui.same_line();
+		imgui.set_next_item_width(text_width);
+		edge["condition"] = gui.input_string("Condition", edge["condition"], long=True);
+
+		imgui.pop_id();
+		imgui.end_group();
+
+		imgui.same_line();
+		if imgui.button(f"-##edge_{idx}"):
+			self.trash.trash_index(self.asset["edges"], idx);
+
+	def draw(self):
+		imnodes.begin_node(self.node_id);
+		imgui.push_id(str(id(self.asset)));
+		
+		imnodes.begin_pin(self.in_id, imnodes.PinKind.input);
+		imgui.text("(In)");
+		imnodes.end_pin();
+	
+		imgui.same_line();
+		self.asset["face"] = gui.input_sprite("##face", self.asset["face"], (32, 32));
+	
+		if self.is_root:
+			imgui.same_line();
+			imgui.set_next_item_width(GraphNode.WIDTH);
+			self.asset["name"] = gui.input_string("##name", self.asset["name"]);
+			self._newline();
+	
+		imgui.begin_group();
+		for idx, line in enumerate(self.asset["lines"]):
+			self._draw_line(idx);
+		if imgui.button("New line"):
+			self.asset["lines"].append(AssetManager.get_tree("dialogue").search("lines").inmost.prototype());
+		imgui.end_group();
+		self._newline();
+	
+		imgui.begin_group();
+		for idx, edge in enumerate(self.asset["edges"]):
+			self._draw_edge(idx, self.out_ids[idx]);
+		if imgui.button("New edge"):
+			self.asset["edges"].append(AssetManager.get_tree("dialogue").search("edges").inmost.prototype());
+		imgui.end_group();
+		self._newline();
+	
+		imgui.pop_id();
+		imnodes.end_node();
+
+		self.trash.flush();
 
 class GraphEdge:
 	def __init__(self, out_id, in_id):
@@ -160,13 +178,13 @@ class GraphRegistry:
 			return None;
 
 	def search_by_node_id(self, node_id):
-		return self.by_node_id[node_id.id()];
+		return self.by_node_id[node_id.id()] if node_id.id() in self.by_node_id else None;
 
 	def search_by_pin_id(self, pin_id):
-		return self.by_pin_id[pin_id.id()];
+		return self.by_pin_id[pin_id.id()] if pin_id.id() in self.by_pin_id else None;
 
 	def search_by_link_id(self, link_id):
-		return self.by_link_id[link_id.id()];
+		return self.by_link_id[link_id.id()] if link_id.id() in self.by_link_id else None;
 
 def find_sources():
 	nodes = AssetManager.get_all("dialogue");
@@ -188,10 +206,13 @@ def populate_tree(node):
 	graph = [];
 	stack = [node];
 	visited = set(node["name"]);
+	root_face = node["face"];
 
 	while len(stack) > 0:
 		head = stack.pop(-1);
-		graph.append(GraphNode(head));
+		if head["face"] == "":
+			head["face"] = root_face;
+		graph.append(GraphNode(head, is_root=head==node));
 		for edge in head["edges"]:
 			next_node = AssetManager.search("dialogue", edge["node"]);
 			if next_node != None and not next_node["name"] in visited:
@@ -213,6 +234,14 @@ class DialogueEditor:
 		self.dirty = False;
 	
 		self.trash = Trash(deferred=True);
+		self.clipboard = Clipboard();
+		self.selection_context = SelectionContext();
+		self.canvas_focused = True;
+
+		names = [x["name"] for x in self.node_bank];
+		anons = [int(x[1:]) for x in names if x[0] == "x" and x[1:].isnumeric()];
+		anon_max = max(anons);
+		self.anon_id = EEID(anon_max+1);
 	
 	def __del__(self):
 		imnodes.destroy_editor(self.context);
@@ -228,6 +257,10 @@ class DialogueEditor:
 				if imgui.begin_menu("Open"):
 
 					if imgui.begin_menu("Source"):
+						if imgui.menu_item_simple("New source"):
+							root = AssetManager.get_document("dialogue").spawn_entry();
+							self.load_root(root);
+						
 						for source in self.source_bank:
 							clicked, status = imgui.menu_item(source["name"], "", source == self.root);
 							if clicked and status:
@@ -249,7 +282,7 @@ class DialogueEditor:
 		if imgui.begin_menu("Graph"):
 			if imgui.begin_menu("Add"):
 				if imgui.menu_item_simple("New node"):
-					new = AssetManager.get_document("dialogue").spawn_entry();
+					new = AssetManager.get_document("dialogue").spawn_entry(name=f"x{next(self.anon_id)}");
 					size = imnodes.get_screen_size();
 					w, h = size;
 					self.nodes.append(GraphNode(new, imnodes.screen_to_canvas(imgui.ImVec2(w/2, h/2))));
@@ -274,8 +307,36 @@ class DialogueEditor:
 		imnodes.set_current_editor(self.context);
 		imnodes.begin("graph", imgui.ImVec2(0, 0));
 
+		self.selection_context.clear();
+		selected_ids = imnodes.get_selected_nodes();
+		for node_id in selected_ids:
+			node = registry.search_by_node_id(node_id);
+			if node != None:
+				self.selection_context.select(node);
+		
+		if imgui.is_window_focused(imgui.WindowFlags_.child_window):
+			if not self.selection_context.is_empty():
+				self.canvas_focused = False;
+				selection = self.selection_context.get_selection();
+				if InputManager.is_command(glfw.KEY_C):
+					self.clipboard.clear();
+					for node in selection:
+						self.clipboard.copy(node);
+				if InputManager.is_command(glfw.KEY_D):
+					for node in selection:
+						self.trash.trash_item(self.nodes, node);
+			else:
+				if imnodes.is_background_clicked():
+					self.canvas_focused = True;
+				if self.canvas_focused and InputManager.is_command(glfw.KEY_V):
+					for node in self.clipboard.contents:
+						new = AssetManager.get_document("dialogue").spawn_entry(node.asset, name=f"x{next(self.anon_id)}");
+						size = imnodes.get_screen_size();
+						w, h = size;
+						self.nodes.append(GraphNode(new, imnodes.screen_to_canvas(imgui.ImVec2(w/2, h/2))));
+
 		for node in registry.nodes:
-			gui_node(node);
+			node.draw();
 		
 		for edge in registry.edges:
 			imnodes.link(edge.link_id, edge.out_id, edge.in_id);

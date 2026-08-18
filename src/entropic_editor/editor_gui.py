@@ -313,7 +313,7 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 	if isinstance(T, asset_types.Any):
 		value = input_any(gui_id, value);
 	if isinstance(T, asset_types.String):
-		value = input_string(gui_id, value, True);
+		value = input_string(gui_id, value, hasattr(T, "code") and T.code);
 	if isinstance(T, asset_types.Bool):
 		value = input_bool(gui_id, value);
 	if isinstance(T, asset_types.Float):
