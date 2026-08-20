@@ -49,7 +49,19 @@ def get_text_aabb(text):
 	return [x0, y0, x1, y1];
 
 def get_script_data(entity, key):
-	return next((x for x in entity["script_data"] if x["signature"]["key"] == key), None);
+	for entry in entity["script_data"]:
+		for datum in entry["data"]:
+			if datum["signature"]["key"] == key:
+				return datum;
+	return None;
+
+def rectify_entity_script_data(entity):
+	prototype = AssetManager.search("prototype", entity["prototype"]);
+	if prototype == None:
+		return;
+
+	prototype["script_data"] = scripts.rectify_all_script_data(prototype["scripts"], prototype["script_data"]);
+	entity["script_data"] = scripts.rectify_all_script_data(prototype["scripts"], entity["script_data"], prototype["script_data"]);
 	
 #########################################################
 ## SCENE EDITOR
@@ -922,11 +934,15 @@ class SceneEditor:
 				entity["frame_idx"] = input_int("Frame", entity["frame_idx"], EEGUIIntStyle.SLIDER, 0, sprite.frame_count-1);
 				
 				if imgui.tree_node("Script data"):
-					for sd_inst in entity["script_data"]:
-						sd = scripts.ScriptData(sd_inst["signature"]["key"], sd_inst["signature"]["type"]);
-						if imgui.tree_node(f"{sd.key}"):
-							sd_inst["value"] = typed_input(f"##{sd.key}", sd.type, sd_inst["value"]);
-							imgui.tree_pop();
+					for entry in entity["script_data"]:
+						if not imgui.tree_node(entry["script"]):
+							continue;
+						for datum in entry["data"]:
+							sd = scripts.ScriptDatum(datum["signature"]["key"], datum["signature"]["type"]);
+							if imgui.tree_node(f"{sd.key}##{entry["script"]}"):
+								datum["value"] = typed_input(f"##{sd.key}##{entry["script"]}", sd.type, datum["value"]);
+								imgui.tree_pop();
+						imgui.tree_pop();
 					if imgui.button("Reset to defaults"):
 						entity["script_data"] = [];
 					imgui.tree_pop();
@@ -951,7 +967,7 @@ class SceneEditor:
 		self.synchronize_manip();
 		
 		for entity in self.scene["entities"]:
-			scripts.rectify_entity(entity);
+			rectify_entity_script_data(entity);
 
 		def run_left_panel(panel_tick):
 			imgui.begin_child(

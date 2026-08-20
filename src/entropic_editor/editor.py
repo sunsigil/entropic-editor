@@ -16,9 +16,11 @@ from assets import *;
 from tool_window import Tool, ToolWindowRegistry;
 import asset_types;
 
-from scenes.scene_editor import SceneEditor;
 from sprites import SpriteBank;
+from scripts import ScriptBank, Script;
 from input import InputManager;
+
+from scenes.scene_editor import SceneEditor;
 from scenes.prototype_editor import PrototypeEditor;
 from dialogue_editor import DialogueEditor;
 from recipe_editor import RecipeEditor;
@@ -60,6 +62,8 @@ if __name__ == "__main__":
 				return;
 		glfw.set_window_should_close(handle, True);
 	glfw.set_window_close_callback(context.get().glfw_handle, window_close_callback);
+
+	Script.luac_path = Path(game_path)/Path("utils/bin/luac");
 
 	if typefile_path != None and typefile_path.is_file():
 			asset_types.load_typefile(typefile_path);
@@ -113,6 +117,7 @@ if __name__ == "__main__":
 		context.get().begin_frame();
 
 		SpriteBank.refresh();
+		ScriptBank.refresh(AssetManager.get_all("script"), AssetManager.get_document("script").directory);
 		InputManager.tick();
 
 		for document in AssetManager.documents:

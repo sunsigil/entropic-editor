@@ -131,13 +131,13 @@ class PrototypeEditor:
 			imgui.tree_pop();
 
 		if imgui.tree_node("Script Data"):
-			scripts.rectify_prototype(self.prototype);
+			self.prototype["script_data"] = scripts.rectify_all_script_data(self.prototype["scripts"], self.prototype["script_data"]);
 
-			for sd_inst in self.prototype["script_data"]:
-				sd = scripts.ScriptData(sd_inst["signature"]["key"], sd_inst["signature"]["type"]);
-				label = f"{sd.key} ({sd.type})";
-				sd_inst = next(x for x in self.prototype["script_data"] if x["signature"]["key"] == sd.key);
-				sd_inst["value"] = typed_input(label, sd.type, sd_inst["value"]);
+			for [script, data] in self.prototype["script_data"]:
+				sig = data["signature"];
+				datum = scripts.ScriptDatum(sig["key"], sig["type"]);
+				label = f"{sig["key"]} ({sig["type"]})";
+				data["value"] = typed_input(label, datum.type, data["value"]);
 					
 			imgui.tree_pop();
 	

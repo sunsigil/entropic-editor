@@ -8,6 +8,7 @@ from imgui_bundle import imgui;
 from pathlib import Path;
 import context;
 from enum import Enum;
+import math;
 
 def _is_image_black(img):
 	pixels = img.load();

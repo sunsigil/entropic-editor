@@ -1,11 +1,12 @@
 import asset_types;
 import re;
-import assets;
-import copy;
 from pathlib import Path;
-import context;
+import hashlib;
+import subprocess as sp;
+import copy;
+import os;
 
-class ScriptData:
+class ScriptDatum:
 	pattern = r"--@scriptdata ([0-9A-Za-z_]+)\s*\:\s*([0-9A-Za-z_]+)";
 
 	def __init__(self, key, type):
@@ -13,82 +14,130 @@ class ScriptData:
 		self.type_expr = type;
 		self.type = asset_types.construct_type(self.type_expr);
 
-	def export(self):
+	def to_json(self, value=None):
 		return {
-			"key": str(self.key),
-			"type": str(self.type_expr)
+			"signature": {
+				"key": str(self.key),
+				"type": str(self.type_expr),
+			},
+			"value": value
 		};
 
+def luac(luac_path, source, extra_args=[]):
+	args = [luac_path];
+	args += extra_args;
+	args += ["-o", "-", "-"];
+	return sp.run(args, input=source.encode(), capture_output=True, check=True).stdout;
+
 class Script:
-	def __init__(self, asset):
-		self.asset = asset;
-		self.refresh();
-	
-	def refresh(self):
-		file_path = Path(context.get().game_directory/"assets"/"scripts"/self.asset["path"]);
-		if file_path.exists():
-			file = open(file_path, "r");
-			self.text = file.read();
+	luac_path = None;
 
-			sd_exprs = re.findall(ScriptData.pattern, self.text);
-			self.script_data = [ScriptData(k, t) for k, t in sd_exprs];
-		else:
-			self.text = "";
-			self.script_data = [];
+	def __init__(self, source, name=None, debug=False):
+		self.source = source.strip();
+		self.name = name;
 
-	def rectify(self):
-		self.asset["script_data"] = [x.export() for x in self.script_data];
-	
-def rectify_prototype(prototype):
-	for script_name in prototype["scripts"]:
-		script_asset = assets.AssetManager.search("script", script_name);
-		if script_asset == None:
-			continue;
-		script = Script(script_asset);
+		self.bytecode = luac(Script.luac_path, self.source, [] if debug else ["-s"]);
+		self.hash = hashlib.sha1(self.bytecode);
 
-		for sd in script.script_data:
-			existing = next((x for x in prototype["script_data"] if x["signature"]["key"] == sd.key), None);
-			exists = existing != None;
-			if not exists:
-				prototype["script_data"].append({
-					"signature": sd.export(),
-					"value": sd.type.prototype()
-				});
-			else:
-				existing["signature"]["type"] = sd.type_expr;
-				if not sd.type.validate(existing["value"]):
-					existing["value"] = sd.type.rectify(existing["value"]);
+		if self.name == None:
+			self.name = f"_{self.hash.hexdigest()[:12]}";
+
+		sd_exprs = re.findall(ScriptDatum.pattern, self.source);
+		self.script_data = [ScriptDatum(k, t) for k, t in sd_exprs];
+
+	def export(self, path):
+		path = Path(path);
+		if not path.parent.exists():
+			path.parent.mkdir(parents=True, exist_ok=True);
+		file = open(path, "wb");
+		file.write(self.bytecode);
+		file.close();
 	
-def rectify_entity(entity):
-		prototype = assets.AssetManager.search("prototype", entity["prototype"]);
-		if prototype == None:
+	def __hash__(self):
+		return int(self.hash.hexdigest(), 16);
+
+class ScriptBank:
+	class Record:
+		def __init__(self, name, path):
+			with open(path, "r") as file:
+				self.path = path;
+				self.timestamp = os.lstat(path).st_mtime;
+				self.script = Script(file.read(), name);
+	
+	by_name = {};
+
+	def update(name, path):
+		path = Path(path);
+		if not (path.exists() and path.is_file()):
 			return;
-		rectify_prototype(prototype);
 
-		valid_keys = [];
-		for script_name in prototype["scripts"]:
-			script_asset = assets.AssetManager.search("script", script_name);
-			if script_asset == None:
-				continue;
-			script = Script(script_asset);
+		record = ScriptBank.by_name[name] if name in ScriptBank.by_name else None;
+		timestamp = os.lstat(path).st_mtime;
+		if record == None or record.timestamp != timestamp:
+			ScriptBank.by_name[name] = ScriptBank.Record(name, path);
+	
+	def	refresh(script_assets, script_dir):
+		for asset in script_assets:
+			name = asset["name"];
+			relative_path = asset["path"];
+			real_path = script_dir / relative_path;
+			ScriptBank.update(name, real_path);
+	
+	def search(name):
+		return ScriptBank.by_name[name].script if name in ScriptBank.by_name else None;
 
-			for sd in script.script_data:
-				existing = next((x for x in entity["script_data"] if x["signature"]["key"] == sd.key), None);
-				exists = existing != None;
-				if not exists:
-					default = next(x for x in prototype["script_data"] if x["signature"]["key"] == sd.key);
-					entity["script_data"].append(copy.copy(default));
-				else:
-					existing["signature"]["type"] = sd.type_expr;
-					if not sd.type.validate(existing["value"]):
-						existing["value"] = sd.type.rectify(existing["value"]);
-				
-				valid_keys.append(sd.key);
-		
-		trash = [];
-		for sd_inst in entity["script_data"]:
-			if sd_inst["signature"]["key"] not in valid_keys:
-				trash.append(sd_inst);
-		for sd_inst in trash:
-			entity["script_data"].remove(sd_inst);
+def get_all_script_data(script_names):
+	data = [];
+	for name in script_names:
+		script = ScriptBank.search(name);
+		if script != None:
+			entry = {
+				"script": name,
+				"data": [x.to_json() for x in script.script_data]
+			};
+			data.append(entry);
+	return data;
 
+def address_data(all_data, script, key):
+	for entry in all_data:
+		if entry["script"] == script:
+			for datum in entry["data"]:
+				if datum["signature"]["key"] == key:
+					return datum;
+	return None;
+
+def validate_datum(datum):
+	T_expr = datum["signature"]["type"];
+	T = asset_types.construct_type(T_expr);
+	return T.validate(datum["value"]);
+
+def rectify_all_script_data(script_names, all_actual, all_reference=None):
+	if all_reference == None:
+		all_reference = get_all_script_data(script_names);
+	all_merged = [];
+
+	for script_data in all_reference:
+		merged = [];
+
+		script = script_data["script"];
+		data = script_data["data"];
+		keys = [x["signature"]["key"] for x in data];
+
+		for key in keys:
+			reference = address_data(all_reference, script, key);
+			actual = address_data(all_actual, script, key);
+			if actual == None:
+				merged.append(copy.deepcopy(reference));
+			elif not validate_datum(actual):
+				T = asset_types.construct_type(actual["signature"]["type"]);
+				actual["value"] = T.rectify(actual["value"]);
+				merged.append(actual);
+			else:
+				merged.append(actual);
+
+		all_merged.append({
+			"script": script,
+			"data": merged
+		});
+
+	return all_merged;

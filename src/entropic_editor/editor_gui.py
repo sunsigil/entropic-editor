@@ -11,10 +11,9 @@ import cowtools;
 
 from assets import AssetManager;
 from tool_window import ToolWindowRegistry;
-from file_explorer import FileExplorer;
-from asset_explorer import AssetExplorer;
+import file_explorer;
+import asset_explorer;
 from text_editor import TextEditor;
-from sprites import SpriteBank;
 
 # Not Actually GUI
 
@@ -182,13 +181,13 @@ def input_file(gui_id, value, pattern, directory=None, asset_type=None, return_a
 	browse = imgui.button(f"Browse##{gui_id}");
 
 	win_id = imgui.get_id(gui_id);
-	win = ToolWindowRegistry.search(FileExplorer).window(win_id);
+	win = ToolWindowRegistry.search(file_explorer.FileExplorer).window(win_id);
 	if win != None:
 		harvest = win.get_result();
 		value = harvest if harvest != None else value;
 	else:
 		if browse:
-			win = ToolWindowRegistry.search(FileExplorer).open(win_id);
+			win = ToolWindowRegistry.search(file_explorer.FileExplorer).open(win_id);
 			if directory == None:
 				if asset_type != None:
 					directory = AssetManager.get_document(asset_type).directory;
@@ -205,31 +204,31 @@ def input_asset(gui_id, value, asset_type):
 	browse = imgui.button(f"Browse##{gui_id}");
 
 	win_id = imgui.get_id(gui_id);
-	win = ToolWindowRegistry.search(AssetExplorer).window(win_id);
+	win = ToolWindowRegistry.search(asset_explorer.AssetExplorer).window(win_id);
 	if win != None:
 		harvest = win.get_result();
 		value = harvest if harvest != None else value;
 	else:
 		if browse:
-			win = ToolWindowRegistry.search(AssetExplorer).open(win_id);
+			win = ToolWindowRegistry.search(asset_explorer.AssetExplorer).open(win_id);
 			win.configure(asset_type);
 
 	return value;
 
 def input_sprite(gui_id, value, size=(64, 64)):
-	sprite = SpriteBank.search(value);
+	sprite = sprites.SpriteBank.search(value);
 	w, h = size;
 
 	clicked = imgui.image_button(gui_id, imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(w, h));
 
 	win_id = imgui.get_id(gui_id);
-	win = ToolWindowRegistry.search(AssetExplorer).window(win_id);
+	win = ToolWindowRegistry.search(asset_explorer.AssetExplorer).window(win_id);
 	if win != None:
 		harvest = win.get_result();
 		value = harvest if harvest != None else value;
 	else:
 		if clicked:
-			win = ToolWindowRegistry.search(AssetExplorer).open(win_id);
+			win = ToolWindowRegistry.search(asset_explorer.AssetExplorer).open(win_id);
 			win.configure("sprite");
 
 	return value;
