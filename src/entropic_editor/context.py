@@ -59,7 +59,7 @@ class Context:
 		self.time = glfw.get_time();
 		self.delta_time = 0;
 
-	def __del__(self):
+	def shutdown(self):
 		self.imgui_impl.shutdown();
 		imgui.destroy_context();
 

@@ -6,9 +6,8 @@ from stat import *;
 import sys;
 import argparse;
 
-import glfw;
 from imgui_bundle import imgui;
-from imgui_bundle.python_backends.glfw_backend import GlfwRenderer;
+import glfw;
 import context;
 
 from cowtools import *;
@@ -113,67 +112,69 @@ if __name__ == "__main__":
 	ToolWindowRegistry.register(Tool(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
 	ToolWindowRegistry.register(Tool(SpriteImporter, "Sprite Importer", flags=tool_flags));
 
-	while context.get().is_alive():
-		context.get().begin_frame();
+	try:
+		while context.get().is_alive():
+			context.get().begin_frame();
 
-		SpriteBank.refresh();
-		ScriptBank.refresh(AssetManager.get_all("script"), AssetManager.get_document("script").directory);
-		InputManager.tick();
+			SpriteBank.refresh();
+			ScriptBank.refresh(AssetManager.get_all("script"), AssetManager.get_document("script").directory);
+			InputManager.tick();
 
-		for document in AssetManager.documents:
-			document.refresh();
-		make_backups(game_path/"backups/hot");
-		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_S):
 			for document in AssetManager.documents:
-				document.save();
+				document.refresh();
+			make_backups(game_path/"backups/hot");
+			if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_S):
+				for document in AssetManager.documents:
+					document.save();
 
-		de_trash = [de for de in document_editors if not de.open];
-		for de in de_trash:
-			document_editors.remove(de);
-		def doc_is_open(doc):
-			return next((x for x in document_editors if x.document.type_name == doc.type_name), None) != None;
+			de_trash = [de for de in document_editors if not de.open];
+			for de in de_trash:
+				document_editors.remove(de);
+			def doc_is_open(doc):
+				return next((x for x in document_editors if x.document.type_name == doc.type_name), None) != None;
 
-		imgui.set_next_window_pos((0, 0));
-		imgui.set_next_window_size(imgui.ImVec2(1920*0.8, 1080*0.8));
-		imgui.begin(context.get().name, flags=window_flags | splash_flags);
+			imgui.set_next_window_pos((0, 0));
+			imgui.set_next_window_size(imgui.ImVec2(1920*0.8, 1080*0.8));
+			imgui.begin(context.get().name, flags=window_flags | splash_flags);
 
-		if imgui.begin_main_menu_bar():
-			if imgui.begin_menu("File"):
-				if imgui.begin_menu("Open"):
-					for document in AssetManager.documents:
-						_, clicked = imgui.menu_item(document.type_name, "", doc_is_open(document));
-						if clicked:
-							if not doc_is_open(document):
-								document_editors.append(DocumentEditor(document));
-							else:
-								for de in document_editors:
-									if de.document == document:
-										de.close();
+			if imgui.begin_main_menu_bar():
+				if imgui.begin_menu("File"):
+					if imgui.begin_menu("Open"):
+						for document in AssetManager.documents:
+							_, clicked = imgui.menu_item(document.type_name, "", doc_is_open(document));
+							if clicked:
+								if not doc_is_open(document):
+									document_editors.append(DocumentEditor(document));
+								else:
+									for de in document_editors:
+										if de.document == document:
+											de.close();
+						imgui.end_menu();
+					
+					if imgui.menu_item_simple("Save all"):
+						print("Saving...");
+						for document in AssetManager.documents:
+							document.save();
 					imgui.end_menu();
 				
-				if imgui.menu_item_simple("Save all"):
-					print("Saving...");
-					for document in AssetManager.documents:
-						document.save();
-				imgui.end_menu();
-			
-			if imgui.begin_menu("Tools"):
-				for tool in ToolWindowRegistry.all():
-					if not tool.hidden and imgui.menu_item_simple(tool.title):
-						tool.open();
-				imgui.end_menu();
-			imgui.end_main_menu_bar();
+				if imgui.begin_menu("Tools"):
+					for tool in ToolWindowRegistry.all():
+						if not tool.hidden and imgui.menu_item_simple(tool.title):
+							tool.open();
+					imgui.end_menu();
+				imgui.end_main_menu_bar();
 
-			imgui.set_scroll_x(0);
-			imgui.set_scroll_y(0);
-			imgui.image(imgui.ImTextureRef(splash_tex), imgui.ImVec2(splash_img.width, splash_img.height));
-		imgui.end();
+				imgui.set_scroll_x(0);
+				imgui.set_scroll_y(0);
+				imgui.image(imgui.ImTextureRef(splash_tex), imgui.ImVec2(splash_img.width, splash_img.height));
+			imgui.end();
 
-		for de in document_editors:
-			de.draw();
-		for tool in ToolWindowRegistry.all():
-			tool.draw();
-		imgui.show_id_stack_tool_window();
+			for de in document_editors:
+				de.draw();
+			for tool in ToolWindowRegistry.all():
+				tool.draw();
+			imgui.show_id_stack_tool_window();
 
-		context.get().end_frame();
-
+			context.get().end_frame();
+	finally:
+		context.get().shutdown();
