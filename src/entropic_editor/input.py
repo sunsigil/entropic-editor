@@ -40,15 +40,12 @@ class InputManager:
 
 	def is_command(keys):
 		if not InputManager.is_held(glfw.KEY_LEFT_SUPER):
-			return;
-		if isinstance(keys, list):
-			for idx, key in enumerate(keys):
-				if idx == len(keys)-1:
-					if not InputManager.is_pressed(key):
-						return False;
-				else:
-					if not InputManager.is_held(key):
-						return False;
-		if not InputManager.is_pressed(keys):
 			return False;
-		return True;
+		if not isinstance(keys, list):
+			keys = [keys];
+		if len(keys) == 0:
+			return False;
+		for key in keys[:-1]:
+			if not InputManager.is_held(key):
+				return False;
+		return InputManager.is_pressed(keys[-1]);

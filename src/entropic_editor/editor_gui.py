@@ -36,24 +36,30 @@ class Tooltip:
 
 class ContextMenu:
 	gui_id = None;
+	pending_frame = -1;
 
 	def _make_id(gui_id):
 		return f"##context-menu-{gui_id}";
 
+	# ping() only records that the last item was right-clicked. The popup is
+	# opened and drawn in begin(), so open_popup and begin_popup always run
+	# under the same ID stack. Opening it here would fail whenever the item
+	# is an expanded tree node, since tree_node pushes an ID until tree_pop
+	# and begin() is usually called after that.
 	def ping(gui_id):
-		window_id = ContextMenu._make_id(gui_id);
-		if imgui.is_popup_open(window_id):
-			return;
-	
-		if imgui.begin_popup_context_item(window_id):
-			imgui.open_popup(window_id);
+		if imgui.is_item_hovered(imgui.HoveredFlags_.allow_when_blocked_by_popup) and imgui.is_mouse_released(imgui.MouseButton_.right):
 			ContextMenu.gui_id = gui_id;
-			imgui.end_popup();
+			ContextMenu.pending_frame = imgui.get_frame_count();
 
 	def begin(gui_id):
 		if ContextMenu.gui_id != gui_id:
-			return;
-		return imgui.begin_popup(ContextMenu._make_id(gui_id));
+			return False;
+		window_id = ContextMenu._make_id(gui_id);
+		# A ping with no matching begin() would otherwise stay pending forever.
+		if imgui.get_frame_count() - ContextMenu.pending_frame <= 1:
+			imgui.open_popup(window_id);
+			ContextMenu.pending_frame = -1;
+		return imgui.begin_popup(window_id);
 	
 # Even More Primitive
 
@@ -66,8 +72,8 @@ def combo(gui_id, value, values, fmt=lambda x: x):
 			if selected:
 				imgui.set_item_default_focus();
 		imgui.end_combo();
-	Tooltip.ping();
 	ContextMenu.ping(gui_id);
+	Tooltip.ping();
 	return value;
 
 # Custom Widgets
@@ -85,34 +91,34 @@ class EEGUIIntStyle(Enum):
 def input_int(gui_id, value, style=EEGUIIntStyle.DEFAULT, low_bound=None, high_bound=None):
 	match style:
 		case EEGUIIntStyle.DEFAULT:
-			_, value = imgui.input_int(str(gui_id), int(value));
+			_, value = imgui.input_int(str(gui_id), int(value) if value != None else 0);
 			if low_bound != None:
 				value = max(value, low_bound);
 			if high_bound != None:
 				value = min(value, high_bound);
 		case EEGUIIntStyle.SLIDER:
 			_, value = imgui.slider_int(str(gui_id), value, low_bound, high_bound);
-	Tooltip.ping();
 	ContextMenu.ping(gui_id);
+	Tooltip.ping();
 	return value;
 
 def input_float(gui_id, value):
 	_, value = imgui.input_float(str(gui_id), value);
-	Tooltip.ping();
 	ContextMenu.ping(gui_id);
+	Tooltip.ping();
 	return value;
 
 def input_bool(gui_id, value):
 	_, value = imgui.checkbox(str(gui_id), bool(value));
-	Tooltip.ping();
 	ContextMenu.ping(gui_id);
+	Tooltip.ping();
 	return value;
 
 def input_string(gui_id, value, long=False):
 	text_id = str(gui_id);
 	_, value = imgui.input_text(text_id, str(value));
-	Tooltip.ping();
 	ContextMenu.ping(gui_id);
+	Tooltip.ping();
 	
 	if long:
 		imgui.same_line();
@@ -168,8 +174,8 @@ def input_flags(gui_id, value, values):
 			value.append(candidate);
 		elif not included and candidate in value:
 			value.remove(candidate);
-	Tooltip.ping();
 	ContextMenu.ping(gui_id);
+	Tooltip.ping();
 	return value;
 
 # Special Data
@@ -248,8 +254,8 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 
 	if isinstance(T, asset_types.Object):
 		node_open = imgui.tree_node(gui_id);
-		Tooltip.ping();
 		ContextMenu.ping(gui_id);
+		Tooltip.ping();
 
 		if node_open:
 			if previews:
@@ -266,8 +272,8 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 
 	if isinstance(T, asset_types.List):
 		node_open = imgui.tree_node(gui_id);
-		Tooltip.ping();
 		ContextMenu.ping(gui_id);
+		Tooltip.ping();
 		if ContextMenu.begin(gui_id):
 			if imgui.menu_item_simple("Add"):
 				value.append(T.T.prototype());
@@ -277,7 +283,8 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
 			N = len(value);
 
 			if getattr(T, "read_only", False):
-				typed_display(f"[{i}]##{anchor}", T.T, value[i], previews, tooltip);
+				for i in range(N):
+					typed_display(f"[{i}]##{anchor}", T.T, value[i], previews, tooltip);
 			else:
 				trash = [];
 				for i in range(N):
@@ -334,9 +341,9 @@ def typed_display(gui_id, T, value, previews=False, tooltip=False):
 		Tooltip.ping();
 
 		if node_open:
-			for element in T.elements:
+			for key, element in T.elements.items():
 				if key in value:
-					value[key] = typed_display(f"{key}##{anchor}", element.T, value[key], previews, tooltip);
+					typed_display(f"{key}##{anchor}", element, value[key], previews, tooltip);
 			imgui.tree_pop();
 
 	if isinstance(T, asset_types.List):
@@ -344,16 +351,8 @@ def typed_display(gui_id, T, value, previews=False, tooltip=False):
 		Tooltip.ping();
 
 		if node_open:
-			trash = [];
-
-			N = len(value);
-			for i in range(N):
-				value[i] = typed_display(f"[{i}]##{anchor}", T.T, value[i]);
-			
-			for i in trash:
-				del value[i];
-			trash = [];
-
+			for i in range(len(value)):
+				typed_display(f"[{i}]##{anchor}", T.T, value[i], previews, tooltip);
 			imgui.tree_pop();
 	
 	if isinstance(T, asset_types.Asset):
@@ -399,7 +398,7 @@ def input_aabb(gui_id, value, mode="xyxy"):
 			w, h = x1-x0, y1-y0;
 			x0, y0 = imgui.input_int2(f"X Y##{gui_id}", [int(x0), int(y0)])[1];
 			w, h = imgui.input_int2(f"W H##{gui_id}", [int(w), int(h)])[1];
-			value = [x0, y0, x0+w, x0+h];
+			value = [x0, y0, x0+w, y0+h];
 	imgui.end_group();
 	ContextMenu.ping(gui_id);
 	return value;
@@ -439,8 +438,8 @@ def input_orientation(gui_id, value):
 def input_colour(gui_id, value):
 	r, g, b = value;
 	_, (r, g, b) = imgui.color_edit3(str(gui_id), (r/255, g/255, b/255));
-	Tooltip.ping();
 	ContextMenu.ping(gui_id);
+	Tooltip.ping();
 	return int(r*255), int(g*255), int(b*255);
 
 # Layout

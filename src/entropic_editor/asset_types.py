@@ -11,12 +11,9 @@ class Type():
 	def __eq__(self, value):
 		if type(self) == type(value):
 			if isinstance(self, Object):
-				if len(self.elements) != len(value.elements):
+				if self.elements.keys() != value.elements.keys():
 					return False;
-				equal = True;
-				for i in range(len(self.elements)):
-					equal &= self.elements[i].T == value.elements[i].T;
-				return equal;
+				return all(self.elements[k] == value.elements[k] for k in self.elements);
 		
 			elif isinstance(self, List):
 				return self.T == value.T;
@@ -250,15 +247,14 @@ class Object(Type):
 			return False;
 	
 		exclusion_pass = True;
-		canon_keys = [e.name for e in self.elements];
 		for key in value:
-			exclusion_pass &= key in canon_keys;
+			exclusion_pass &= key in self.elements;
 		if not exclusion_pass:
 			return False;
 
 		inclusion_pass = True;
-		for element in self.elements:
-			inclusion_pass &= element.name in value and element.validate(value[element.name]);
+		for name, T in self.elements.items():
+			inclusion_pass &= name in value and bool(T.validate(value[name]));
 		if not inclusion_pass:
 			return False;
 
@@ -268,19 +264,15 @@ class Object(Type):
 		if not isinstance(value, dict):
 			value = {};
 		
-		trash = [];
-		for key in value:
-			element = next((x for x in self.elements if x.name == key), None);
-			if element == None:
-				trash.append(key);
+		trash = [key for key in value if key not in self.elements];
 		for key in trash:
 			del value[key];
 
-		for element in self.elements:
-			if not element.name in value:
-				value[element.name] = element.T.prototype();
+		for name, T in self.elements.items():
+			if not name in value:
+				value[name] = T.prototype();
 			else:
-				value[element.name] = element.T.rectify(value[element.name]);
+				value[name] = T.rectify(value[name]);
 
 		return value;
 
@@ -349,7 +341,7 @@ def construct_type(expr, attributes={}) -> Type:
 	return Asset(expr, attributes=attributes);
 
 class MapNode:	
-	def __init__(self, parent: MapNode, T: Type, I):
+	def __init__(self, parent: "MapNode", T: Type, I):
 		self.parent = parent;
 		self.update(T, I);
 	def __repr__(self):

@@ -133,12 +133,15 @@ class PrototypeEditor:
 		if imgui.tree_node("Script Data"):
 			self.prototype["script_data"] = scripts.rectify_all_script_data(self.prototype["scripts"], self.prototype["script_data"]);
 
-			for [script, data] in self.prototype["script_data"]:
-				sig = data["signature"];
-				datum = scripts.ScriptDatum(sig["key"], sig["type"]);
-				label = f"{sig["key"]} ({sig["type"]})";
-				data["value"] = typed_input(label, datum.type, data["value"]);
-					
+			for entry in self.prototype["script_data"]:
+				if imgui.tree_node(entry["script"]):
+					for data in entry["data"]:
+						sig = data["signature"];
+						datum = scripts.ScriptDatum(sig["key"], sig["type"]);
+						label = f"{sig["key"]} ({sig["type"]})";
+						data["value"] = typed_input(label, datum.type, data["value"]);
+					imgui.tree_pop();
+			
 			imgui.tree_pop();
 	
 	def canvas_draw_boxes(self):

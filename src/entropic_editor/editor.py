@@ -5,6 +5,7 @@ from PIL import Image;
 from stat import *;
 import sys;
 import argparse;
+import traceback;
 
 from imgui_bundle import imgui;
 import glfw;
@@ -16,7 +17,7 @@ from tool_window import Tool, ToolWindowRegistry;
 import asset_types;
 
 from sprites import SpriteBank;
-from scripts import ScriptBank, Script;
+from scripts import ScriptBank;
 from input import InputManager;
 
 from scenes.scene_editor import SceneEditor;
@@ -52,24 +53,15 @@ if __name__ == "__main__":
 		"Entropic Editor", 1920, 1080)
 	);
 
-	InputManager.initialize(context.get().glfw_handle, context.get().imgui_impl);
-	def window_close_callback(handle):
-		for tool in ToolWindowRegistry.all():
-			if tool.is_open():
-				tool.close();
-				glfw.set_window_should_close(handle, False);
-				return;
-		glfw.set_window_should_close(handle, True);
-	glfw.set_window_close_callback(context.get().glfw_handle, window_close_callback);
-
-	Script.luac_path = Path(game_path)/Path("utils/bin/luac");
-
 	if typefile_path != None and typefile_path.is_file():
-			asset_types.load_typefile(typefile_path);
+		asset_types.load_typefile(typefile_path);
+	
 	for path in (game_path/"assets").rglob("*.json"):
 		if AssetDocument.is_file_asset_document(path):
 			AssetManager.load_document(path);
 	make_backups(game_path/"backups/cold", cold=True);
+	HOT_BACKUP_INTERVAL = 5.0;
+	hot_backup_timestamp = glfw.get_time();
 
 	document_editors = [];
 	
@@ -112,6 +104,22 @@ if __name__ == "__main__":
 	ToolWindowRegistry.register(Tool(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
 	ToolWindowRegistry.register(Tool(SpriteImporter, "Sprite Importer", flags=tool_flags));
 
+	InputManager.initialize(context.get().glfw_handle, context.get().imgui_impl);
+
+	def window_close_callback(handle):
+		for tool in ToolWindowRegistry.all():
+			if tool.is_open():
+				tool.close();
+				glfw.set_window_should_close(handle, False);
+				return;
+		for de in document_editors:
+			if de.open:
+				de.close();
+				glfw.set_window_should_close(handle, False);
+				return;
+		glfw.set_window_should_close(handle, True);
+	glfw.set_window_close_callback(context.get().glfw_handle, window_close_callback);
+
 	try:
 		while context.get().is_alive():
 			context.get().begin_frame();
@@ -122,7 +130,17 @@ if __name__ == "__main__":
 
 			for document in AssetManager.documents:
 				document.refresh();
-			make_backups(game_path/"backups/hot");
+
+			History.tick(idle=not imgui.is_any_item_active() and not imgui.is_any_mouse_down());
+			if not imgui.get_io().want_text_input and InputManager.is_command(glfw.KEY_Z):
+				if InputManager.is_held(glfw.KEY_LEFT_SHIFT) or InputManager.is_held(glfw.KEY_RIGHT_SHIFT):
+					History.redo();
+				else:
+					History.undo();
+
+			if glfw.get_time() - hot_backup_timestamp >= HOT_BACKUP_INTERVAL:
+				make_backups(game_path/"backups/hot", cold=False);
+				hot_backup_timestamp = glfw.get_time();
 			if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_S):
 				for document in AssetManager.documents:
 					document.save();
@@ -173,8 +191,17 @@ if __name__ == "__main__":
 				de.draw();
 			for tool in ToolWindowRegistry.all():
 				tool.draw();
-			imgui.show_id_stack_tool_window();
 
 			context.get().end_frame();
+	except Exception:
+		traceback.print_exc();
+		recovery_dir = game_path/"backups/recovery";
+		try:
+			make_backups(recovery_dir, cold=False);
+			print(f"[Editor] Crashed. Unsaved work written to {recovery_dir}");
+		except Exception:
+			print("[Editor] Crashed, and the recovery save also failed:");
+			traceback.print_exc();
+		raise;
 	finally:
 		context.get().shutdown();

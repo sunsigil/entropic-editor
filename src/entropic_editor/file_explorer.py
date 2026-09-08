@@ -70,8 +70,7 @@ class FileExplorer:
 		if self.asset_type == "sprite":
 			_, self.filter_unused = imgui.checkbox("Unused", self.filter_unused);
 			if self.filter_unused:
-				unused = [x for x in listings if not sprites.is_image_sprite(Path(os.path.relpath(x.absolute(), self.anchor.absolute())))];
-				listings = unused;
+				listings = [x for x in listings if x.is_dir() or not sprites.SpriteBank.is_image_used(x.absolute())];
 
 		listings.sort();
 		

@@ -991,9 +991,6 @@ class SceneEditor:
 				if selection != None:
 					self.trash.trash_item(self.scene["entities"], selection);
 			
-			if InputManager.is_command(glfw.KEY_Z):
-				self.trash.restore();
-			
 			self.spawn_popup.draw();
 			
 			self.canvas_manip.tick();

@@ -87,7 +87,7 @@ def set_by_path(structure, path, value):
 		if len(path) == 0:
 			structure[part] = value;
 		else:
-			(structure[part], path, value);
+			set_by_path(structure[part], path, value);
 
 def make_texture(buffer, width, height):
 	texture = glGenTextures(1);

@@ -240,7 +240,7 @@ class DialogueEditor:
 
 		names = [x["name"] for x in self.node_bank];
 		anons = [int(x[1:]) for x in names if x[0] == "x" and x[1:].isnumeric()];
-		anon_max = max(anons);
+		anon_max = max(anons, default=-1);
 		self.anon_id = EEID(anon_max+1);
 	
 	def __del__(self):
