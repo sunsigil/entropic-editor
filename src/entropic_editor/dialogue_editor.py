@@ -65,7 +65,7 @@ class GraphNode:
 		imgui.set_next_item_width(width);
 		line["text"] = gui.input_string("Text", line["text"], True);
 		imgui.set_next_item_width(width);
-		line["script"] = gui.input_string("Script", line["script"], True);
+		line["script"] = gui.input_string("Script", line["script"], True, True);
 
 		imgui.pop_id();
 		imgui.end_group();
@@ -96,7 +96,7 @@ class GraphNode:
 		imgui.dummy((width-text_width, 0));
 		imgui.same_line();
 		imgui.set_next_item_width(text_width);
-		edge["condition"] = gui.input_string("Condition", edge["condition"], long=True);
+		edge["condition"] = gui.input_string("Condition", edge["condition"], True, True);
 
 		imgui.pop_id();
 		imgui.end_group();
@@ -205,7 +205,7 @@ def find_sources():
 def populate_tree(node):
 	graph = [];
 	stack = [node];
-	visited = set(node["name"]);
+	visited = {node["name"]};
 	root_face = node["face"];
 
 	while len(stack) > 0:
@@ -238,6 +238,12 @@ class DialogueEditor:
 		self.selection_context = SelectionContext();
 		self.canvas_focused = True;
 
+		self.context_node = None;
+		self.rename_target = None;
+		self.rename_buffer = "";
+		self.rename_pending = False;
+		self.node_generation = AssetManager.get_document("dialogue").generation;
+
 		names = [x["name"] for x in self.node_bank];
 		anons = [int(x[1:]) for x in names if x[0] == "x" and x[1:].isnumeric()];
 		anon_max = max(anons, default=-1);
@@ -250,7 +256,91 @@ class DialogueEditor:
 		self.root = node;
 		self.nodes = populate_tree(self.root);
 		self.dirty = True;
-	
+
+	def resync(self):
+		# History restores an undone/redone delete as a new dict, not the one
+		# self.nodes was holding, so a document-level undo doesn't by itself
+		# bring a deleted node back into the currently displayed graph.
+		document = AssetManager.get_document("dialogue");
+		if document.generation == self.node_generation:
+			return;
+		self.node_generation = document.generation;
+
+		live = document.instances;
+		self.nodes = [node for node in self.nodes if node.asset in live];
+
+		known = {node.asset["name"] for node in self.nodes};
+		grown = True;
+		while grown:
+			grown = False;
+			for node in list(self.nodes):
+				for edge in node.asset["edges"]:
+					name = edge["node"];
+					if name != "" and name not in known:
+						target = AssetManager.search("dialogue", name);
+						if target != None:
+							self.nodes.append(GraphNode(target));
+							known.add(name);
+							grown = True;
+
+		self.dirty = True;
+
+	def begin_rename(self, instance):
+		self.rename_target = instance;
+		self.rename_buffer = instance["name"];
+		# Popup IDs hash against the ID stack, so the popup must be opened
+		# from window level rather than from inside the context menu.
+		self.rename_pending = True;
+
+	def draw_rename_modal(self):
+		modal_id = "Rename node";
+		if self.rename_pending:
+			imgui.open_popup(modal_id);
+			self.rename_pending = False;
+
+		if self.rename_target == None:
+			return;
+
+		visible, _ = imgui.begin_popup_modal(modal_id, None, imgui.WindowFlags_.always_auto_resize);
+		if not visible:
+			self.rename_target = None;
+			return;
+
+		old_name = self.rename_target["name"];
+
+		if imgui.is_window_appearing():
+			imgui.set_keyboard_focus_here();
+		imgui.set_next_item_width(256);
+		submitted, self.rename_buffer = imgui.input_text(
+			"##rename", self.rename_buffer, imgui.InputTextFlags_.enter_returns_true
+		);
+
+		new_name = self.rename_buffer.strip();
+		collision = new_name != old_name and AssetManager.search("dialogue", new_name) != None;
+		valid = len(new_name) > 0 and not collision;
+
+		if collision:
+			imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), "Name already in use");
+		elif len(new_name) == 0:
+			imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), "Name cannot be empty");
+
+		imgui.begin_disabled(not valid);
+		commit = imgui.button("Rename") or (submitted and valid);
+		imgui.end_disabled();
+		imgui.same_line();
+		cancel = imgui.button("Cancel") or imgui.is_key_pressed(imgui.Key.escape);
+
+		if commit:
+			if new_name != old_name:
+				AssetManager.rename("dialogue", old_name, new_name);
+			self.rename_target = None;
+			imgui.close_current_popup();
+		elif cancel:
+			self.rename_target = None;
+			imgui.close_current_popup();
+
+		imgui.end_popup();
+
 	def menu_bar(self):
 		if imgui.begin_menu_bar():
 			if imgui.begin_menu("File"):
@@ -291,6 +381,7 @@ class DialogueEditor:
 	
 	def draw_graph(self):
 		GenID.reset_frame_ids();
+		self.resync();
 
 		registry = GraphRegistry();
 		for node in self.nodes:
@@ -363,7 +454,30 @@ class DialogueEditor:
 					out_idx = out_node.out_ids.index(edge.out_id);
 					out_node.asset["edges"][out_idx]["node"] = "";
 			imnodes.end_delete();
-		
+
+		imnodes.suspend();
+		context_node_id = imnodes.NodeId();
+		if imnodes.show_node_context_menu(context_node_id):
+			node = registry.search_by_node_id(context_node_id);
+			if node != None:
+				self.context_node = node;
+				imgui.open_popup("node_context_menu");
+		if imgui.begin_popup("node_context_menu"):
+			node = self.context_node;
+			if imgui.menu_item_simple("Rename"):
+				self.begin_rename(node.asset);
+			if imgui.menu_item_simple("Duplicate"):
+				new = AssetManager.get_document("dialogue").spawn_entry(node.asset, name=f"x{next(self.anon_id)}");
+				position = imnodes.get_node_position(node.node_id) + imgui.ImVec2(32, 32);
+				self.nodes.append(GraphNode(new, position));
+			if imgui.menu_item_simple("Delete"):
+				AssetManager.get_document("dialogue").delete_entry(node.asset);
+				self.trash.trash_item(self.nodes, node);
+				if node.asset is self.root:
+					self.root = None;
+			imgui.end_popup();
+		imnodes.resume();
+
 		if self.dirty:
 			visited = [];
 			def recursive_position(node, y0, x, y):
@@ -399,5 +513,7 @@ class DialogueEditor:
 		gui.begin_column("graph");
 		self.draw_graph();
 		gui.end_column();
+
+		self.draw_rename_modal();
 
 		self.trash.flush();

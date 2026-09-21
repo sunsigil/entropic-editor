@@ -48,7 +48,7 @@ def align(x, n, mapping=round):
 
 def enforce_length(l, n, default=None):
 	if len(l) > n:
-		del l[:n];
+		del l[n:];
 	else:
 		dl = n-len(l);
 		l.extend([default for i in range(dl)]);
@@ -154,13 +154,21 @@ class Clipboard:
 	
 	def __init__(self):
 		self.contents = [];
+		# how many times the current contents have been pasted, so a caller can
+		# step each paste away from the last instead of stacking them all up
+		self.paste_count = 0;
 
 	def clear(self):
 		self.contents.clear();
+		self.paste_count = 0;
 
 	def copy(self, value, copy_mode=CopyMode.NONE, exclusive=False):
+		# copying nothing leaves the clipboard alone rather than filling it with None
+		if value == None:
+			return;
 		if exclusive:
 			self.contents.clear();
+		self.paste_count = 0;
 		match copy_mode:
 			case Clipboard.CopyMode.NONE:
 				self.contents.append(value);
@@ -170,8 +178,15 @@ class Clipboard:
 				self.contents.append(copy.deepcopy(value));
 
 	def paste(self, destination):
+		pasted = [];
 		for entry in self.contents:
-			destination.append(entry);
+			# a copy per paste, or pasting twice puts one object in the
+			# destination twice and editing either moves both
+			pasted.append(copy.deepcopy(entry));
+			destination.append(pasted[-1]);
+		if len(pasted) > 0:
+			self.paste_count += 1;
+		return pasted;
 
 	def is_empty(self):
 		return len(self.contents) == 0;

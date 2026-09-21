@@ -77,6 +77,17 @@ def apply_gamma(c):
 	rf, gf, bf = rf ** (1/Gr), gf ** (1/Gg), bf ** (1/Gb);
 	return (int(rf*255), int(gf*255), int(bf*255));
 
+def nearest(colours, c):
+	"""Nearest palette entry by LAB distance. RGB distance picks visibly wrong
+	neighbours once a palette has more than a handful of colours."""
+	if len(colours) == 0:
+		return tuple(c[:3]);
+	l0, a0, b0 = RGB2LAB(c);
+	def distance(other):
+		l1, a1, b1 = RGB2LAB(other);
+		return (l0-l1)**2 + (a0-a1)**2 + (b0-b1)**2;
+	return tuple(min(colours, key=distance)[:3]);
+
 def hue(c):
 	r, g, b = c[:3];
 	r /= 255;

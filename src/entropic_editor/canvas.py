@@ -7,6 +7,22 @@ from cowtools import *;
 from input import InputManager;
 from geometry import *;
 from editor_gui import *;
+import sprites;
+
+# CAT_LEADING; glyph size comes from the sprite itself
+GLYPH_LEADING = 2;
+
+_glyph_cache = {};
+
+def _glyph_image(glyphs, idx, scale):
+	key = (glyphs, idx, scale);
+	image = _glyph_cache.get(key);
+	if image == None:
+		image = glyphs.frame_images[idx];
+		if scale > 1:
+			image = image.resize((image.width*scale, image.height*scale), Image.NEAREST);
+		_glyph_cache[key] = image;
+	return image;
 
 class Canvas:
 	def __init__(self, width, height, scale=1, origin=(0, 0)):
@@ -68,10 +84,27 @@ class Canvas:
 		else:
 			self.image.paste(image, (int(x), int(y)), mask=image);
 	
-	def draw_text(self, xy, text, s, c):
-		x, y = xy;
-		xy = self._transform(x, y);
-		self.draw.text(xy, str(text), font_size=s, stroke_fill=c);
+	def draw_text(self, xy, text, scale, c):
+		"""Drawn from the same glyph sprite the game uses, a frame per character
+		code, so text lands identically in both."""
+		glyphs = sprites.SpriteBank.search("glyph");
+		scale = max(int(scale), 1);
+		advance = glyphs.frame_width * scale;
+		line_height = (glyphs.frame_height + GLYPH_LEADING) * scale;
+
+		x0, y = xy;
+		x = x0;
+		for character in str(text):
+			if character == "\n":
+				x = x0;
+				y += line_height;
+				continue;
+
+			idx = ord(character);
+			# spaces take their width without drawing, as they do in the game
+			if not character.isspace() and idx < glyphs.frame_count:
+				self.draw_image(x, y, _glyph_image(glyphs, idx, scale), c);
+			x += advance;
 	
 	def draw_guides(self, c):
 		ox, oy = self.origin;
@@ -261,10 +294,12 @@ class CanvasManipViewDrag(CanvasManipEvent):
 		super().__init__(None, start, point);
 
 class CanvasManipRecord:
-	def __init__(self, object, shape, eeid):
+	def __init__(self, object, shape, eeid, key=None):
 		self.object = object;
 		self.shape = shape;
 		self.eeid = eeid;
+		# where this sits in render order, or None when the caller doesn't sort
+		self.key = key;
 class CanvasManipRegistry:
 	def __init__(self, objects=[], shapes=[], eeids=[]):
 		self.records = [];
@@ -274,20 +309,22 @@ class CanvasManipRegistry:
 	def clear(self):
 		self.update([], []);
 	
-	def register(self, object, shape, eeid=None):
+	def register(self, object, shape, eeid=None, key=None):
 		existing = next((x for x in self.records if x.object == object), None);
 		if existing:
 			existing.shape = shape;
+			existing.key = key;
 		else:
 			self.records.append(CanvasManipRecord(
 				object,
 				shape,
-				eeid
+				eeid,
+				key
 			));
 	
-	def update(self, objects, shapes):
+	def update(self, objects, shapes, keys=None):
 		for i in range(len(objects)):
-			self.register(objects[i], shapes[i]);
+			self.register(objects[i], shapes[i], key=keys[i] if keys != None else None);
 		trash = [];
 		for i in range(len(self.records)):
 			if not self.records[i].object in objects:
@@ -313,38 +350,76 @@ class CanvasManipulator:
 		self.event_queue = event_queue;
 		self.event_log = [];
 
+		self.keys = {};
+		self.order = {};
+		self.pick_point = None;
+		self.pick_idx = 0;
+
 		self.eeid = iter(EEID());
 		self.shapes = {};
 
 		self.event = None;
 		self.dragging = False;
 
-	def _spatial_search(self, point):
-		min_dist = math.inf;
-		min_eeid = None;
+	def _spatial_search(self, point, cycle=False):
+		candidates = [];
 		for eeid,shape in self.shapes.items():
 			dist = shape.distance(point);
-			if dist <= 2 and abs(dist) < min_dist:
-				min_dist = abs(dist);
-				min_eeid = eeid;
-		return min_eeid;
+			if dist <= 2:
+				candidates.append((self.keys.get(eeid), self.order.get(eeid, 0), dist, eeid));
+
+		if len(candidates) == 0:
+			self.pick_point = None;
+			return None;
+
+		# a shape the cursor is inside beats one it is merely near, so a thin
+		# segment stays grabbable without a fat rect stealing every click
+		inside = [c for c in candidates if c[2] <= 0];
+		if len(inside) > 0:
+			candidates = inside;
+
+		if all(c[0] != None for c in candidates):
+			# render order, so a click lands on whatever is drawn on top; later
+			# registration wins ties the way the draw sort's stability does
+			candidates.sort(key=lambda c: (c[0], c[1], -abs(c[2])), reverse=True);
+		else:
+			candidates.sort(key=lambda c: abs(c[2]));
+
+		idx = 0;
+		if cycle and self.pick_point != None and point_point_dist(point, self.pick_point) <= 2:
+			# clicking the same spot again steps down the stack, so something
+			# completely behind something else is still reachable
+			idx = (self.pick_idx + 1) % len(candidates);
+		if cycle:
+			self.pick_point = point;
+			self.pick_idx = idx;
+
+		return candidates[idx][3];
 
 	def clear(self):
 		self.eeid = iter(EEID());
 		self.shapes = {};
+		self.keys = {};
+		self.order = {};
+		self.pick_point = None;
+		self.pick_idx = 0;
 		self.event = None;
 	
 	def synchronize(self, registry: CanvasManipRegistry):
 		canon_eeids = set();
-		for record in registry.records:
+		for idx, record in enumerate(registry.records):
 			if record.eeid == None:
 				record.eeid = next(self.eeid);
 			self.shapes[record.eeid] = record.shape;
+			self.keys[record.eeid] = record.key;
+			self.order[record.eeid] = idx;
 			canon_eeids.add(record.eeid);
 		
 		invalid_eeids = [eeid for eeid in self.shapes if eeid not in canon_eeids];
 		for eeid in invalid_eeids:
 			del self.shapes[eeid];
+			del self.keys[eeid];
+			del self.order[eeid];
 	
 	def search(self, eeid):
 		if eeid in self.shapes:
@@ -369,7 +444,7 @@ class CanvasManipulator:
 				self.event = None;
 			
 			if InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
-				self.event = CanvasManipEvent(self._spatial_search(cursor), cursor, cursor);
+				self.event = CanvasManipEvent(self._spatial_search(cursor, cycle=True), cursor, cursor);
 				if self.event.eeid == None:
 					self.event_queue.append(CanvasManipClick(None, self.event.point));
 					self.event_log.append(self.event_queue[-1]);
