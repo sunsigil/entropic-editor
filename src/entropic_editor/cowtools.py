@@ -1,5 +1,4 @@
 import OpenGL;
-OpenGL.FULL_LOGGING = True;
 from OpenGL.GL import *;
 from enum import Enum;
 import copy;

@@ -1,5 +1,23 @@
+import os;
+import sys;
+
 import OpenGL;
-OpenGL.FULL_LOGGING = True;
+
+# PyOpenGL picks its platform plugin off the environment, choosing EGL whenever
+# WAYLAND_DISPLAY is set. GLFW may well have made an X11/GLX context instead --
+# WSLg sets both WAYLAND_DISPLAY and DISPLAY. When the two disagree,
+# eglGetCurrentContext() returns 0 and every call that stores per-context state
+# (glVertexAttribPointer among them) dies with "Attempt to retrieve context when
+# no valid context". Ask GLFW which backend it took and match it.
+# Must happen before OpenGL.GL is imported: the plugin is chosen at import time.
+if sys.platform.startswith("linux") and "PYOPENGL_PLATFORM" not in os.environ:
+	import glfw;
+	glfw.init();
+	if glfw.get_platform() == glfw.PLATFORM_X11:
+		os.environ["PYOPENGL_PLATFORM"] = "glx";
+	elif glfw.get_platform() == glfw.PLATFORM_WAYLAND:
+		os.environ["PYOPENGL_PLATFORM"] = "egl";
+
 from OpenGL.GL import *;
 
 import glfw;
