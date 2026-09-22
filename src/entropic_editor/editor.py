@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 
+# PyOpenGL has to bind its GL/EGL entry points before imgui_bundle loads the
+# GLFW it ships with, or the two end up holding separate library instances: the
+# context GLFW makes is then invisible to PyOpenGL, GetCurrentContext() returns
+# 0, and the first call that stores per-context state (glVertexAttribPointer,
+# from imgui's backend) dies with "Attempt to retrieve context when no valid
+# context". Keep this above every other import.
+import OpenGL.GL;
+
 from pathlib import Path;
 from PIL import Image;
 from stat import *;
@@ -7,8 +15,8 @@ import sys;
 import argparse;
 import traceback;
 
-from imgui_bundle import imgui;
 import glfw;
+from imgui_bundle import imgui;
 import context;
 
 from cowtools import *;
