@@ -101,24 +101,19 @@ class PaletteViewer:
 				self.cursor = int(point[1] * self.get_cols() + point[0]);
 	
 	def gui_draw_selector(self):
-		palettes = sorted(AssetManager.get_all("palette"), key=lambda x: x["name"]);
-
-		for palette in palettes:
-			selected = imgui.menu_item_simple(palette["name"]);
-
-			if imgui.begin_popup_context_item():
-				if imgui.menu_item_simple("New"):
-					AssetManager.get_document("palette").spawn_entry();
-					imgui.close_current_popup();
-				if imgui.menu_item_simple("Delete"):
-					AssetManager.get_document("palette").delete_entry(palette);
-					imgui.close_current_popup();
-				imgui.end_popup();
-			
-			if selected:
-				self.palette = palette;
+		self.palette = asset_selector("palette-selector", self.palette, "palette");
 	
 	def draw(self):
+		if imgui.begin_menu_bar():
+			if imgui.begin_menu("Asset"):
+				if imgui.menu_item_simple("New"):
+					self.palette = AssetManager.get_document("palette").spawn_entry();
+				if self.palette != None and imgui.menu_item_simple("Delete"):
+					AssetManager.get_document("palette").delete_entry(self.palette);
+					self.palette = None;
+				imgui.end_menu();
+			imgui.end_menu_bar();
+
 		begin_column("selector", imgui.get_content_region_avail().x * 0.1);
 		palette_last = self.palette;
 		self.gui_draw_selector();

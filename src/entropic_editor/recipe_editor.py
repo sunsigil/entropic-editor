@@ -28,11 +28,7 @@ class RecipeEditor:
 		return None;
 
 	def draw_selector(self):
-		recipes = sorted(AssetManager.get_all("recipe"), key=lambda x: x["name"]);
-		for recipe in recipes:
-			selected = imgui.menu_item_simple(recipe["name"]+f"##{id(recipe)}");
-			if selected:
-				self.recipe = recipe;
+		self.recipe = asset_selector("recipe-selector", self.recipe, "recipe");
 	
 	def draw_grid(self):
 		self.canvas_io.tick();

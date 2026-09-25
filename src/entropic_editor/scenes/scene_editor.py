@@ -14,6 +14,8 @@ import scenes.walls;
 import scenes.tilemaps;
 import scenes.navlists;
 import scenes.decorations;
+import scenes.entities;
+import scenes.foliage;
 import scripts;
 
 #########################################################
@@ -26,40 +28,10 @@ PASTE_OFFSET = 16;
 def index_of(items, item):
 	return next((i for i, x in enumerate(items) if x is item), None);
 
-def get_entity_sprite(entity):
-	prototype = AssetManager.search("prototype", entity["prototype"]);
-	if prototype == None:
-		return None;
-	return SpriteBank.search(prototype["sprite"], safe=False);
-
-def get_entity_aabb(entity):
-	x, y = entity["position"];
-
-	prototype = AssetManager.search("prototype", entity["prototype"]);
-	if prototype != None:
-		sprite = SpriteBank.search(prototype["sprite"], safe=False);
-		if sprite != None:
-			dx, dy = prototype["sprite_offset"];
-			return [x+dx, y+dy, x+dx+sprite.frame_width, y+dy+sprite.frame_height];
-	
-		if prototype["has_blocker"]:
-			x0, y0, x1, y1 = prototype["blocker"];
-			return [x+x0, y+y0, x+x1, y+y1];
-		elif prototype["has_trigger"]:
-			x0, y0, x1, y1 = prototype["trigger"];
-			return [x+x0, y+y0, x+x1, y+y1];
-
-	return [x-8, y-8, x+8, y+8];
-
-def get_entity_body_key(entity):
-	"""Where this sits in the draw order. Sorting and picking share it so they
-	can't drift apart. Entities all live on layer 0."""
-	return (0, 0, get_entity_depth(entity));
-
-def get_entity_depth(entity):
-	prototype = AssetManager.search("prototype", entity["prototype"]);
-	y_offset = prototype["y_sort_offset"] if prototype != None else 0;
-	return get_entity_aabb(entity)[3] + y_offset;
+get_entity_sprite = scenes.entities.get_sprite;
+get_entity_aabb = scenes.entities.get_aabb;
+get_entity_body_key = scenes.entities.get_body_key;
+get_entity_depth = scenes.entities.get_depth;
 
 def get_script_data(entity, key):
 	for entry in entity["script_data"]:
@@ -86,7 +58,8 @@ class EditMode(Enum):
 	DOORS = 3,
 	NAVLISTS = 4,
 	DECORATIONS = 5,
-	PROPERTIES = 6
+	PROPERTIES = 6,
+	FOLIAGE = 7
 
 class TilemapEditor:
 	TOOLS = ["paint", "rect", "fill"];
@@ -134,12 +107,25 @@ class TilemapEditor:
 		self.rect_anchor = None;
 		self.paint_last = None;
 
+	def move_tilemap(self, delta):
+		# draw order is list order, so a move changes what draws over what
+		idx = index_of(self.tilemaps, self.tilemap);
+		if idx == None:
+			return;
+		target = idx + delta;
+		if target < 0 or target >= len(self.tilemaps):
+			return;
+		self.tilemaps[idx], self.tilemaps[target] = self.tilemaps[target], self.tilemaps[idx];
+
 	def label_tilemap(self, tilemap):
 		if tilemap == None:
 			return "None";
 		idx = index_of(self.tilemaps, tilemap);
 		palette = tilemap["palette"] if len(tilemap["palette"]) > 0 else "no palette";
-		return f"{idx}: {palette} ({"fg" if tilemap["is_foreground"] else "bg"})";
+		tags = ["fg" if tilemap["is_foreground"] else "bg"];
+		if tilemap["is_animated"]:
+			tags.append("anim");
+		return f"{idx}: {palette} ({", ".join(tags)})";
 
 	def draw_palette(self):
 		self.tilemap["palette"] = input_asset("Palette", self.tilemap["palette"], "sprite");
@@ -177,6 +163,15 @@ class TilemapEditor:
 		if self.tilemap == None:
 			return;
 
+		# later tilemaps draw on top of earlier ones within their layer
+		if imgui.arrow_button("tilemap-up", imgui.Dir.up):
+			self.move_tilemap(-1);
+		imgui.same_line();
+		if imgui.arrow_button("tilemap-down", imgui.Dir.down):
+			self.move_tilemap(1);
+		imgui.same_line();
+		imgui.text_disabled("order (later draws on top)");
+
 		type_last = self.tilemap["type"];
 		self.tilemap["type"] = input_enum("Type", self.tilemap["type"], ["sparse", "dense"]);
 		if type_last == "sparse" and self.tilemap["type"] == "dense":
@@ -193,6 +188,13 @@ class TilemapEditor:
 				scenes.tilemaps.resize_dense(dense, rows, columns);
 		
 		self.tilemap["is_foreground"] = input_bool("Is Foreground", self.tilemap["is_foreground"]);
+
+		# the palette plays as one animation over every placed tile
+		self.tilemap["is_animated"] = input_bool("Is Animated", self.tilemap["is_animated"]);
+		if self.tilemap["is_animated"]:
+			imgui.same_line();
+			imgui.set_next_item_width(96);
+			self.tilemap["period"] = input_int("Period (ticks/frame)", self.tilemap["period"], low_bound=1);
 
 		self.tool = input_enum("Tool", self.tool, TilemapEditor.TOOLS);
 		imgui.text_disabled("shift: erase, alt: pick, right drag: pan");
@@ -237,9 +239,19 @@ class TilemapEditor:
 		paint_last = self.paint_last;
 		self.paint_last = None;
 
+		# painting past a dense map's edge grows it to reach the cell; growing
+		# up or left moves the origin, so in-progress cells shift with it
+		def grow_to(col, row, *others):
+			if frame_idx == None or self.tilemap["type"] != "dense":
+				return (col, row), others;
+			dcol, drow = scenes.tilemaps.grow_dense(self.tilemap["dense"], col, row);
+			shift = lambda cell: (cell[0]+dcol, cell[1]+drow) if cell != None else None;
+			return shift((col, row)), tuple(shift(x) for x in others);
+
 		match self.tool:
 			case "paint":
 				if InputManager.is_held(glfw.MOUSE_BUTTON_LEFT):
+					(col, row), (paint_last,) = grow_to(col, row, paint_last);
 					start = paint_last if paint_last != None else (col, row);
 					scenes.tilemaps.stroke(self.tilemap, *start, col, row, frame_idx);
 					self.paint_last = (col, row);
@@ -248,6 +260,9 @@ class TilemapEditor:
 				if InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
 					self.rect_anchor = (col, row);
 				if InputManager.is_released(glfw.MOUSE_BUTTON_LEFT) and self.rect_anchor != None:
+					(col, row), (self.rect_anchor,) = grow_to(col, row, self.rect_anchor);
+					self.rect_anchor, (cell,) = grow_to(*self.rect_anchor, (col, row));
+					col, row = cell;
 					scenes.tilemaps.fill_rect(self.tilemap, *self.rect_anchor, col, row, frame_idx);
 					self.rect_anchor = None;
 
@@ -363,6 +378,9 @@ class WallEditor:
 				if event.eeid != None:
 					wall = self.manip_registry.search(event.eeid);
 					scenes.walls.canvas_drag(wall, event, self.parent.canvas_grid);
+
+			if isinstance(event, CanvasManipViewDrag):
+				CanvasManipulator.default_view_drag_handler(self.parent.canvas, event);
 	
 	def tick(self):
 		if self.walls == None:
@@ -448,6 +466,9 @@ class DecorationEditor:
 				if event.eeid != None:
 					decoration = self.manip_registry.search(event.eeid);
 					scenes.decorations.canvas_drag(decoration, event, self.parent.canvas_grid);
+
+			if isinstance(event, CanvasManipViewDrag):
+				CanvasManipulator.default_view_drag_handler(self.parent.canvas, event);
 
 	def tick(self):
 		if self.decorations == None:
@@ -740,6 +761,10 @@ class NavlistEditor:
 				self.navlists.append(navlist);
 				self.selection_context.select(NavlistEditor.ManipIndex(navlist, 0), exclusive=True);
 
+			if isinstance(event, CanvasManipViewDrag):
+				CanvasManipulator.default_view_drag_handler(self.parent.canvas, event);
+				continue;
+
 			if isinstance(event, CanvasManipDrag):
 				if event.eeid == None or event.signal != CanvasManipDrag.Signal.TICK:
 					continue;
@@ -990,6 +1015,8 @@ class SceneViewer:
 
 		if self.parent.edit_mode == EditMode.TILEMAP:
 			self.parent.tilemap_editor.draw_canvas();
+		if self.parent.edit_mode == EditMode.FOLIAGE:
+			self.parent.foliage_editor.draw_canvas();
 
 class SceneEditor:
 	class SpawnPopup:
@@ -1011,11 +1038,7 @@ class SceneEditor:
 				_, self.is_open = imgui.begin("Spawn", self.is_open);
 				self.prototype = input_asset("##prototype", self.prototype, "prototype");
 				if imgui.button("Spawn"):
-					entity = AssetManager.get_tree("scene").search("entities").inmost.prototype();
-					entity["name"] = "";
-					entity["position"] = self.position;
-					entity["prototype"] = self.prototype;
-					self.parent.scene["entities"].append(entity);
+					scenes.entities.spawn(self.parent.scene, self.prototype, self.position);
 					self.is_open = False;
 				imgui.same_line();
 				if imgui.button("Cancel"):
@@ -1028,13 +1051,19 @@ class SceneEditor:
 		self.event_queue.clear();
 		self.canvas_manip.clear();
 		self.manip_registry.clear();
+		self.pan_event_queue.clear();
+		self.pan_manip.clear();
 
 		self.selection_context.clear();
 		
+		for entity in self.scene["entities"]:
+			rectify_entity_script_data(entity);
+
 		self.tilemap_editor.on_load_scene();
 		self.wall_editor.on_load_scene();
 		self.decoration_editor.on_load_scene();
 		self.navlist_editor.on_load_scene();
+		self.foliage_editor.on_load_scene();
 
 	def _is_scene_loaded(self):
 		return self.scene in AssetManager.get_all("scene");
@@ -1051,6 +1080,11 @@ class SceneEditor:
 		self.event_queue = [];
 		self.canvas_manip = CanvasManipulator(self.canvas_io, self.event_queue);
 		self.manip_registry = CanvasManipRegistry();
+
+		# tabs with nothing to pick on the canvas still pan with this one; it
+		# never gets shapes, so clicks are dropped and only view drags are kept
+		self.pan_event_queue = [];
+		self.pan_manip = CanvasManipulator(self.canvas_io, self.pan_event_queue);
 
 		self.selection_context = SelectionContext();
 		self.clipboard = Clipboard();
@@ -1069,6 +1103,7 @@ class SceneEditor:
 		self.decoration_editor = DecorationEditor(self);
 		self.door_editor = DoorEditor(self);
 		self.navlist_editor = NavlistEditor(self);
+		self.foliage_editor = scenes.foliage.FoliageEditor(self);
 		self.scene_viewer = SceneViewer(self);
 
 		self.spawn_popup = SceneEditor.SpawnPopup(self);
@@ -1098,6 +1133,13 @@ class SceneEditor:
 								position = self.canvas_grid.snap_point(position);
 							entity["position"] = position;
 			
+			if isinstance(event, CanvasManipViewDrag):
+				CanvasManipulator.default_view_drag_handler(self.canvas, event);
+
+	def pan_tick(self):
+		self.pan_manip.tick();
+		while len(self.pan_event_queue) > 0:
+			event = self.pan_event_queue.pop(0);
 			if isinstance(event, CanvasManipViewDrag):
 				CanvasManipulator.default_view_drag_handler(self.canvas, event);
 	
@@ -1275,6 +1317,16 @@ class SceneEditor:
 			self.scene["bounds"] = input_aabb("Bounds", self.scene["bounds"]);
 		self.scene["free_camera"] = input_bool("Free camera", self.scene["free_camera"]);
 
+		# parallax lag is measured from this point, so decorations sit where
+		# they were placed when the camera is over it
+		self.scene["parallax_origin"] = input_vec2("Parallax origin", self.scene["parallax_origin"]);
+		imgui.same_line();
+		imgui.begin_disabled(not self.scene["has_bounds"]);
+		if imgui.button("Center parallax"):
+			x0, y0, x1, y1 = self.scene["bounds"];
+			self.scene["parallax_origin"] = [(x0+x1)//2, (y0+y1)//2];
+		imgui.end_disabled();
+
 	def draw(self):
 		self.draw_menu_bar();
 
@@ -1283,9 +1335,14 @@ class SceneEditor:
 
 		self.canvas_io.tick();
 		self.synchronize_manip();
-		
-		for entity in self.scene["entities"]:
-			rectify_entity_script_data(entity);
+
+		# An entity's script data only drifts from its prototype's when one of
+		# them is edited (a spawn, a paste, a prototype change, a script edit in
+		# the prototype editor), and every one of those leaves its document
+		# dirty until the next history commit. _load_scene covers the rest.
+		if AssetManager.get_document("scene").is_dirty() or AssetManager.get_document("prototype").is_dirty():
+			for entity in self.scene["entities"]:
+				rectify_entity_script_data(entity);
 
 		def run_left_panel(panel_tick):
 			imgui.begin_child(
@@ -1327,6 +1384,7 @@ class SceneEditor:
 			self.wall_editor.draw_gui();
 		
 		def doors_tick():
+			self.pan_tick();
 			self.door_editor.logic();
 			self.door_editor.gui();
 		
@@ -1339,7 +1397,12 @@ class SceneEditor:
 			self.decoration_editor.draw_gui();
 		
 		def properties_tick():
+			self.pan_tick();
 			self.gui_draw_properties_editor();
+
+		def foliage_tick():
+			self.foliage_editor.tick();
+			self.foliage_editor.draw_gui();
 		
 		match self.edit_mode:
 			case EditMode.ENTITIES:
@@ -1356,6 +1419,8 @@ class SceneEditor:
 				run_left_panel(decorations_tick);
 			case EditMode.PROPERTIES:
 				run_left_panel(properties_tick);	
+			case EditMode.FOLIAGE:
+				run_left_panel(foliage_tick);
 
 		imgui.same_line();
 		imgui.begin_child(

@@ -76,6 +76,31 @@ def combo(gui_id, value, values, fmt=lambda x: x):
     Tooltip.ping();
     return value;
 
+class AssetSelector:
+    searches = {};
+
+    # Lists every asset of a type as a menu item, filtered by a search bar
+    # and an optional predicate, and returns the clicked asset or the value
+    # passed in
+    def draw(gui_id, value, asset_type, filter=None):
+        search = AssetSelector.searches.get(gui_id, "");
+        imgui.set_next_item_width(-1);
+        _, search = imgui.input_text_with_hint(f"##search-{gui_id}", "Search", search);
+        AssetSelector.searches[gui_id] = search;
+
+        assets = sorted(AssetManager.get_all(asset_type), key=lambda x: x["name"]);
+        for asset in assets:
+            if not search in asset["name"]:
+                continue;
+            if filter != None and not filter(asset):
+                continue;
+            if imgui.menu_item_simple(asset["name"]+f"##{id(asset)}", selected=asset is value):
+                value = asset;
+        return value;
+
+def asset_selector(gui_id, value, asset_type, filter=None):
+    return AssetSelector.draw(gui_id, value, asset_type, filter);
+
 # Custom Widgets
 
 def edit_button(gui_id, size=(16,16)):
@@ -293,12 +318,21 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
                     typed_display(f"[{i}]##{anchor}", T.T, value[i], previews, tooltip);
             else:
                 trash = [];
+                # (from, to) pairs, applied after the loop so the list isn't
+                # reordered under the entries still being drawn this frame
+                moves = [];
                 for i in range(N):
                     value[i] = typed_input(f"[{i}]##{anchor}", T.T, value[i], previews, tooltip);
                     if ContextMenu.begin(f"[{i}]##{anchor}"):
+                        if imgui.menu_item_simple("Move up", enabled=i > 0):
+                            moves.append((i, i-1));
+                        if imgui.menu_item_simple("Move down", enabled=i < N-1):
+                            moves.append((i, i+1));
                         if imgui.menu_item_simple("Delete"):
                             trash.append(i);
                         imgui.end_popup();
+                for src, dst in moves:
+                    value[src], value[dst] = value[dst], value[src];
                 for i in trash:
                     del value[i];
                 trash = [];

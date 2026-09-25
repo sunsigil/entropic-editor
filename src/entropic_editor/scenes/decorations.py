@@ -4,8 +4,9 @@ import geometry as geo;
 import numpy as np;
 
 from assets import AssetManager;
+import sprites;
 
-TYPES = ["text", "line", "rect", "circle"];
+TYPES = ["text", "line", "rect", "circle", "sprite"];
 
 GLYPH_WIDTH = 8;
 GLYPH_HEIGHT = 8;
@@ -34,6 +35,12 @@ def get_aabb(decoration):
 		case "circle":
 			r = decoration["circle"]["radius"];
 			return [x-r, y-r, x+r, y+r];
+
+		case "sprite":
+			sprite = sprites.SpriteBank.search(decoration["sprite"]["sprite"], safe=False);
+			if sprite == None:
+				return [x, y, x+DEFAULT_EXTENT, y+DEFAULT_EXTENT];
+			return [x, y, x+sprite.frame_width, y+sprite.frame_height];
 
 	return [x, y, x, y];
 
@@ -78,6 +85,9 @@ def gui_draw(decoration):
 	decoration["position"] = gui.input_vec2("Position", decoration["position"]);
 	decoration["colour"] = list(gui.input_colour("Colour", decoration["colour"], get_colour_palette()));
 	decoration["layer"] = gui.input_int("Layer", decoration["layer"], low_bound=-128, high_bound=127);
+	# departure from the world's speed in 128ths per axis: 0 moves with the world, -128 pins to the screen
+	decoration["parallax_x"] = gui.input_int("Parallax X (0 = unity)", decoration["parallax_x"], low_bound=-128, high_bound=127);
+	decoration["parallax_y"] = gui.input_int("Parallax Y (0 = unity)", decoration["parallax_y"], low_bound=-128, high_bound=127);
 
 	match decoration["type"]:
 		case "text":
@@ -98,6 +108,12 @@ def gui_draw(decoration):
 			shape["radius"] = gui.input_int("Radius", shape["radius"], low_bound=1);
 			shape["fill"] = gui.input_bool("Fill", shape["fill"]);
 
+		case "sprite":
+			shape = decoration["sprite"];
+			shape["sprite"] = gui.input_asset("Sprite", shape["sprite"], "sprite");
+			sprite = sprites.SpriteBank.search(shape["sprite"]);
+			shape["frame_idx"] = gui.input_int("Frame", shape["frame_idx"], gui.EEGUIIntStyle.SLIDER, 0, sprite.frame_count-1);
+
 def canvas_draw(target: canvas.Canvas, decoration, outline=None):
 	x, y = decoration["position"];
 	colour = tuple(decoration["colour"]);
@@ -117,6 +133,15 @@ def canvas_draw(target: canvas.Canvas, decoration, outline=None):
 		case "circle":
 			target.draw_circle(x, y, decoration["circle"]["radius"], colour);
 
+		case "sprite":
+			shape = decoration["sprite"];
+			sprite = sprites.SpriteBank.search(shape["sprite"], safe=False);
+			if sprite != None:
+				frame_idx = min(max(shape["frame_idx"], 0), sprite.frame_count-1);
+				target.draw_image(x, y, sprite.frame_images[frame_idx]);
+			else:
+				target.draw_aabb(get_aabb(decoration), colour);
+
 	if outline != None:
 		target.draw_aabb(get_aabb(decoration), outline);
 
@@ -126,7 +151,9 @@ def canvas_place(point, type, grid: canvas.CanvasGrid=None):
 		"type": type,
 		"position": [int(x), int(y)],
 		"colour": [255, 255, 255],
-		"layer": 0
+		"layer": 0,
+		"parallax_x": 0,
+		"parallax_y": 0
 	};
 
 	match type:
@@ -142,6 +169,9 @@ def canvas_place(point, type, grid: canvas.CanvasGrid=None):
 		case "circle":
 			decoration["circle"] = {"radius": DEFAULT_EXTENT//2, "fill": False};
 
+		case "sprite":
+			decoration["sprite"] = {"sprite": "", "frame_idx": 0};
+
 		case _:
 			return None;
 
@@ -155,7 +185,7 @@ def relocate(decoration, point):
 def canvas_drag(decoration, drag: canvas.CanvasManipDrag, grid: canvas.CanvasGrid=None):
 	match drag.signal:
 		case canvas.CanvasManipDrag.Signal.TICK:
-			if drag.inside or decoration["type"] == "text":
+			if drag.inside or decoration["type"] in ("text", "sprite"):
 				point = np.array(drag.point) + np.array(drag.delta);
 				point = grid.snap_point(point) if grid else point;
 				relocate(decoration, point);

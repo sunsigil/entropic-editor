@@ -12,6 +12,10 @@ from geometry import *;
 import scenes.walls;
 import scripts;
 
+# The game's fixed tick rate, so a preview's animation period reads the same
+# as it will on device
+GAME_TICK_RATE = 30;
+
 class PrototypeSpawner:
 	def __init__(self):
 		self.size = (512, 256);
@@ -64,6 +68,7 @@ class PrototypeEditor:
 			self.canvas.origin = (128, 128);
 			self.canvas_manip.clear();
 			self.manip_registry = CanvasManipRegistry();
+			self.selection_context.clear();
 	
 	def __init__(self):
 		self.canvas_size = (256, 256);
@@ -90,12 +95,32 @@ class PrototypeEditor:
 		self._load_prototype(AssetManager.get_first("prototype"));
 	
 	def gui_draw_selector(self):
-		protoypes = sorted(AssetManager.get_all("prototype"), key=lambda x: x["name"]);
-		for prototype in protoypes:
-			selected = imgui.menu_item_simple(prototype["name"]+f"##{id(prototype)}");
-			if selected:
-				self._load_prototype(prototype);
+		prototype = asset_selector("prototype-selector", self.prototype, "prototype");
+		if prototype is not self.prototype:
+			self._load_prototype(prototype);
 	
+	# Every prototype ticks to the same clock, so previews stay in step
+	def preview_frame(self, sprite):
+		if not self.prototype["animated"] or sprite.frame_count <= 1:
+			return 0;
+		period = max(self.prototype["animation_period"], 1);
+		return int(imgui.get_time() * GAME_TICK_RATE / period) % sprite.frame_count;
+
+	def get_selected_wall_index(self):
+		path = self.selection_context.get_selection(True);
+		if not isinstance(path, str) or not path.startswith("walls/"):
+			return None;
+		idx = int(path.split("/")[1]);
+		if idx >= len(self.prototype["walls"]):
+			return None;
+		return idx;
+
+	def delete_selected_wall(self):
+		idx = self.get_selected_wall_index();
+		if idx != None:
+			del self.prototype["walls"][idx];
+			self.selection_context.clear();
+
 	def gui_draw_boxes(self):
 		self.prototype["has_blocker"] = input_bool("Has blocker", self.prototype["has_blocker"]);
 		if self.prototype["has_blocker"]:
@@ -172,7 +197,7 @@ class PrototypeEditor:
 			if sprite != None:
 				x, y = self.prototype["sprite_offset"];
 
-				self.canvas.draw_image(x, y, sprite.frame_images[0]);
+				self.canvas.draw_image(x, y, sprite.frame_images[self.preview_frame(sprite)]);
 				if self.draw_outlines:
 					self.canvas.draw_aabb((x, y, x+sprite.frame_width, y+sprite.frame_height), (255, 255, 255));
 
@@ -185,8 +210,10 @@ class PrototypeEditor:
 				self.canvas.draw_line(x-4, y, x+4, y, (255, 255, 0));
 				self.canvas.draw_line(x, y-4, x, y+4, (255, 255, 0));
 			
-			for wall in self.prototype["walls"]:
-				scenes.walls.canvas_draw(self.canvas, wall, (255, 0, 0));
+			selected_wall = self.get_selected_wall_index();
+			for idx, wall in enumerate(self.prototype["walls"]):
+				colour = (255, 255, 0) if idx == selected_wall else (255, 0, 0);
+				scenes.walls.canvas_draw(self.canvas, wall, colour);
 
 			self.canvas_draw_boxes();
 	
@@ -277,7 +304,11 @@ class PrototypeEditor:
 					if imgui.menu_item_simple("Segment"):
 						self.prototype["walls"].append(scenes.walls.canvas_place(self.canvas_io.get_cursor(), "segment", self.canvas_grid));
 					imgui.end_menu();
+				if self.get_selected_wall_index() != None and imgui.menu_item_simple("Delete wall"):
+					self.delete_selected_wall();
 				imgui.end_popup();
+			if InputManager.is_command(glfw.KEY_D):
+				self.delete_selected_wall();
 
 		self.prototype["sprite"] = input_asset("Sprite", self.prototype["sprite"], "sprite");
 		self.prototype["sprite_offset"] = input_vec2("Sprite offset", self.prototype["sprite_offset"]);
@@ -290,6 +321,10 @@ class PrototypeEditor:
 		self.prototype["mobile"] = input_bool("Mobile", self.prototype["mobile"]);
 		imgui.same_line();
 		self.prototype["animated"] = input_bool("Animated", self.prototype["animated"]);
+		if self.prototype["animated"]:
+			imgui.same_line();
+			imgui.set_next_item_width(96);
+			self.prototype["animation_period"] = input_int("Period (ticks/frame)", self.prototype["animation_period"], low_bound=1);
 		
 		self.gui_draw_boxes();
 		self.gui_draw_scripts();
@@ -308,9 +343,9 @@ class PrototypeEditor:
 					self.selection_context.select(self.manip_registry.search(event.eeid));
 			
 			if isinstance(event, CanvasManipDrag):
+				# a drag from empty canvas means nothing here; right-drag pans
 				if event.eeid == None:
-					self.view_drag_handler(event);
-					return;
+					continue;
 			
 				shape = self.canvas_manip.search(event.eeid);
 				path = self.manip_registry.search(event.eeid);

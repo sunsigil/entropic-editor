@@ -107,7 +107,7 @@ if __name__ == "__main__":
 	ToolWindowRegistry.register(Tool(DialogueEditor, "Dialogue Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolWindowRegistry.register(Tool(RecipeEditor, "Recipe Editor", flags=tool_flags));
 	ToolWindowRegistry.register(Tool(Mesh2DEditor, "Mesh2D Editor", flags=tool_flags));
-	ToolWindowRegistry.register(Tool(PaletteViewer, "Palette Viewer", flags=tool_flags));
+	ToolWindowRegistry.register(Tool(PaletteViewer, "Palette Viewer", flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolWindowRegistry.register(Tool(EnDeCoder, "EnDeCoder", flags=tool_flags));
 	ToolWindowRegistry.register(Tool(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
 	ToolWindowRegistry.register(Tool(SpriteImporter, "Sprite Importer", flags=tool_flags));
@@ -137,7 +137,7 @@ if __name__ == "__main__":
 			InputManager.tick();
 
 			for document in AssetManager.documents:
-				document.refresh();
+				document.refresh(changed_only=True);
 
 			History.tick(idle=not imgui.is_any_item_active() and not imgui.is_any_mouse_down());
 			if not imgui.get_io().want_text_input and InputManager.is_command(glfw.KEY_Z):

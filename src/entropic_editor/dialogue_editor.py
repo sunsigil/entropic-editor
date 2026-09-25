@@ -188,19 +188,8 @@ class GraphRegistry:
 
 def find_sources():
 	nodes = AssetManager.get_all("dialogue");
-	sources = [];
-	for a in nodes:
-		source = True;
-		for b in nodes:
-			for edge in b["edges"]:
-				if edge["node"] == a["name"]:
-					source = False;
-					break;
-			if not source:
-				break;
-		if source:
-			sources.append(a);
-	return sources;
+	targets = {edge["node"] for node in nodes for edge in node["edges"]};
+	return [node for node in nodes if not node["name"] in targets];
 
 def populate_tree(node):
 	graph = [];
@@ -226,7 +215,6 @@ class DialogueEditor:
 		self.context = imnodes.create_editor();
 
 		self.node_bank = AssetManager.get_all("dialogue");	
-		self.source_bank = find_sources();
 
 		self.root = None;
 		self.nodes = [];
@@ -344,40 +332,31 @@ class DialogueEditor:
 	def menu_bar(self):
 		if imgui.begin_menu_bar():
 			if imgui.begin_menu("File"):
-				if imgui.begin_menu("Open"):
+				if imgui.menu_item_simple("New source"):
+					root = AssetManager.get_document("dialogue").spawn_entry();
+					self.load_root(root);
+				imgui.end_menu();
 
-					if imgui.begin_menu("Source"):
-						if imgui.menu_item_simple("New source"):
-							root = AssetManager.get_document("dialogue").spawn_entry();
-							self.load_root(root);
-						
-						for source in self.source_bank:
-							clicked, status = imgui.menu_item(source["name"], "", source == self.root);
-							if clicked and status:
-								self.load_root(source);
-						imgui.end_menu();
-					
-					if imgui.begin_menu("All"):
-						for node in self.node_bank:
-							clicked, status = imgui.menu_item(node["name"], "", node == self.root);
-							if clicked and status:
-								self.load_root(node);
-						imgui.end_menu();
-					
+			if imgui.begin_menu("Graph"):
+				if imgui.begin_menu("Add"):
+					if imgui.menu_item_simple("New node"):
+						new = AssetManager.get_document("dialogue").spawn_entry(name=f"x{next(self.anon_id)}");
+						size = imnodes.get_screen_size();
+						w, h = size;
+						self.nodes.append(GraphNode(new, imnodes.screen_to_canvas(imgui.ImVec2(w/2, h/2))));
 					imgui.end_menu();
 				imgui.end_menu();
 			imgui.end_menu_bar();
 	
+	# Every graph is identified by its source, the one node nothing points at.
+	# Orphaned anonymous nodes are sources too, but not graphs anyone edits
 	def draw_inspector(self):
-		if imgui.begin_menu("Graph"):
-			if imgui.begin_menu("Add"):
-				if imgui.menu_item_simple("New node"):
-					new = AssetManager.get_document("dialogue").spawn_entry(name=f"x{next(self.anon_id)}");
-					size = imnodes.get_screen_size();
-					w, h = size;
-					self.nodes.append(GraphNode(new, imnodes.screen_to_canvas(imgui.ImVec2(w/2, h/2))));
-				imgui.end_menu();
-			imgui.end_menu();
+		sources = find_sources();
+		def is_graph(node):
+			return node in sources and not node.get("metadata", {}).get("anonymous", False);
+		root = gui.asset_selector("dialogue-selector", self.root, "dialogue", filter=is_graph);
+		if root is not self.root:
+			self.load_root(root);
 	
 	def draw_graph(self):
 		GenID.reset_frame_ids();

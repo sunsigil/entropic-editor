@@ -11,6 +11,12 @@ MAX_FRAME = 254;
 def get_origin(tilemap):
 	if tilemap["type"] == "dense":
 		return tilemap["dense"]["position"];
+	# a sparse map's grid takes its phase from its tiles, so one converted from
+	# a dense map placed off the world grid keeps its cells where the tiles are
+	sparse = tilemap["sparse"];
+	if len(sparse) > 0:
+		x, y = sparse[0]["position"];
+		return [x % TILE, y % TILE];
 	return [0, 0];
 
 def world_to_cell(tilemap, x, y):
@@ -183,9 +189,10 @@ def flood_fill(tilemap, col, row, frame_idx, limit=1<<16):
 			seen.add(neighbour);
 			queue.append(neighbour);
 
-def resize_dense(dense, rows, columns):
+def resize_dense(dense, rows, columns, dcol=0, drow=0):
 	"""frame_indices is a flat row-major buffer, so a resize has to reflow it or
-	every row after the first shifts."""
+	every row after the first shifts. dcol/drow place the old contents that
+	many cells into the new buffer."""
 	rows = max(int(rows), 0);
 	columns = max(int(columns), 0);
 
@@ -193,15 +200,30 @@ def resize_dense(dense, rows, columns):
 	src_w, src_h = dense["columns"], dense["rows"];
 	dst = [0 for i in range(rows*columns)];
 
-	for row in range(min(rows, src_h)):
-		for col in range(min(columns, src_w)):
+	for row in range(min(rows-drow, src_h)):
+		for col in range(min(columns-dcol, src_w)):
 			idx = row * src_w + col;
 			if idx < len(src):
-				dst[row * columns + col] = src[idx];
+				dst[(row+drow) * columns + (col+dcol)] = src[idx];
 
 	dense["rows"] = rows;
 	dense["columns"] = columns;
 	dense["frame_indices"] = dst;
+
+def grow_dense(dense, col, row):
+	"""Grows the map to include the cell. Growing up or left moves the origin,
+	so this returns how many cells every existing coordinate shifted by."""
+	dcol = -col if col < 0 else 0;
+	drow = -row if row < 0 else 0;
+	columns = max(dense["columns"], col+1) + dcol;
+	rows = max(dense["rows"], row+1) + drow;
+	if (columns, rows) == (dense["columns"], dense["rows"]):
+		return (0, 0);
+
+	resize_dense(dense, rows, columns, dcol, drow);
+	x, y = dense["position"];
+	dense["position"] = [x - dcol*TILE, y - drow*TILE];
+	return (dcol, drow);
 
 def dense_to_sparse(src):
 	dst = [];
@@ -316,32 +338,50 @@ def export_tilemap(tilemap, csv_path):
 		case "sparse":
 			_export_dense(sparse_to_dense(tilemap["sparse"]), csv_path);
 
+def _visible_world_aabb(canvas, margin_w, margin_h):
+	"""World-space rect a tile's top-left must fall in to touch the canvas.
+	PIL clips pastes that land outside, but a big scene has thousands of tiles
+	off-canvas and the per-call overhead of clipping each one is most of the
+	cost of a frame, so they are skipped before the call instead."""
+	ox, oy = canvas.origin;
+	return (-ox - margin_w, -oy - margin_h, canvas.width - ox, canvas.height - oy);
+
 def canvas_draw(canvas, tilemap):
 	palette = sprites.SpriteBank.search(tilemap["palette"]);
+	# an animated tilemap rests on its first frame, whatever was painted
+	animated = tilemap["is_animated"];
+
+	vx0, vy0, vx1, vy1 = _visible_world_aabb(canvas, palette.frame_width, palette.frame_height);
 
 	match tilemap["type"]:
 		case "sparse":
 			for tile in tilemap["sparse"]:
-				frame_idx = cowtools.clamp(tile["frame_idx"], 0, palette.frame_count-1);
-				canvas.draw_image(
-					tile["position"][0], tile["position"][1],
-					palette.frame_images[frame_idx]
-				);
+				x, y = tile["position"];
+				if x < vx0 or x >= vx1 or y < vy0 or y >= vy1:
+					continue;
+				frame_idx = 0 if animated else cowtools.clamp(tile["frame_idx"], 0, palette.frame_count-1);
+				canvas.draw_image(x, y, palette.frame_images[frame_idx]);
 		
 		case "dense":
 			x0, y0 = tilemap["dense"]["position"];
 			w = tilemap["dense"]["columns"];
 			h = tilemap["dense"]["rows"];
 
+			# the cell range whose tiles can touch the canvas
+			col0 = max(int(math.floor((vx0 - x0) / TILE)), 0);
+			col1 = min(int(math.ceil((vx1 - x0) / TILE)), w);
+			row0 = max(int(math.floor((vy0 - y0) / TILE)), 0);
+			row1 = min(int(math.ceil((vy1 - y0) / TILE)), h);
+
 			canvas.draw_circle(x0, y0, 4, (255, 255, 255));
-			for row in range(h):
+			for row in range(row0, row1):
 				y = y0 + row * TILE;
-				for col in range(w):
+				for col in range(col0, col1):
 					x = x0 + col * TILE;
 					idx = row * w + col;
 					frame_idx = tilemap["dense"]["frame_indices"][idx]-1;
 					if frame_idx >= 0:
-						frame_idx = cowtools.clamp(frame_idx, 0, palette.frame_count-1);
+						frame_idx = 0 if animated else cowtools.clamp(frame_idx, 0, palette.frame_count-1);
 						canvas.draw_image(
 							x, y,
 							palette.frame_images[frame_idx]

@@ -90,9 +90,24 @@ class AssetDocument:
 			self.id_set.remove(entry["id"]);
 		self.instances.remove(entry);
 	
-	def refresh(self):
-		for i in range(len(self.instances)):
-			self.type_helper.rectify(self.instances[i]);
+	def is_dirty(self):
+		"""Edited since the last history commit."""
+		return self.instances != self.committed;
+
+	def refresh(self, changed_only=False):
+		"""Rectify every instance against the type tree. Editors rely on this to
+		fill in the keys a freshly placed object is missing before its variant is
+		switched, so it has to run on every frame an instance could have changed
+		-- but rectifying every instance of every document each frame was the
+		editor's single biggest per-frame cost, and on a clean instance it does
+		nothing: whatever was committed to history was rectified first. So a
+		caller may ask for only the instances that differ from their committed
+		copy, which is a cheap comparison on the common no-edit frame."""
+		committed = self.committed if changed_only else None;
+		for i, instance in enumerate(self.instances):
+			if committed != None and i < len(committed) and instance == committed[i]:
+				continue;
+			self.type_helper.rectify(instance);
 	
 	def save(self, path=None):
 		if path == None:
