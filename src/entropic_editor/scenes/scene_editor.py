@@ -25,6 +25,9 @@ import scripts;
 # each paste so repeats don't stack on one spot
 PASTE_OFFSET = 16;
 
+# zoom multiplier per wheel notch; trackpads deliver fractional notches
+ZOOM_STEP = 1.1;
+
 def index_of(items, item):
 	return next((i for i, x in enumerate(items) if x is item), None);
 
@@ -1249,6 +1252,8 @@ class SceneEditor:
 				_, self.scene_viewer.show_walls = imgui.menu_item("Walls", "", self.scene_viewer.show_walls);
 				_, self.scene_viewer.show_gizmos = imgui.menu_item("Gizmos", "", self.scene_viewer.show_gizmos);
 				_, self.scene_viewer.show_grid = imgui.menu_item("Grid", "", self.scene_viewer.show_grid);
+				if imgui.menu_item_simple(f"Reset zoom ({self.canvas.scale:.2f}x)"):
+					self.canvas.set_zoom(1.0, pivot=(0, 0));
 				imgui.end_menu();
 			
 			if imgui.begin_menu("Grid"):
@@ -1347,7 +1352,7 @@ class SceneEditor:
 		def run_left_panel(panel_tick):
 			imgui.begin_child(
 				"left-panel",
-				imgui.ImVec2((imgui.get_content_region_avail().x - self.canvas.width) * 0.9, imgui.get_content_region_avail().y),
+				imgui.ImVec2((imgui.get_content_region_avail().x - self.canvas.view_size[0]) * 0.9, imgui.get_content_region_avail().y),
 				0, 0
 			);
 			panel_tick();
@@ -1426,7 +1431,7 @@ class SceneEditor:
 		imgui.begin_child(
 			"main-panel",
 			imgui.ImVec2(imgui.get_content_region_avail().x, imgui.get_content_region_avail().y),
-			0, 0
+			0, imgui.WindowFlags_.no_scroll_with_mouse # the wheel zooms the canvas
 		);
 
 		if imgui.begin_tab_bar("edit-mode"):
@@ -1436,6 +1441,12 @@ class SceneEditor:
 					self.edit_mode = value;
 					imgui.end_tab_item();
 			imgui.end_tab_bar();
+
+		# Zoom before drawing, so this frame is drawn at the new zoom. has_mouse
+		# and the cursor are from last frame's render, which is close enough.
+		wheel = imgui.get_io().mouse_wheel;
+		if wheel != 0 and self.canvas.has_mouse:
+			self.canvas.set_zoom(self.canvas.scale * (ZOOM_STEP ** wheel), pivot=self.canvas_io.get_cursor());
 
 		self.scene_viewer.draw();
 		self.canvas.render(gui_id="canvas");

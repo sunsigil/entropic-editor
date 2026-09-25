@@ -14,6 +14,9 @@ GLYPH_LEADING = 2;
 
 _glyph_cache = {};
 
+ZOOM_MIN = 0.5;
+ZOOM_MAX = 8.0;
+
 def _glyph_image(glyphs, idx, scale):
 	key = (glyphs, idx, scale);
 	image = _glyph_cache.get(key);
@@ -31,12 +34,46 @@ class Canvas:
 		self.scale = scale;
 		self.origin = origin;
 
+		# on-screen size, which zooming holds fixed while the backing image changes
+		self.view_size = (self.width * self.scale, self.height * self.scale);
+
 		self.image = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0));
 		self.texture = make_texture(self.image.tobytes(), width, height);
 		self.draw = ImageDraw.Draw(self.image);
 	
 		self.position = None;
 		self.has_mouse = False;
+		self.texture_stale = False;
+
+	def set_zoom(self, zoom, pivot=None):
+		"""Display-scaling zoom: drawing stays in world pixels, the backing image
+		shrinks as the zoom grows, and the GPU stretches it back to view_size
+		with nearest-neighbour sampling. Non-integer zooms therefore show uneven
+		pixels; that's accepted for an editor. pivot is the world point to hold
+		still on screen, normally the cursor."""
+		zoom = min(max(zoom, ZOOM_MIN), ZOOM_MAX);
+		if zoom == self.scale:
+			return;
+
+		if pivot != None:
+			px, py = pivot;
+			sx, sy = (px + self.origin[0]) * self.scale, (py + self.origin[1]) * self.scale;
+
+		view_w, view_h = self.view_size;
+		self.width = max(int(round(view_w / zoom)), 1);
+		self.height = max(int(round(view_h / zoom)), 1);
+		self.scale = zoom;
+
+		self.image = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0));
+		self.draw = ImageDraw.Draw(self.image);
+		# The texture is NOT touched here. imgui only records the texture id
+		# when the canvas is drawn and samples it at the end of the frame, so
+		# uploading a blank image now would black out any frame that zoomed.
+		# render() reallocates it with the next drawn image instead.
+		self.texture_stale = True;
+
+		if pivot != None:
+			self.origin = (sx / zoom - px, sy / zoom - py);
 	
 	def _transform(self, x, y):
 		x += self.origin[0];
@@ -115,8 +152,13 @@ class Canvas:
 	def render(self, gui_id=None):
 		self.position = imgui.get_cursor_screen_pos();
 		glBindTexture(GL_TEXTURE_2D, self.texture);
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, self.width, self.height, GL_RGBA, GL_UNSIGNED_BYTE, self.image.tobytes());
-		imgui.image(imgui.ImTextureRef(self.texture), imgui.ImVec2(self.width * self.scale, self.height * self.scale));
+		if self.texture_stale:
+			# size changed: reallocate rather than update in place
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.width, self.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, self.image.tobytes());
+			self.texture_stale = False;
+		else:
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, self.width, self.height, GL_RGBA, GL_UNSIGNED_BYTE, self.image.tobytes());
+		imgui.image(imgui.ImTextureRef(self.texture), imgui.ImVec2(self.view_size[0], self.view_size[1]));
 		ContextMenu.ping(gui_id);
 		self.has_mouse = imgui.is_item_hovered();
 
