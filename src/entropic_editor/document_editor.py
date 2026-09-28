@@ -7,6 +7,7 @@ class DocumentEditor:
 	def __init__(self, document):
 		self.document = document;
 		self.open = True;
+		self.focus_pending = False;
 		self.size = imgui.ImVec2(1280, 720);
 
 		self.show_typetip = False;
@@ -21,6 +22,9 @@ class DocumentEditor:
 
 	def close(self):
 		self.open = False;
+
+	def focus(self):
+		self.focus_pending = True;
 
 	def begin_rename(self, instance):
 		self.rename_target = instance;
@@ -80,6 +84,9 @@ class DocumentEditor:
 
 	def draw(self):
 		imgui.set_next_window_size(self.size);
+		if self.focus_pending:
+			imgui.set_next_window_focus();
+			self.focus_pending = False;
 		_, self.open = imgui.begin(self.document.type_name, self.open, flags=imgui.WindowFlags_.menu_bar);
 
 		if imgui.begin_menu_bar():

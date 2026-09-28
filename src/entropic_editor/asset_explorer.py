@@ -13,7 +13,7 @@ class AssetExplorer:
 	
 	def _is_private(self, x):
 		asset = AssetManager.search(self.type, x);
-		return "private" in asset and asset["private"];
+		return asset.get("anonymous", False);
 
 	def draw(self):
 		listings = [s["name"] for s in AssetManager.get_all(self.type)];

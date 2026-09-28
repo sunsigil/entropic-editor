@@ -1,6 +1,7 @@
 from pathlib import Path;
 import json;
 import asset_types;
+import scripts;
 import copy;
 import shutil;
 
@@ -168,6 +169,8 @@ class AssetManager:
 			for asset in assets:
 				nodes = doc.type_helper.flatten(asset);
 				for node in nodes:
+					if node.I == None:
+						continue;
 					if isinstance(node.T, asset_types.List) and node.T.T == asset_types.Asset(asset_type):
 						for i,v in enumerate(node.I):
 							if v == asset_name:
@@ -175,8 +178,49 @@ class AssetManager:
 					if isinstance(node.T, asset_types.Object):
 						for key in node.children:
 							child = node.children[key];
-							if child.T == asset_types.Asset(asset_type) and node.I[key] == asset_name:
+							if child.T == asset_types.Asset(asset_type) and node.I.get(key) == asset_name:
 								node.I[key] = new_name;
+
+def rectify_entity_script_data(entity):
+	prototype = AssetManager.search("prototype", entity["prototype"]);
+	if prototype == None:
+		return;
+	prototype["script_data"] = scripts.rectify_all_script_data(prototype["scripts"], prototype["script_data"]);
+	entity["script_data"] = scripts.rectify_all_script_data(prototype["scripts"], entity["script_data"], prototype["script_data"]);
+
+# A datum equal to the prototype's old default is inherited (scenegen strips
+# it), so it follows the new default; anything else is an override
+def follow_prototype_defaults():
+	prototypes = AssetManager.get_document("prototype");
+	scenes = AssetManager.get_document("scene");
+	if prototypes == None or scenes == None or prototypes.instances == prototypes.committed:
+		return;
+
+	entities = [entity for scene in scenes.instances for entity in scene["entities"]];
+	for entity in entities:
+		rectify_entity_script_data(entity);
+
+	old = {prototype["name"]: prototype for prototype in prototypes.committed};
+	for prototype in prototypes.instances:
+		previous = old.get(prototype["name"]);
+		if previous == None:
+			continue;
+		for block in prototype["script_data"]:
+			for datum in block["data"]:
+				key = datum["signature"]["key"];
+				before = scripts.address_data(previous["script_data"], block["script"], key);
+				if before == None or before["value"] == datum["value"]:
+					continue;
+				count = 0;
+				for entity in entities:
+					if entity["prototype"] != prototype["name"]:
+						continue;
+					actual = scripts.address_data(entity["script_data"], block["script"], key);
+					if actual != None and actual["value"] == before["value"]:
+						actual["value"] = copy.deepcopy(datum["value"]);
+						count += 1;
+				if count > 0:
+					print(f"[Prototype] {prototype["name"]}.{block["script"]}.{key}: {count} entities followed {before["value"]} -> {datum["value"]}");
 
 #########################################################
 ## HISTORY
@@ -251,6 +295,7 @@ class History:
 	_frame = 0;
 
 	def commit():
+		follow_prototype_defaults();
 		entry = [];
 		for doc in AssetManager.documents:
 			if doc.instances != doc.committed:

@@ -13,7 +13,9 @@ def glfw_error_callback(error, description):
 
 def get_clipboard_text(_ctx: imgui.internal.Context) -> str:
 	s = glfw.get_clipboard_string(__context.glfw_handle);
-	return s.decode();
+	if s == None:
+		return "";
+	return s.decode() if isinstance(s, bytes) else str(s);
 def set_clipboard_text(_ctx: imgui.internal.Context, text: str) -> str:
 	glfw.set_clipboard_string(__context.glfw_handle, text);
 

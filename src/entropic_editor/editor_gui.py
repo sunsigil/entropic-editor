@@ -215,7 +215,7 @@ def input_file(gui_id, value, pattern, directory=None, asset_type=None, return_a
     win = ToolWindowRegistry.search(file_explorer.FileExplorer).window(win_id);
     if win != None:
         harvest = win.get_result();
-        value = harvest if harvest != None else value;
+        value = str(harvest) if harvest != None else value;
     else:
         if browse:
             win = ToolWindowRegistry.search(file_explorer.FileExplorer).open(win_id);

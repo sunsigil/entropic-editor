@@ -43,14 +43,6 @@ def get_script_data(entity, key):
 				return datum;
 	return None;
 
-def rectify_entity_script_data(entity):
-	prototype = AssetManager.search("prototype", entity["prototype"]);
-	if prototype == None:
-		return;
-
-	prototype["script_data"] = scripts.rectify_all_script_data(prototype["scripts"], prototype["script_data"]);
-	entity["script_data"] = scripts.rectify_all_script_data(prototype["scripts"], entity["script_data"], prototype["script_data"]);
-	
 #########################################################
 ## SCENE EDITOR
 
@@ -896,7 +888,7 @@ class NavlistEditor:
 
 			imgui.tree_pop();
 
-	def draw_canvas(self):
+	def draw_canvas(self, show_selection=True):
 		if self.navlists == None:
 			return;
 
@@ -912,21 +904,59 @@ class NavlistEditor:
 				highlight=(0, 255, 255) if is_selected else None
 			);
 
-		if selected_navlist != None and selection.node_idx == None:
+		if show_selection and selected_navlist != None and selection.node_idx == None:
 			self.parent.canvas.draw_aabb(scenes.navlists.get_aabb(selected_navlist), (255, 255, 255));
 
 class SceneViewer:
+	# Every toggleable thing the viewer draws, in menu order.
+	# (key, menu label, shown by default, menu group)
+	# Tool cursors (tilemap/foliage) are deliberately not here: they are
+	# feedback for the active tool, not scene overlays.
+	LAYERS = [
+		("tiles",       "Tiles",                 True,  "Content"),
+		("entities",    "Entities",              True,  "Content"),
+		("decorations", "Decorations",           True,  "Content"),
+		("walls",       "Walls",                 True,  "Collision"),
+		("bounds",      "Scene bounds",          True,  "Collision"),
+		("boxes",       "Blocker/trigger boxes", False, "Collision"),
+		("doors",       "Door gizmos",           True,  "Gizmos"),
+		("navlists",    "Navlists",              True,  "Gizmos"),
+		("selection",   "Selection outlines",    True,  "Gizmos"),
+		("grid",        "Grid",                  False, "Guides"),
+		("guides",      "Axis guides",           True,  "Guides"),
+	];
+	CONTENT_GROUP = "Content";
+
 	def __init__(self, parent):
 		self.parent = parent;
+		self.visible = {key: default for key, _, default, _ in SceneViewer.LAYERS};
 
-		self.show_tiles = True;
-		self.show_entities = True;
-		self.show_decorations = True;
+	def shows(self, key):
+		return self.visible[key];
 
-		self.show_grid = False;
-		self.show_walls = True;
-		self.show_boxes = False;
-		self.show_gizmos = True;
+	def show_all(self):
+		for key in self.visible:
+			self.visible[key] = True;
+
+	def hide_overlays(self):
+		for key, _, _, group in SceneViewer.LAYERS:
+			if group != SceneViewer.CONTENT_GROUP:
+				self.visible[key] = False;
+
+	def draw_menu(self):
+		last_group = None;
+		for key, label, _, group in SceneViewer.LAYERS:
+			if group != last_group:
+				if last_group != None:
+					imgui.separator();
+				imgui.text_disabled(group);
+				last_group = group;
+			_, self.visible[key] = imgui.menu_item(label, "", self.visible[key]);
+		imgui.separator();
+		if imgui.menu_item_simple("Show all"):
+			self.show_all();
+		if imgui.menu_item_simple("Hide overlays"):
+			self.hide_overlays();
 	
 	def draw_tilemaps(self, foreground):
 		for tilemap in self.parent.scene["tilemaps"]:
@@ -951,7 +981,7 @@ class SceneViewer:
 			prototype = AssetManager.search("prototype", entity["prototype"]);
 			x, y = entity["position"];
 
-			if prototype != None and self.show_boxes:
+			if prototype != None and self.shows("boxes"):
 				if prototype["has_blocker"]:
 					x0, y0, x1, y1 = prototype["blocker"];
 					self.parent.canvas.draw_aabb((x0+x, y0+y, x1+x, y1+y), (255, 0, 0));
@@ -959,11 +989,13 @@ class SceneViewer:
 					x0, y0, x1, y1 = prototype["trigger"];
 					self.parent.canvas.draw_aabb((x0+x, y0+y, x1+x, y1+y), (0, 255, 0));
 
-			if self.parent.selection_context.is_selected(entity):
+			if self.shows("selection") and self.parent.selection_context.is_selected(entity):
 				self.parent.canvas.draw_aabb(get_entity_aabb(entity), (255, 255, 255));
 				self.parent.canvas.draw_circle(x, y, 4, (192, 192, 255));
 
 	def draw_decoration_overlays(self):
+		if not self.shows("selection"):
+			return;
 		for decoration in self.parent.scene["decorations"]:
 			if self.parent.decoration_editor.selection_context.is_selected(decoration):
 				self.parent.canvas.draw_aabb(scenes.decorations.get_aabb(decoration), (255, 255, 255));
@@ -971,11 +1003,11 @@ class SceneViewer:
 	def draw_world(self):
 		bodies = [];
 
-		if self.show_entities:
+		if self.shows("entities"):
 			for entity in self.parent.scene["entities"]:
 				bodies.append((get_entity_body_key(entity), lambda e=entity: self.draw_entity(e)));
 
-		if self.show_decorations:
+		if self.shows("decorations"):
 			for decoration in self.parent.scene["decorations"]:
 				bodies.append((scenes.decorations.get_body_key(decoration), lambda d=decoration: scenes.decorations.canvas_draw(self.parent.canvas, d)));
 
@@ -983,10 +1015,11 @@ class SceneViewer:
 		for _, draw_body in bodies:
 			draw_body();
 
-	def draw_walls(self):
+	def draw_bounds(self):
 		if self.parent.scene["has_bounds"]:
 			self.parent.canvas.draw_aabb(self.parent.scene["bounds"], (128, 0, 0), False);
-		
+
+	def draw_walls(self):
 		for wall in self.parent.scene["walls"]:
 			colour = (255, 255, 0) if self.parent.wall_editor.selection_context.is_selected(wall) else (255, 0, 0);
 			scenes.walls.canvas_draw(self.parent.canvas, wall, colour);
@@ -994,27 +1027,31 @@ class SceneViewer:
 	def draw(self):
 		self.parent.canvas.clear(tuple(self.parent.scene["background"]));
 
-		if self.show_tiles:
+		if self.shows("tiles"):
 			self.draw_tilemaps(False);
-		if self.show_grid:
+		if self.shows("grid"):
 			self.parent.canvas_grid.draw_lines((64, 64, 64));
-		self.parent.canvas.draw_guides((128, 128, 128));
+		if self.shows("guides"):
+			self.parent.canvas.draw_guides((128, 128, 128));
 
 		self.draw_world();
 
-		if self.show_tiles:
+		if self.shows("tiles"):
 			self.draw_tilemaps(True);
 
-		if self.show_entities:
+		if self.shows("entities"):
 			self.draw_entity_overlays();
-		if self.show_decorations:
+		if self.shows("decorations"):
 			self.draw_decoration_overlays();
-		if self.show_walls:
+		if self.shows("bounds"):
+			self.draw_bounds();
+		if self.shows("walls"):
 			self.draw_walls();
 
-		if self.show_gizmos:
+		if self.shows("doors"):
 			self.parent.door_editor.draw();
-			self.parent.navlist_editor.draw_canvas();
+		if self.shows("navlists"):
+			self.parent.navlist_editor.draw_canvas(show_selection=self.shows("selection"));
 
 		if self.parent.edit_mode == EditMode.TILEMAP:
 			self.parent.tilemap_editor.draw_canvas();
@@ -1050,6 +1087,7 @@ class SceneEditor:
 	
 	def _load_scene(self, scene):		
 		self.scene = scene;
+		self.scene.setdefault("script", "");
 
 		self.event_queue.clear();
 		self.canvas_manip.clear();
@@ -1245,13 +1283,8 @@ class SceneEditor:
 				imgui.end_menu();
 			
 			if imgui.begin_menu("View"):
-				_, self.scene_viewer.show_tiles = imgui.menu_item("Tiles", "", self.scene_viewer.show_tiles);
-				_, self.scene_viewer.show_entities = imgui.menu_item("Entities", "", self.scene_viewer.show_entities);
-				_, self.scene_viewer.show_decorations = imgui.menu_item("Decorations", "", self.scene_viewer.show_decorations);
-				_, self.scene_viewer.show_boxes = imgui.menu_item("Boxes", "", self.scene_viewer.show_boxes);
-				_, self.scene_viewer.show_walls = imgui.menu_item("Walls", "", self.scene_viewer.show_walls);
-				_, self.scene_viewer.show_gizmos = imgui.menu_item("Gizmos", "", self.scene_viewer.show_gizmos);
-				_, self.scene_viewer.show_grid = imgui.menu_item("Grid", "", self.scene_viewer.show_grid);
+				self.scene_viewer.draw_menu();
+				imgui.separator();
 				if imgui.menu_item_simple(f"Reset zoom ({self.canvas.scale:.2f}x)"):
 					self.canvas.set_zoom(1.0, pivot=(0, 0));
 				imgui.end_menu();
@@ -1321,6 +1354,7 @@ class SceneEditor:
 		if self.scene["has_bounds"]:
 			self.scene["bounds"] = input_aabb("Bounds", self.scene["bounds"]);
 		self.scene["free_camera"] = input_bool("Free camera", self.scene["free_camera"]);
+		self.scene["script"] = input_asset("Script", self.scene.get("script", ""), "script");
 
 		# parallax lag is measured from this point, so decorations sit where
 		# they were placed when the camera is over it
