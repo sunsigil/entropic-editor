@@ -17,8 +17,6 @@ class ScriptDatum:
         self.type = asset_types.construct_type(self.type_expr);
 
     def to_json(self, value=None):
-        # A datum must always hold a valid value for its type; None would fail
-        # validation and crash rectify on the next merge.
         if value == None:
             value = self.type.prototype();
         return {
@@ -30,10 +28,14 @@ class ScriptDatum:
         };
 
 def find_luac():
-    luac_path = os.environ.get("LUAC") or shutil.which("luac");
-    if luac_path == None:
-        return None;
-    return Path(luac_path);
+    candidates = [
+        os.environ.get("LUAC"),
+        shutil.which("luac")
+    ];
+    for candidate in candidates:
+        if candidate != None and Path(candidate).is_file():
+            return Path(candidate);
+    return None;
 
 def luac(source, name, extra_args=[]):
     luac_path = find_luac();
@@ -53,7 +55,10 @@ class Script:
         self.source = source.strip();
         self.name = name;
 
-        self.bytecode = luac(self.source, self.name, [] if debug else ["-s"]);
+        try:
+            self.bytecode = luac(self.source, self.name, [] if debug else ["-s"]);
+        except:
+            self.bytecode = None;
         if self.bytecode != None:
             self.hash = hashlib.sha1(self.bytecode);
         if self.name == None:
@@ -63,12 +68,13 @@ class Script:
         self.script_data = [ScriptDatum(k, t) for k, t in sd_exprs];
 
     def export(self, path):
-        path = Path(path);
-        if not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True);
-        file = open(path, "wb");
-        file.write(self.bytecode);
-        file.close();
+        if self.bytecode != None:
+            path = Path(path);
+            if not path.parent.exists():
+                path.parent.mkdir(parents=True, exist_ok=True);
+            file = open(path, "wb");
+            file.write(self.bytecode);
+            file.close();
     
     def __hash__(self):
         return int(self.hash.hexdigest(), 16);
