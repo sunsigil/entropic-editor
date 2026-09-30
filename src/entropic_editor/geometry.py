@@ -10,12 +10,10 @@ class Orientation(enum.Enum):
 	SOUTH = 3
 
 def is_left(a, b, c):
-	a = np.array(a);
-	b = np.array(b);
-	c = np.array(c);
-	ab = b-a;
-	ac = c-a;
-	return np.cross(ab, ac) > 0;
+	ax, ay = a;
+	bx, by = b;
+	cx, cy = c;
+	return (bx-ax)*(cy-ay) - (by-ay)*(cx-ax) > 0;
 
 def point_point_dist(a, b):
 	a = np.array(a);

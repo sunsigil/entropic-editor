@@ -59,22 +59,22 @@ class Script:
             self.bytecode = luac(self.source, self.name, [] if debug else ["-s"]);
         except:
             self.bytecode = None;
-        if self.bytecode != None:
-            self.hash = hashlib.sha1(self.bytecode);
+        self.hash = hashlib.sha1(self.bytecode if self.bytecode != None else self.source.encode());
         if self.name == None:
-            self.name = f"_{self.hash.hexdigest()[:12]}" if self.bytecode != None else "untitled";
+            self.name = f"_{self.hash.hexdigest()[:12]}";
 
         sd_exprs = re.findall(ScriptDatum.pattern, self.source);
         self.script_data = [ScriptDatum(k, t) for k, t in sd_exprs];
 
     def export(self, path):
-        if self.bytecode != None:
-            path = Path(path);
-            if not path.parent.exists():
-                path.parent.mkdir(parents=True, exist_ok=True);
-            file = open(path, "wb");
-            file.write(self.bytecode);
-            file.close();
+        if self.bytecode == None:
+            raise RuntimeError(f"Cannot export script '{self.name}': no bytecode (no Lua compiler was found)");
+        path = Path(path);
+        if not path.parent.exists():
+            path.parent.mkdir(parents=True, exist_ok=True);
+        file = open(path, "wb");
+        file.write(self.bytecode);
+        file.close();
     
     def __hash__(self):
         return int(self.hash.hexdigest(), 16);
