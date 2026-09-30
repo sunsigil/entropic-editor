@@ -32,16 +32,20 @@ class ScriptDatum:
 def find_luac():
     luac_path = os.environ.get("LUAC") or shutil.which("luac");
     if luac_path == None:
-        raise RuntimeError("No Lua compiler found: set the LUAC environment variable or put luac on PATH");
+        return None;
     return Path(luac_path);
 
 def luac(source, name, extra_args=[]):
+    luac_path = find_luac();
+    if luac_path == None:
+        return None;
+
     if name == None or len(name) == 0:
         name = "untitled";
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d) / f"{name}.lua";
         tmp.write_text(source);
-        args = [find_luac(), *extra_args, "-o", "-", tmp.name];
+        args = [luac_path, *extra_args, "-o", "-", tmp.name];
         return sp.run(args, cwd=d, capture_output=True, check=True).stdout;
 
 class Script:
@@ -50,9 +54,10 @@ class Script:
         self.name = name;
 
         self.bytecode = luac(self.source, self.name, [] if debug else ["-s"]);
-        self.hash = hashlib.sha1(self.bytecode);
+        if self.bytecode != None:
+            self.hash = hashlib.sha1(self.bytecode);
         if self.name == None:
-            self.name = f"_{self.hash.hexdigest()[:12]}";
+            self.name = f"_{self.hash.hexdigest()[:12]}" if self.bytecode != None else "untitled";
 
         sd_exprs = re.findall(ScriptDatum.pattern, self.source);
         self.script_data = [ScriptDatum(k, t) for k, t in sd_exprs];
