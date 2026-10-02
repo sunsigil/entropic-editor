@@ -1,5 +1,12 @@
 from imgui_bundle import imgui;
 import glfw;
+import sys;
+
+# Cmd on macOS, Ctrl on Windows and Linux.
+if sys.platform == "darwin":
+	COMMAND_KEYS = [glfw.KEY_LEFT_SUPER, glfw.KEY_RIGHT_SUPER];
+else:
+	COMMAND_KEYS = [glfw.KEY_LEFT_CONTROL, glfw.KEY_RIGHT_CONTROL];
 
 class InputManager:
 	_glfw_handle = None;
@@ -39,7 +46,7 @@ class InputManager:
 		return InputManager._glfw_io[key][1] and not InputManager._glfw_io[key][0];
 
 	def is_command(keys):
-		if not InputManager.is_held(glfw.KEY_LEFT_SUPER):
+		if not any(InputManager.is_held(modifier) for modifier in COMMAND_KEYS):
 			return False;
 		if not isinstance(keys, list):
 			keys = [keys];

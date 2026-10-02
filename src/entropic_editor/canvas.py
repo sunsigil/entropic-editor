@@ -9,7 +9,6 @@ from geometry import *;
 from editor_gui import *;
 import sprites;
 
-# CAT_LEADING; glyph size comes from the sprite itself
 GLYPH_LEADING = 2;
 
 _glyph_cache = {};
@@ -34,7 +33,6 @@ class Canvas:
 		self.scale = scale;
 		self.origin = origin;
 
-		# on-screen size, which zooming holds fixed while the backing image changes
 		self.view_size = (self.width * self.scale, self.height * self.scale);
 
 		self.image = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0));
@@ -46,11 +44,6 @@ class Canvas:
 		self.texture_stale = False;
 
 	def set_zoom(self, zoom, pivot=None):
-		"""Display-scaling zoom: drawing stays in world pixels, the backing image
-		shrinks as the zoom grows, and the GPU stretches it back to view_size
-		with nearest-neighbour sampling. Non-integer zooms therefore show uneven
-		pixels; that's accepted for an editor. pivot is the world point to hold
-		still on screen, normally the cursor."""
 		zoom = min(max(zoom, ZOOM_MIN), ZOOM_MAX);
 		if zoom == self.scale:
 			return;
@@ -66,10 +59,6 @@ class Canvas:
 
 		self.image = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0));
 		self.draw = ImageDraw.Draw(self.image);
-		# The texture is NOT touched here. imgui only records the texture id
-		# when the canvas is drawn and samples it at the end of the frame, so
-		# uploading a blank image now would black out any frame that zoomed.
-		# render() reallocates it with the next drawn image instead.
 		self.texture_stale = True;
 
 		if pivot != None:
@@ -122,8 +111,6 @@ class Canvas:
 			self.image.paste(image, (int(x), int(y)), mask=image);
 	
 	def draw_text(self, xy, text, scale, c):
-		"""Drawn from the same glyph sprite the game uses, a frame per character
-		code, so text lands identically in both."""
 		glyphs = sprites.SpriteBank.search("glyph");
 		scale = max(int(scale), 1);
 		advance = glyphs.frame_width * scale;
@@ -138,7 +125,6 @@ class Canvas:
 				continue;
 
 			idx = ord(character);
-			# spaces take their width without drawing, as they do in the game
 			if not character.isspace() and idx < glyphs.frame_count:
 				self.draw_image(x, y, _glyph_image(glyphs, idx, scale), c);
 			x += advance;
@@ -153,7 +139,6 @@ class Canvas:
 		self.position = imgui.get_cursor_screen_pos();
 		glBindTexture(GL_TEXTURE_2D, self.texture);
 		if self.texture_stale:
-			# size changed: reallocate rather than update in place
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.width, self.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, self.image.tobytes());
 			self.texture_stale = False;
 		else:

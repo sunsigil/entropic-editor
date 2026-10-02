@@ -27,8 +27,6 @@ def get_aabb(entity):
 	return [x-8, y-8, x+8, y+8];
 
 def get_body_key(entity):
-	"""Where this sits in the draw order. Sorting and picking share it so they
-	can't drift apart. Entities all live on layer 0."""
 	return (0, 0, get_depth(entity));
 
 def get_depth(entity):
