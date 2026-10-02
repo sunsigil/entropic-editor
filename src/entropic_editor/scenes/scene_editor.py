@@ -381,7 +381,7 @@ class WallEditor:
 		if self.walls == None:
 			return;
 	
-		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_D):
+		if InputManager.is_command(glfw.KEY_D):
 			selected = self.selection_context.get_selection(True);
 			self.trash.trash_item(self.walls, selected);
 			self.trash.flush();
@@ -481,7 +481,7 @@ class DecorationEditor:
 				scenes.decorations.relocate(decoration, self.parent.canvas_grid.snap_point((x+offset, y+offset)));
 				self.selection_context.select(decoration);
 
-		if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_D):
+		if InputManager.is_command(glfw.KEY_D):
 			selected = self.selection_context.get_selection(True);
 			self.trash.trash_item(self.decorations, selected);
 			self.trash.flush();

@@ -149,7 +149,7 @@ if __name__ == "__main__":
 			if glfw.get_time() - hot_backup_timestamp >= HOT_BACKUP_INTERVAL:
 				make_backups(game_path/"backups/hot", cold=False);
 				hot_backup_timestamp = glfw.get_time();
-			if InputManager.is_held(glfw.KEY_LEFT_SUPER) and InputManager.is_pressed(glfw.KEY_S):
+			if InputManager.is_command(glfw.KEY_S):
 				for document in AssetManager.documents:
 					document.save();
 
