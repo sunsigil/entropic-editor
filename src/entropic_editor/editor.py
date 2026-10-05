@@ -17,6 +17,7 @@ import traceback;
 
 import glfw;
 from imgui_bundle import imgui;
+from rendering.images import Texture;
 import window;
 import paths;
 
@@ -83,8 +84,7 @@ if __name__ == "__main__":
 	];
 	window_flags = foldl(lambda a, b : a | b, 0, window_flag_list);
 
-	splash_img = Image.open(editor_path/"resources/splash.png");
-	splash_tex = make_texture(splash_img.tobytes(), splash_img.width, splash_img.height);
+	splash = Texture.load(editor_path/"resources/splash.png");
 	splash_flag_list = [
 		imgui.WindowFlags_.no_scrollbar,
 		imgui.WindowFlags_.no_scroll_with_mouse
@@ -145,7 +145,7 @@ if __name__ == "__main__":
 					document.save();
 
 			imgui.set_next_window_pos((0, 0));
-			imgui.set_next_window_size(imgui.ImVec2(1920*0.8, 1080*0.8));
+			imgui.set_next_window_size(imgui.ImVec2(*win.size));
 			imgui.begin(win.name, flags=window_flags | splash_flags);
 
 			if imgui.begin_main_menu_bar():
@@ -176,7 +176,12 @@ if __name__ == "__main__":
 
 				imgui.set_scroll_x(0);
 				imgui.set_scroll_y(0);
-				imgui.image(imgui.ImTextureRef(splash_tex), imgui.ImVec2(splash_img.width, splash_img.height));
+				avail = imgui.get_content_region_avail();
+				fit = min(avail.x / splash.width, avail.y / splash.height);
+				fitted = imgui.ImVec2(splash.width * fit, splash.height * fit);
+				cursor = imgui.get_cursor_pos();
+				imgui.set_cursor_pos(imgui.ImVec2(cursor.x + (avail.x - fitted.x) / 2, cursor.y + (avail.y - fitted.y) / 2));
+				imgui.image(imgui.ImTextureRef(splash.handle), fitted);
 			imgui.end();
 
 			PanelManager.draw_all();

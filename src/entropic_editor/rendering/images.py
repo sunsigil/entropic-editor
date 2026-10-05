@@ -15,6 +15,7 @@ def scale_dimensions(width, height, sx, sy):
 
 class Texture:
     def __init__(self, source):
+        self.handle = None;
         if isinstance(source, Texture):
             source = source.source;
 
@@ -25,7 +26,12 @@ class Texture:
         self.dirty = False;
 
     def __del__(self):
-        gl.glDeleteTextures(1, [self.handle]);
+        if self.handle is None:
+            return;
+        try:
+            gl.glDeleteTextures(1, [self.handle]);
+        except Exception:
+            pass;
     
     @classmethod
     def empty(cls, width, height):

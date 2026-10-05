@@ -1,30 +1,18 @@
 from enum import Flag, auto;
 from imgui_bundle import imgui;
-from PIL import Image, ImageDraw;
 import glfw;
 
 from cowtools import *;
 from input import InputManager;
 from geometry import *;
 from editor_gui import *;
+from rendering.images import Texture;
 import sprites;
 
 GLYPH_LEADING = 2;
 
-_glyph_cache = {};
-
 ZOOM_MIN = 0.5;
 ZOOM_MAX = 8.0;
-
-def _glyph_image(glyphs, idx, scale):
-	key = (glyphs, idx, scale);
-	image = _glyph_cache.get(key);
-	if image == None:
-		image = glyphs.frames[idx].source;
-		if scale > 1:
-			image = image.resize((image.width*scale, image.height*scale), Image.NEAREST);
-		_glyph_cache[key] = image;
-	return image;
 
 class Canvas:
 	def __init__(self, width, height, scale=1, origin=(0, 0)):
@@ -35,13 +23,10 @@ class Canvas:
 
 		self.view_size = (self.width * self.scale, self.height * self.scale);
 
-		self.image = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0));
-		self.texture = make_texture(self.image.tobytes(), width, height);
-		self.draw = ImageDraw.Draw(self.image);
+		self.texture = Texture.empty(self.width, self.height);
 	
 		self.position = None;
 		self.has_mouse = False;
-		self.texture_stale = False;
 
 	def set_zoom(self, zoom, pivot=None):
 		zoom = min(max(zoom, ZOOM_MIN), ZOOM_MAX);
@@ -57,9 +42,7 @@ class Canvas:
 		self.height = max(int(round(view_h / zoom)), 1);
 		self.scale = zoom;
 
-		self.image = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0));
-		self.draw = ImageDraw.Draw(self.image);
-		self.texture_stale = True;
+		self.texture.resize(self.width, self.height);
 
 		if pivot != None:
 			self.origin = (sx / zoom - px, sy / zoom - py);
@@ -76,11 +59,11 @@ class Canvas:
 		);
 
 	def clear(self, c):
-		self.draw.rectangle((0, 0, self.width, self.height), fill=c);
+		self.texture.clear(c);
 
 	def draw_pixel(self, x, y, c):
 		x, y = self._transform(x, y);
-		self.draw.point((x, y), fill=c);
+		self.texture.draw_pixel((x, y), c);
 	
 	def draw_aabb(self, aabb, c, fill=False):
 		x0, y0, x1, y1 = aabb;
@@ -89,26 +72,20 @@ class Canvas:
 		w, h = x1-x0, y1-y0;
 		if w <= 0 or h <= 0:
 			return;
-		if fill:
-			self.draw.rectangle((x0, y0, x1, y1), fill=c);
-		else:
-			self.draw.rectangle((x0, y0, x1, y1), outline=c);
+		self.texture.draw_rectangle((x0, y0, x1, y1), c, fill);
 
 	def draw_line(self, x0, y0, x1, y1, c):
 		x0, y0 = self._transform(x0, y0);
 		x1, y1 = self._transform(x1, y1);
-		self.draw.line((x0, y0, x1, y1), fill=c);
+		self.texture.draw_line((x0, y0), (x1, y1), c);
 
 	def draw_circle(self, x, y, r, c):
 		x, y = self._transform(x, y);
-		self.draw.circle((x, y), r, outline=c);
+		self.texture.draw_circle((x, y), r, c);
 	
 	def draw_image(self, x, y, image, c=None):
 		x, y = self._transform(x, y);
-		if c != None:
-			self.image.paste(c, (int(x), int(y)), mask=image);
-		else:
-			self.image.paste(image, (int(x), int(y)), mask=image);
+		self.texture.draw_image((int(x), int(y)), image, c);
 	
 	def draw_text(self, xy, text, scale, c):
 		glyphs = sprites.SpriteBank.search("glyph");
@@ -126,7 +103,7 @@ class Canvas:
 
 			idx = ord(character);
 			if not character.isspace() and idx < glyphs.frame_count:
-				self.draw_image(x, y, _glyph_image(glyphs, idx, scale), c);
+				self.draw_image(x, y, glyphs.thumbnail(idx, width=glyphs.width * scale, height=glyphs.height * scale).source, c);
 			x += advance;
 	
 	def draw_guides(self, c):
@@ -137,13 +114,8 @@ class Canvas:
 	
 	def render(self, gui_id=None):
 		self.position = imgui.get_cursor_screen_pos();
-		glBindTexture(GL_TEXTURE_2D, self.texture);
-		if self.texture_stale:
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.width, self.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, self.image.tobytes());
-			self.texture_stale = False;
-		else:
-			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, self.width, self.height, GL_RGBA, GL_UNSIGNED_BYTE, self.image.tobytes());
-		imgui.image(imgui.ImTextureRef(self.texture), imgui.ImVec2(self.view_size[0], self.view_size[1]));
+		self.texture.refresh();
+		imgui.image(imgui.ImTextureRef(self.texture.handle), imgui.ImVec2(self.view_size[0], self.view_size[1]));
 		ContextMenu.ping(gui_id);
 		self.has_mouse = imgui.is_item_hovered();
 

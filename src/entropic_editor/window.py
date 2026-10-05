@@ -12,18 +12,19 @@ def glfw_error_callback(error, description):
 class Window:
 	def __init__(self, name, width, height):
 		self.name = name;
-		self.width = width;
-		self.height = height;
 
 		glfw.set_error_callback(glfw_error_callback);
 		if not glfw.init():
 			print("Failed to initialize GLFW. Exiting");
 			exit();
+		_, _, work_width, work_height = glfw.get_monitor_workarea(glfw.get_primary_monitor());
+		width = min(width, work_width);
+		height = min(height, work_height);
 		glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3);
 		glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3);
 		glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
 		glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, GL_TRUE);
-		self.glfw_handle = glfw.create_window(self.width, self.height, self.name, None, None);
+		self.glfw_handle = glfw.create_window(width, height, self.name, None, None);
 		if not self.glfw_handle:
 			print("Failed to create window. Exiting");
 			glfw.terminate();
@@ -46,6 +47,16 @@ class Window:
 
 		self.time = glfw.get_time();
 		self.delta_time = 0;
+
+	@property
+	def size(self):
+		return glfw.get_window_size(self.glfw_handle);
+	@property
+	def width(self):
+		return self.size[0];
+	@property
+	def height(self):
+		return self.size[1];
 
 	def _get_clipboard_text(self, _ctx):
 		s = glfw.get_clipboard_string(self.glfw_handle);

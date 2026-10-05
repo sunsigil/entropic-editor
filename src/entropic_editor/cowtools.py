@@ -1,5 +1,3 @@
-import OpenGL;
-from OpenGL.GL import *;
 from enum import Enum;
 import copy;
 import numpy as np;
@@ -87,14 +85,6 @@ def set_by_path(structure, path, value):
 			structure[part] = value;
 		else:
 			set_by_path(structure[part], path, value);
-
-def make_texture(buffer, width, height):
-	texture = glGenTextures(1);
-	glBindTexture(GL_TEXTURE_2D, texture);
-	glTexParameteri(GL_TEXTURE_2D, 	GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, 	GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
-	return texture;
 
 def process_trash(collection, trash, indices=False):
 	if len(collection) == 0 or len(trash) == 0:
