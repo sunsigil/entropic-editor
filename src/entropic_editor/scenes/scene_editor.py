@@ -19,6 +19,7 @@ import scenes.entities;
 import scenes.foliage;
 import scripts;
 from panels import Panel, PanelManager;
+from rendering.images import Texture;
 
 #########################################################
 ## HELPERS
@@ -950,12 +951,12 @@ class SceneViewer:
 		if imgui.menu_item_simple("Hide overlays"):
 			self.hide_overlays();
 	
-	def draw_tilemaps(self, foreground):
+	def draw_tilemaps(self, canvas, foreground):
 		for tilemap in self.parent.scene["tilemaps"]:
 			if tilemap["is_foreground"] == foreground:
-				scenes.tilemaps.canvas_draw(self.parent.canvas, tilemap);
+				scenes.tilemaps.canvas_draw(canvas, tilemap);
 
-	def draw_entity(self, entity):
+	def draw_entity(self, canvas, entity):
 		prototype = AssetManager.search("prototype", entity["prototype"]);
 		sprite = SpriteBank.search(prototype["sprite"], safe=False) if prototype != None else None;
 
@@ -964,11 +965,11 @@ class SceneViewer:
 
 		if sprite != None:
 			frame_idx = clamp(entity["frame_idx"], 0, sprite.frame_count-1);
-			self.parent.canvas.draw_image(x+dx, y+dy, sprite.frames[frame_idx].source);
+			canvas.draw_image(x+dx, y+dy, sprite.frames[frame_idx].source);
 		else:
-			self.parent.canvas.draw_aabb(get_entity_aabb(entity), (255, 255, 0));
+			canvas.draw_aabb(get_entity_aabb(entity), (255, 255, 0));
 
-	def draw_entity_overlays(self):
+	def draw_entity_overlays(self, canvas):
 		for entity in self.parent.scene["entities"]:
 			prototype = AssetManager.search("prototype", entity["prototype"]);
 			x, y = entity["position"];
@@ -976,69 +977,67 @@ class SceneViewer:
 			if prototype != None and self.shows("boxes"):
 				if prototype["has_blocker"]:
 					x0, y0, x1, y1 = prototype["blocker"];
-					self.parent.canvas.draw_aabb((x0+x, y0+y, x1+x, y1+y), (255, 0, 0));
+					canvas.draw_aabb((x0+x, y0+y, x1+x, y1+y), (255, 0, 0));
 				if prototype["has_trigger"]:
 					x0, y0, x1, y1 = prototype["trigger"];
-					self.parent.canvas.draw_aabb((x0+x, y0+y, x1+x, y1+y), (0, 255, 0));
+					canvas.draw_aabb((x0+x, y0+y, x1+x, y1+y), (0, 255, 0));
 
 			if self.shows("selection") and self.parent.selection_context.is_selected(entity):
-				self.parent.canvas.draw_aabb(get_entity_aabb(entity), (255, 255, 255));
-				self.parent.canvas.draw_circle(x, y, 4, (192, 192, 255));
+				canvas.draw_aabb(get_entity_aabb(entity), (255, 255, 255));
+				canvas.draw_circle(x, y, 4, (192, 192, 255));
 
-	def draw_decoration_overlays(self):
+	def draw_decoration_overlays(self, canvas):
 		if not self.shows("selection"):
 			return;
 		for decoration in self.parent.scene["decorations"]:
 			if self.parent.decoration_editor.selection_context.is_selected(decoration):
-				self.parent.canvas.draw_aabb(scenes.decorations.get_aabb(decoration), (255, 255, 255));
+				canvas.draw_aabb(scenes.decorations.get_aabb(decoration), (255, 255, 255));
 
-	def draw_world(self):
+	def draw_world(self, canvas, show_entities, show_decorations):
 		bodies = [];
 
-		if self.shows("entities"):
+		if show_entities:
 			for entity in self.parent.scene["entities"]:
-				bodies.append((get_entity_body_key(entity), lambda e=entity: self.draw_entity(e)));
+				bodies.append((get_entity_body_key(entity), lambda e=entity: self.draw_entity(canvas, e)));
 
-		if self.shows("decorations"):
+		if show_decorations:
 			for decoration in self.parent.scene["decorations"]:
-				bodies.append((scenes.decorations.get_body_key(decoration), lambda d=decoration: scenes.decorations.canvas_draw(self.parent.canvas, d)));
+				bodies.append((scenes.decorations.get_body_key(decoration), lambda d=decoration: scenes.decorations.canvas_draw(canvas, d)));
 
 		bodies = sorted(bodies, key=lambda x: x[0]);
 		for _, draw_body in bodies:
 			draw_body();
 
-	def draw_bounds(self):
+	def draw_bounds(self, canvas):
 		if self.parent.scene["has_bounds"]:
-			self.parent.canvas.draw_aabb(self.parent.scene["bounds"], (128, 0, 0), False);
+			canvas.draw_aabb(self.parent.scene["bounds"], (128, 0, 0), False);
 
-	def draw_walls(self):
+	def draw_walls(self, canvas):
 		for wall in self.parent.scene["walls"]:
 			colour = (255, 255, 0) if self.parent.wall_editor.selection_context.is_selected(wall) else (255, 0, 0);
-			scenes.walls.canvas_draw(self.parent.canvas, wall, colour);
-	
-	def draw(self):
-		self.parent.canvas.clear(tuple(self.parent.scene["background"]));
+			scenes.walls.canvas_draw(canvas, wall, colour);
 
-		if self.shows("tiles"):
-			self.draw_tilemaps(False);
-		if self.shows("grid"):
-			self.parent.canvas_grid.draw_lines((64, 64, 64));
-		if self.shows("guides"):
-			self.parent.canvas.draw_guides((128, 128, 128));
+	def draw_content(self, canvas, force_all=False, after_background=None):
+		shows = lambda key: force_all or self.shows(key);
 
-		self.draw_world();
+		canvas.clear(tuple(self.parent.scene["background"]));
+		if shows("tiles"):
+			self.draw_tilemaps(canvas, False);
+		if after_background != None:
+			after_background();
+		self.draw_world(canvas, shows("entities"), shows("decorations"));
+		if shows("tiles"):
+			self.draw_tilemaps(canvas, True);
 
-		if self.shows("tiles"):
-			self.draw_tilemaps(True);
-
+	def draw_overlays(self, canvas):
 		if self.shows("entities"):
-			self.draw_entity_overlays();
+			self.draw_entity_overlays(canvas);
 		if self.shows("decorations"):
-			self.draw_decoration_overlays();
+			self.draw_decoration_overlays(canvas);
 		if self.shows("bounds"):
-			self.draw_bounds();
+			self.draw_bounds(canvas);
 		if self.shows("walls"):
-			self.draw_walls();
+			self.draw_walls(canvas);
 
 		if self.shows("doors"):
 			self.parent.door_editor.draw();
@@ -1049,6 +1048,16 @@ class SceneViewer:
 			self.parent.tilemap_editor.draw_canvas();
 		if self.parent.edit_mode == EditMode.FOLIAGE:
 			self.parent.foliage_editor.draw_canvas();
+
+	def draw(self):
+		canvas = self.parent.canvas;
+		def guides():
+			if self.shows("grid"):
+				self.parent.canvas_grid.draw_lines((64, 64, 64));
+			if self.shows("guides"):
+				canvas.draw_guides((128, 128, 128));
+		self.draw_content(canvas, after_background=guides);
+		self.draw_overlays(canvas);
 
 class SceneEditor:
 	class SpawnPopup(Panel):
@@ -1066,6 +1075,62 @@ class SceneEditor:
 			imgui.same_line();
 			if imgui.button("Cancel"):
 				self.close();
+
+	class RenderExport(Panel):
+		def __init__(self, parent):
+			super().__init__("Export render", size=None);
+			self.parent = parent;
+			self.path = f"assets/scenes/renders/{parent.scene['name']}.png";
+			self.scale = 1;
+			self.message = None;
+
+		def body(self):
+			imgui.set_next_item_width(384);
+			_, self.path = imgui.input_text("Path", self.path);
+			imgui.set_next_item_width(96);
+			self.scale = input_int("Scale", self.scale, low_bound=1, high_bound=8);
+
+			valid = paths.is_stored(self.path) and self.path.lower().endswith(".png");
+			if not valid:
+				imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), "Path must be a .png relative to the game directory");
+
+			imgui.begin_disabled(not valid);
+			if imgui.button("Export"):
+				try:
+					self.parent.export_render(self.path, self.scale);
+					self.message = f"Wrote {self.path}";
+				except Exception as error:
+					self.message = f"Failed: {error}";
+			imgui.end_disabled();
+			imgui.same_line();
+			if imgui.button("Close"):
+				self.close();
+			if self.message != None:
+				imgui.text(self.message);
+
+	def open_render_export(self):
+		if self.render_export != None and self.render_export.open:
+			self.render_export.focus();
+			return;
+		self.render_export = PanelManager.open(SceneEditor.RenderExport(self));
+
+	def render_scene(self, scale=1):
+		if not self.scene["has_bounds"]:
+			raise RuntimeError("Scene has no bounds");
+		x0, y0, x1, y1 = self.scene["bounds"];
+		width, height = int(x1 - x0), int(y1 - y0);
+		if width <= 0 or height <= 0:
+			raise RuntimeError("Scene bounds are empty");
+		target = Canvas(width, height, origin=(-x0, -y0));
+		self.scene_viewer.draw_content(target, force_all=True);
+		if scale > 1:
+			return Texture.scale(target.texture, scale, scale);
+		return target.texture;
+
+	def export_render(self, stored_path, scale=1):
+		path = paths.resolve(stored_path);
+		path.parent.mkdir(parents=True, exist_ok=True);
+		self.render_scene(scale).export(path);
 
 	def open_spawn_popup(self):
 		if self.spawn_popup != None and self.spawn_popup.open:
@@ -1135,6 +1200,7 @@ class SceneEditor:
 		self.navlist_editor = NavlistEditor(self);
 		self.foliage_editor = scenes.foliage.FoliageEditor(self);
 		self.scene_viewer = SceneViewer(self);
+		self.render_export = None;
 
 		self.spawn_popup = None;
 
@@ -1269,6 +1335,10 @@ class SceneEditor:
 					if self.scene != scene_last:
 						self._load_scene(self.scene);
 					imgui.end_menu();
+				imgui.begin_disabled(not self.scene["has_bounds"]);
+				if imgui.menu_item_simple("Export render..."):
+					self.open_render_export();
+				imgui.end_disabled();
 				imgui.end_menu();
 			
 			if imgui.begin_menu("View"):

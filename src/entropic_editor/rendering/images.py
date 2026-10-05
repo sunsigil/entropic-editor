@@ -15,23 +15,29 @@ def scale_dimensions(width, height, sx, sy):
 
 class Texture:
     def __init__(self, source):
-        self.handle = None;
+        self._handle = None;
         if isinstance(source, Texture):
             source = source.source;
 
         self.source = source.convert("RGBA");
-        self.handle = make_texture(self.source.tobytes(), self.width, self.height);
         self.draw = ImageDraw.Draw(self.source);
-        
         self.dirty = False;
 
     def __del__(self):
-        if self.handle is None:
+        handle = getattr(self, "_handle", None);
+        if handle is None:
             return;
         try:
-            gl.glDeleteTextures(1, [self.handle]);
+            gl.glDeleteTextures(1, [handle]);
         except Exception:
             pass;
+
+    @property
+    def handle(self):
+        if self._handle is None:
+            self._handle = make_texture(self.source.tobytes(), self.width, self.height);
+            self.dirty = False;
+        return self._handle;
     
     @classmethod
     def empty(cls, width, height):
@@ -71,16 +77,18 @@ class Texture:
         return self.source.height;
 
     def refresh(self):
-        if not self.dirty:
+        if self._handle is None or not self.dirty:
             return;
-        gl.glBindTexture(gl.GL_TEXTURE_2D, self.handle);
+        gl.glBindTexture(gl.GL_TEXTURE_2D, self._handle);
         gl.glTexSubImage2D(gl.GL_TEXTURE_2D, 0, 0, 0, self.width, self.height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, self.source.tobytes());
         self.dirty = False;
 
     def resize(self, width, height):
         self.source = self.source.crop((0, 0, width, height));
         self.draw = ImageDraw.Draw(self.source);
-        gl.glBindTexture(gl.GL_TEXTURE_2D, self.handle);
+        if self._handle is None:
+            return;
+        gl.glBindTexture(gl.GL_TEXTURE_2D, self._handle);
         gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, self.width, self.height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, self.source.tobytes());
         self.dirty = False;
 
