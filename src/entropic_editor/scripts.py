@@ -104,12 +104,10 @@ class ScriptBank:
                 if record != None:
                     record.timestamp = timestamp;
     
-    def refresh(script_assets, script_dir):
+    def refresh(script_assets):
+        import paths;
         for asset in script_assets:
-            name = asset["name"];
-            relative_path = asset["path"];
-            real_path = script_dir / relative_path;
-            ScriptBank.update(name, real_path);
+            ScriptBank.update(asset["name"], paths.resolve(asset["path"]));
     
     def search(name):
         return ScriptBank.by_name[name].script if name in ScriptBank.by_name else None;

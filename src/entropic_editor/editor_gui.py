@@ -12,6 +12,7 @@ import colours;
 from assets import AssetManager;
 from tool_window import ToolWindowRegistry;
 import file_explorer;
+import paths;
 import asset_explorer;
 from text_editor import TextEditor;
 
@@ -217,7 +218,7 @@ def input_flags(gui_id, value, values):
 
 # Special Data
 
-def input_file(gui_id, value, pattern, directory=None, asset_type=None, return_absolute=False):
+def input_file(gui_id, value, pattern, root=None, asset_type=None):
     value = input_string(gui_id, value);
 
     imgui.same_line();
@@ -231,12 +232,8 @@ def input_file(gui_id, value, pattern, directory=None, asset_type=None, return_a
     else:
         if browse:
             win = ToolWindowRegistry.search(file_explorer.FileExplorer).open(win_id);
-            if directory == None:
-                if asset_type != None:
-                    directory = AssetManager.get_document(asset_type).directory;
-                else:
-                    directory = context.get().game_directory;
-            win.configure(directory, pattern, asset_type, return_absolute);
+            directory = paths.resolve(root) if root else paths.game_root();
+            win.configure(directory, pattern, asset_type);
 
     return value;
 
@@ -359,13 +356,9 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
         value = input_asset(gui_id, value, T.name);
     
     if isinstance(T, asset_types.File):
-        directory = None;
-        if T.pattern == "*.png":
-            directory = context.get().game_directory/"assets/sprites";
         if T.pattern == "*.lua":
             code = True;
-            directory = context.get().game_directory/"assets/scripts";
-        value = input_file(gui_id, value, T.pattern, directory=directory);
+        value = input_file(gui_id, value, T.pattern, root=getattr(T, "root", None));
 
         if code and value:
             imgui.same_line();
@@ -375,7 +368,7 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
             hide_id = gui_id.startswith("##");
             if edit_button(gui_id if hide_id else f"##{gui_id}") and win == None:
                 win = ToolWindowRegistry.search(TextEditor).open(win_id);
-                win.configure_path(directory/value, language = TextEditor.lua_lang);
+                win.configure_path(paths.resolve(value), language = TextEditor.lua_lang);
 
     if isinstance(T, asset_types.Flags):
         value = input_flags(gui_id, value, T.values);

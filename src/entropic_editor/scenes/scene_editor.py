@@ -11,6 +11,7 @@ from input import InputManager;
 from editor_gui import *;
 from geometry import *;
 import scenes.walls;
+import paths;
 import scenes.tilemaps;
 import scenes.navlists;
 import scenes.decorations;
@@ -196,12 +197,13 @@ class TilemapEditor:
 
 		self.draw_palette();
 
-		self.tilemap["csv"] = input_file("CSV", self.tilemap["csv"], "*.csv", "assets/scenes/tilemaps", return_absolute=True);
+		self.tilemap["csv"] = input_file("CSV", self.tilemap["csv"], "*.csv", root="assets/scenes/tilemaps");
+		csv_path = paths.resolve(self.tilemap["csv"]) if self.tilemap["csv"] else None;
 		if imgui.button("Import"):
-			scenes.tilemaps.import_tilemap(self.tilemap, self.tilemap["csv"]);
+			scenes.tilemaps.import_tilemap(self.tilemap, csv_path);
 		imgui.same_line();
 		if imgui.button("Export"):
-			scenes.tilemaps.export_tilemap(self.tilemap, self.tilemap["csv"]);
+			scenes.tilemaps.export_tilemap(self.tilemap, csv_path);
 
 	def handle_events(self):
 		while len(self.event_queue) > 0:

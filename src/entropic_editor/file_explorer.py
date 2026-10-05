@@ -4,6 +4,7 @@ import os;
 from assets import AssetManager;
 import copy;
 import sprites;
+import paths;
 
 class FileExplorer:
 	last = None;
@@ -21,13 +22,12 @@ class FileExplorer:
 	
 		self.result = None;
 	
-	def configure(self, anchor, glob, asset_type=None, return_absolute=False):
+	def configure(self, anchor, glob, asset_type=None):
 		refresh = FileExplorer.last == None or anchor != FileExplorer.last.anchor;
 
 		self.anchor = Path(anchor);
 		self.glob = glob;
 		self.asset_type = asset_type;
-		self.return_absolute = return_absolute;
 
 		if refresh:
 			self.current = self.anchor;
@@ -54,7 +54,9 @@ class FileExplorer:
 				imgui.end_menu();
 			imgui.end_menu_bar();
 
-		listings = [self.current.parent.absolute()];
+		listings = [];
+		if self.current.absolute() != paths.game_root():
+			listings.append(self.current.parent.absolute());
 		for entry in self.current.iterdir():
 			hidden = entry.name.startswith(".") or entry.name.startswith("__");
 			if entry.absolute().is_dir() and not hidden:
@@ -82,10 +84,8 @@ class FileExplorer:
 					self.current = item;
 					self.search = "";
 				else:
-					self.result = Path(os.path.relpath(item.absolute(), self.anchor.absolute()));
+					self.result = paths.relativize(item);
 	
-		if self.result != None and self.return_absolute:
-			self.result = (self.current/self.result).absolute();
 
 	def should_close(self):
 		return self.result != None;

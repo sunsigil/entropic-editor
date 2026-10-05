@@ -301,7 +301,7 @@ def _import_dense(csv_path):
 	};
 
 def import_tilemap(tilemap, csv_path):
-	if len(csv_path) == 0:
+	if csv_path == None:
 		return;
 
 	match tilemap["type"]:
@@ -329,7 +329,7 @@ def _export_dense(dense, csv_path):
 		writer.writerows(rows);
 
 def export_tilemap(tilemap, csv_path):
-	if len(csv_path) == 0:
+	if csv_path == None:
 		return;
 
 	match tilemap["type"]:

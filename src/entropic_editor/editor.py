@@ -133,7 +133,7 @@ if __name__ == "__main__":
 			context.get().begin_frame();
 
 			SpriteBank.refresh();
-			ScriptBank.refresh(AssetManager.get_all("script"), AssetManager.get_document("script").directory);
+			ScriptBank.refresh(AssetManager.get_all("script"));
 			InputManager.tick();
 
 			for document in AssetManager.documents:

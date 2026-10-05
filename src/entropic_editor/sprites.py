@@ -10,6 +10,7 @@ import context;
 from enum import Enum;
 import math;
 import rendering.images as ee_img;
+import paths;
 
 class Sprite:
     def _compute_is_dark(self, img_thresh=0.05, px_thresh=32):
@@ -96,12 +97,11 @@ class SpriteBank:
         return True;
     
     def refresh():
-        directory = AssetManager.get_document("sprite").directory;
         wanted_names = set();
         wanted_resources = set();
         for sprite in AssetManager.get_all("sprite"):
             name = sprite["name"];
-            path = directory / sprite["path"];
+            path = paths.resolve(sprite["path"]);
             frames = sprite["frames"];
             if SpriteBank.update(name, path, frames):
                 wanted_names.add(name);
@@ -119,7 +119,7 @@ class SpriteBank:
     
     def search(name, path=None, frames=None, safe=True):
         if path != None:
-            path = AssetManager.get_document("sprite").directory / path;
+            path = paths.resolve(path);
 
         if name != None and name in SpriteBank.by_name:
             return SpriteBank.by_resource[SpriteBank.by_name[name]];
@@ -165,7 +165,7 @@ class SpriteImporter:
                     return [x for x in acc if not x in matches];
             
     def __init__(self):
-        self.root = context.get().game_directory/"assets/sprites/new";
+        self.root = paths.resolve("assets/sprites/new");
         self.patterns = [];
         self.modes = ["mass", "individual"];
         self.mode = self.modes[0];
@@ -182,8 +182,8 @@ class SpriteImporter:
 
     def import_path(self, path):
         sprite = AssetManager.get_document("sprite").spawn_entry();
-        path = path.relative_to(AssetManager.get_document("sprite").directory);
-        sprite["path"] = str(path);
+        sprite["path"] = paths.relativize(path);
+        path = path.relative_to(self.root.parent);
         parts = list(path.parts[:-1]) + [path.stem];
         sprite["name"] = "_".join(parts);
     
