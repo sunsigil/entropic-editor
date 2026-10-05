@@ -36,16 +36,16 @@ class PrototypeSpawner:
 				prototype["name"] = self.sprite;
 				prototype["sprite"] = self.sprite;
 				sprite = SpriteBank.search(self.sprite);
-				prototype["sprite_offset"] = [-sprite.frame_width//2, -sprite.frame_height];
+				prototype["sprite_offset"] = [-sprite.width//2, -sprite.height];
 
 				if self.static:
 					prototype["walls"].append({
 						"type": "aabb",
-						"aabb": [-sprite.frame_width//2, -8, sprite.frame_width//2, 0]
+						"aabb": [-sprite.width//2, -8, sprite.width//2, 0]
 					});
 				else:
 					prototype["has_blocker"] = True;
-					prototype["blocker"] = [-sprite.frame_width//2, -8, sprite.frame_width//2, 0];
+					prototype["blocker"] = [-sprite.width//2, -8, sprite.width//2, 0];
 				self.finished = True;
 			imgui.same_line();
 		
@@ -197,11 +197,11 @@ class PrototypeEditor:
 			if sprite != None:
 				x, y = self.prototype["sprite_offset"];
 
-				self.canvas.draw_image(x, y, sprite.frame_images[self.preview_frame(sprite)]);
+				self.canvas.draw_image(x, y, sprite.frames[self.preview_frame(sprite)].source);
 				if self.draw_outlines:
-					self.canvas.draw_aabb((x, y, x+sprite.frame_width, y+sprite.frame_height), (255, 255, 255));
+					self.canvas.draw_aabb((x, y, x+sprite.width, y+sprite.height), (255, 255, 255));
 
-				y = self.prototype["sprite_offset"][1] + sprite.frame_height + self.prototype["y_sort_offset"];
+				y = self.prototype["sprite_offset"][1] + sprite.height + self.prototype["y_sort_offset"];
 				w = self.canvas.width;
 				self.canvas.draw_line(-w, y, w, y, (255, 255, 0));
 
@@ -233,7 +233,7 @@ class PrototypeEditor:
 				if sprite != None:
 					paths.append("sprite");
 					x0, y0 = self.prototype["sprite_offset"];
-					x1, y1 = x0+sprite.frame_width, y0+sprite.frame_height;
+					x1, y1 = x0+sprite.width, y0+sprite.height;
 					shapes.append(CanvasManipRect([x0, y0, x1, y1]));
 			case "boxes":
 				if self.prototype["has_blocker"]:

@@ -40,7 +40,7 @@ def get_aabb(decoration):
 			sprite = sprites.SpriteBank.search(decoration["sprite"]["sprite"], safe=False);
 			if sprite == None:
 				return [x, y, x+DEFAULT_EXTENT, y+DEFAULT_EXTENT];
-			return [x, y, x+sprite.frame_width, y+sprite.frame_height];
+			return [x, y, x+sprite.width, y+sprite.height];
 
 	return [x, y, x, y];
 
@@ -138,7 +138,7 @@ def canvas_draw(target: canvas.Canvas, decoration, outline=None):
 			sprite = sprites.SpriteBank.search(shape["sprite"], safe=False);
 			if sprite != None:
 				frame_idx = min(max(shape["frame_idx"], 0), sprite.frame_count-1);
-				target.draw_image(x, y, sprite.frame_images[frame_idx]);
+				target.draw_image(x, y, sprite.frames[frame_idx].source);
 			else:
 				target.draw_aabb(get_aabb(decoration), colour);
 

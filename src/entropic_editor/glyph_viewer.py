@@ -1,6 +1,6 @@
 from imgui_bundle import imgui;
 from assets import AssetManager;
-from sprites import SpritePreview, SpriteBank;
+from sprites import SpriteBank;
 import math;
 import string;
 from editor_gui import *;
@@ -35,7 +35,7 @@ class GlyphExplorer:
 		count = 0;
 		for i in range(0, 128):
 			if self.filters[self.key](str(chr(i))):
-				imgui.image(imgui.ImTextureRef(self.sprite.frame_textures[i]), imgui.ImVec2(24, 24));
+				imgui.image(imgui.ImTextureRef(self.sprite.thumbnail(i, invert_dark=True).handle), imgui.ImVec2(24, 24));
 				if imgui.is_item_hovered():
 					imgui.set_tooltip(self.formats[self.key](str(chr(i))));
 				imgui.same_line();

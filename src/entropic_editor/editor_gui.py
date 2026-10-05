@@ -105,7 +105,19 @@ def asset_selector(gui_id, value, asset_type, filter=None):
 
 def edit_button(gui_id, size=(16,16)):
     edit = sprites.SpriteBank.search("editor_edit");
-    return imgui.image_button(f"##{gui_id}", imgui.ImTextureRef(edit.frame_textures[0]), size);
+    return imgui.image_button(f"##{gui_id}", imgui.ImTextureRef(edit.frames[0].handle), size);
+
+def texture(gui_id, texture, size=None):
+    if size == None:
+        size = (texture.width, texture.height);
+    return imgui.image_button(f"##{gui_id}", imgui.ImTextureRef(texture.handle), size);
+
+def sprite_preview(sprite, scale=2):
+    for idx in range(sprite.frame_count):
+        if idx > 0:
+            imgui.same_line(0, 0);
+        thumb = sprite.thumbnail(idx, invert_dark=True);
+        imgui.image(imgui.ImTextureRef(thumb.handle), imgui.ImVec2(thumb.width * scale, thumb.height * scale));
 
 # Primitives
 
@@ -250,7 +262,7 @@ def input_sprite(gui_id, value, size=(64, 64)):
     sprite = sprites.SpriteBank.search(value);
     w, h = size;
 
-    clicked = imgui.image_button(gui_id, imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(w, h));
+    clicked = imgui.image_button(gui_id, imgui.ImTextureRef(sprite.frames[0].handle), imgui.ImVec2(w, h));
 
     win_id = imgui.get_id(gui_id);
     win = ToolWindowRegistry.search(asset_explorer.AssetExplorer).window(win_id);
@@ -288,7 +300,7 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
         if node_open:
             if previews:
                 if "path" in value and "frames" in value:
-                    sprites.SpritePreview.draw(None, value["path"], value["frames"], show_dimensions=True);
+                    sprite_preview(sprites.SpriteBank.search(None, value["path"], value["frames"]));
 
             for key,element in T.elements.items():
                 if key in value:
@@ -343,7 +355,7 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
         if previews:
             match T.name:
                 case "sprite":
-                    sprites.SpritePreview.draw(value, show_dimensions=True);
+                    sprite_preview(sprites.SpriteBank.search(value));
         value = input_asset(gui_id, value, T.name);
     
     if isinstance(T, asset_types.File):
@@ -412,7 +424,7 @@ def typed_display(gui_id, T, value, previews=False, tooltip=False):
         if previews:
             match T.name:
                 case "sprite":
-                    sprites.SpritePreview.draw(value);
+                    sprite_preview(sprites.SpriteBank.search(value));
         imgui.text(value);
     
     if isinstance(T, asset_types.File):
@@ -480,7 +492,7 @@ def input_orientation(gui_id, value):
                 imgui.dummy(imgui.ImVec2(16, 16));
             else:
                 tint = (0.5, 0.5, 0.5, 1) if cell_orientation == value else (1, 1, 1, 1);
-                if imgui.image_button(f"##{cell_orientation}", imgui.ImTextureRef(arrow.frame_textures[cell_orientation]), (16, 16), tint_col=tint):
+                if imgui.image_button(f"##{cell_orientation}", imgui.ImTextureRef(arrow.frames[cell_orientation].handle), (16, 16), tint_col=tint):
                     value = cell_orientation;
     imgui.pop_style_var();
     imgui.end_group();

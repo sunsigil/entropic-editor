@@ -15,7 +15,7 @@ def get_aabb(entity):
 		sprite = SpriteBank.search(prototype["sprite"], safe=False);
 		if sprite != None:
 			dx, dy = prototype["sprite_offset"];
-			return [x+dx, y+dy, x+dx+sprite.frame_width, y+dy+sprite.frame_height];
+			return [x+dx, y+dy, x+dx+sprite.width, y+dy+sprite.height];
 	
 		if prototype["has_blocker"]:
 			x0, y0, x1, y1 = prototype["blocker"];

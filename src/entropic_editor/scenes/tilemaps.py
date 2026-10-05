@@ -351,7 +351,7 @@ def canvas_draw(canvas, tilemap):
 	# an animated tilemap rests on its first frame, whatever was painted
 	animated = tilemap["is_animated"];
 
-	vx0, vy0, vx1, vy1 = _visible_world_aabb(canvas, palette.frame_width, palette.frame_height);
+	vx0, vy0, vx1, vy1 = _visible_world_aabb(canvas, palette.width, palette.height);
 
 	match tilemap["type"]:
 		case "sparse":
@@ -360,7 +360,7 @@ def canvas_draw(canvas, tilemap):
 				if x < vx0 or x >= vx1 or y < vy0 or y >= vy1:
 					continue;
 				frame_idx = 0 if animated else cowtools.clamp(tile["frame_idx"], 0, palette.frame_count-1);
-				canvas.draw_image(x, y, palette.frame_images[frame_idx]);
+				canvas.draw_image(x, y, palette.frames[frame_idx].source);
 		
 		case "dense":
 			x0, y0 = tilemap["dense"]["position"];
@@ -384,6 +384,6 @@ def canvas_draw(canvas, tilemap):
 						frame_idx = 0 if animated else cowtools.clamp(frame_idx, 0, palette.frame_count-1);
 						canvas.draw_image(
 							x, y,
-							palette.frame_images[frame_idx]
+							palette.frames[frame_idx].source
 						);
 			canvas.draw_aabb((x0, y0, x0+w*TILE, y0+h*TILE), (255, 255, 255));

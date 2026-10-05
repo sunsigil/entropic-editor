@@ -1,4 +1,4 @@
-from PIL import Image;
+from PIL import Image, ImageStat; 
 from pathlib import Path;
 
 from assets import *;
@@ -9,89 +9,113 @@ from pathlib import Path;
 import context;
 from enum import Enum;
 import math;
+import rendering.images as ee_img;
 
-def _is_image_black(img):
-    pixels = img.load();
-    black = 0;
-    non_black = 0;
-    for y in range(img.height):
-        for x in range(img.width):
-            p = pixels[x, y];
-            if p[3] >= 128 and p[0] > 32 or p[1] > 32 or p[2] > 32:
-                non_black += 1;
-            else:
-                black += 1;
-    ratio = non_black / black if black > 0 else math.inf;
-    return ratio <= 0.01;
+class Sprite:
+    def _compute_is_dark(self, img_thresh=0.05, px_thresh=32):
+        alpha = self.sheet;
+        alpha = alpha.getchannel("A");
+        alpha = alpha.point(lambda x: 255 if x >= 255 else 0);
+        alpha = alpha.convert("1");
+        
+        lum = self.sheet;
+        lum = lum.convert("L");
+        lum = lum.point(lambda x: 255 if x > px_thresh else 0);
 
-def _invert_black(img):
-    pixels = img.load();
-    inversion = [];
-    result = Image.new(img.mode, img.size);
-    for y in range(img.height):
-        for x in range(img.width):
-            p = pixels[x, y];
-            r = 255 - p[0];
-            g = 255 - p[1];
-            b = 255 - p[2];
-            a = p[3];
-            inversion.append((r, g, b, a));
-    result.putdata(inversion);
-    return result;
+        stat = ImageStat.Stat(lum, mask=alpha);
+        bright_fraction = stat.mean[0] / 255;
+        return stat.count[0] > 0 and bright_fraction < img_thresh;
 
-class EditorSprite:
-    def _cut_frame(self, i):
-        box = (0, i * self.frame_height, self.raw_width, (i+1) * self.frame_height);
-        return self.raw_image.crop(box);
+    def __init__(self, sheet, frame_count):
+        self.sheet = sheet.convert("RGBA");
+        self.frame_count = clamp(frame_count, 1, sheet.height);
 
-    def __init__(self, path, frames):
-        self.path = Path(path);
+        self.sheet_width = self.sheet.width;
+        self.sheet_height = self.sheet.height;
+        
+        self.width = self.sheet.width;
+        self.height = self.sheet.height // self.frame_count;
+            
+        def cut_frame(i):
+            box = (0, i * self.height, self.width, (i+1) * self.height);
+            return ee_img.Texture(self.sheet.crop(box));
+        self.frames = [cut_frame(i) for i in range(self.frame_count)];
 
-        self.raw_image = Image.open(self.path);
-        self.raw_image.load();
-        self.raw_image.fp = None;
+        self.thumbnail_cache = {};
+        self.is_dark = self._compute_is_dark();
 
-        self.raw_width = self.raw_image.width;
-        self.raw_height = self.raw_image.height;
+    @classmethod
+    def load(cls, path, frame_count):
+        with Image.open(path) as sheet:
+            return cls(sheet, frame_count);
 
-        self.frame_count = max(frames, 1);
-        self.frame_width = self.raw_width;
-        self.frame_height = self.raw_height // self.frame_count;
-        self.frame_images = [self._cut_frame(i) for i in range(self.frame_count)];
-        self.frame_textures = [make_texture(frame.tobytes(), frame.width, frame.height) for frame in self.frame_images];
+    def thumbnail(self, frame_idx=0, width=None, height=None, invert_dark=False):
+        image = self.frames[frame_idx];
+        width = width if width else image.width;
+        height = height if height else image.height;
 
-        self.preview_width = self.raw_width * self.frame_count;
-        self.preview_height = self.frame_height;
-        self.preview_image = Image.new("RGBA", (self.preview_width, self.preview_height));
-        for (idx, frame) in enumerate(self.frame_images):
-            if _is_image_black(self.raw_image):
-                frame = _invert_black(frame);
-            xy = (idx * self.frame_width, 0);
-            self.preview_image.paste(frame, xy);
-        self.preview_texture = make_texture(self.preview_image.tobytes(), self.preview_width, self.preview_height);
+        w_ratio = width / image.width;
+        h_ratio = height / image.height;
+        scale = min(w_ratio, h_ratio);
+        out_w, out_h = ee_img.scale_dimensions(image.width, image.height, scale, scale);
+        
+        invert = invert_dark and self.is_dark;
+        key = (frame_idx, out_w, out_h, invert);
+        if key in self.thumbnail_cache:
+            return self.thumbnail_cache[key];
+
+        pic = ee_img.Texture.scale(image, scale, scale);
+        if invert:
+            pic = ee_img.Texture.invert(pic);
+        self.thumbnail_cache[key] = pic;
+        return pic;
 
 class SpriteBank:
     by_resource = {};
     by_name = {};
+    mtimes = {};
 
     def update(name, path, frames):
+        path = Path(path);
         index = (path, frames);
+        try:
+            mtime = path.stat().st_mtime_ns;
+        except OSError:
+            return False;
+
+        if SpriteBank.mtimes.get(index) != mtime:
+            SpriteBank.mtimes[index] = mtime;
+            try:
+                SpriteBank.by_resource[index] = Sprite.load(path, frames);
+            except Exception as error:
+                print(f"Failed to load sprite '{name}' from {path}: {error}");
+
         if not index in SpriteBank.by_resource:
-            path = Path(path);
-            if path.exists() and path.is_file():
-                SpriteBank.by_resource[index] = EditorSprite(path, frames);
-            else:
-                return;
+            return False;
         SpriteBank.by_name[name] = index;
+        return True;
     
     def refresh():
-        sprites = AssetManager.get_all("sprite");
-        for sprite in sprites:
+        directory = AssetManager.get_document("sprite").directory;
+        wanted_names = set();
+        wanted_resources = set();
+        for sprite in AssetManager.get_all("sprite"):
             name = sprite["name"];
-            relative_path = sprite["path"];
-            real_path = AssetManager.get_document("sprite").directory / relative_path;
+            path = directory / sprite["path"];
             frames = sprite["frames"];
-            SpriteBank.update(name, real_path, frames);
+            if SpriteBank.update(name, path, frames):
+                wanted_names.add(name);
+                wanted_resources.add((path, frames));
+
+        for name in list(SpriteBank.by_name):
+            if not name in wanted_names:
+                del SpriteBank.by_name[name];
+        for index in list(SpriteBank.by_resource):
+            if not index in wanted_resources:
+                del SpriteBank.by_resource[index];
+        for index in list(SpriteBank.mtimes):
+            if not index in wanted_resources:
+                del SpriteBank.mtimes[index];
     
     def search(name, path=None, frames=None, safe=True):
         if path != None:
@@ -116,18 +140,6 @@ class SpriteBank:
             if p == path:
                 return True;
         return False;
-
-class SpritePreview:
-    def draw(name, path=None, frames=None, **kwargs):
-        sprite = SpriteBank.search(name, path, frames);
-        imgui.image(imgui.ImTextureRef(sprite.preview_texture), imgui.ImVec2(sprite.preview_width * 2, sprite.preview_height * 2));
-        if "show_dimensions" in kwargs and kwargs["show_dimensions"]:
-            imgui.text(f"{sprite.frame_width}x{sprite.frame_height}");
-
-    def draw_thumbnail(key, size):
-        sprite = SpriteBank.search(key);
-        aspect = sprite.frame_width / sprite.frame_height;
-        imgui.image(imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(aspect * size, size));
 
 class SpriteImporter:
     class Pattern:

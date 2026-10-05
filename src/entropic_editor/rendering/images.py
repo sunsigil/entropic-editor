@@ -1,5 +1,6 @@
-from PIL import Image, ImageDraw;
+from PIL import Image, ImageDraw, ImageOps;
 import OpenGL.GL as gl;
+from cowtools import *;
 
 def make_texture(buffer, width, height):
     texture = gl.glGenTextures(1);
@@ -9,29 +10,76 @@ def make_texture(buffer, width, height):
     gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, buffer);
     return texture;
 
-class Surface:
-    def __init__(self, width, height):
-        self.width = width;
-        self.height = height;
+def scale_dimensions(width, height, sx, sy):
+    return max(round(width * sx), 1), max(round(height * sy), 1)
 
-        self.image = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0));
-        self.texture = make_texture(self.image.tobytes(), width, height);
-        self.draw = ImageDraw.Draw(self.image);
+class Texture:
+    def __init__(self, source):
+        if isinstance(source, Texture):
+            source = source.source;
 
+        self.source = source.convert("RGBA");
+        self.handle = make_texture(self.source.tobytes(), self.width, self.height);
+        self.draw = ImageDraw.Draw(self.source);
+        
+        self.dirty = False;
+
+    def __del__(self):
+        gl.glDeleteTextures(1, [self.handle]);
+    
+    @classmethod
+    def empty(cls, width, height):
+        source = Image.new("RGBA", (width, height), (0, 0, 0, 0));
+        return cls(source);
+    
+    @classmethod
+    def load(cls, path):
+        source = Image.open(path);
+        texture = cls(source);
+        source.close();
+        return texture;
+    
+    @classmethod
+    def scale(cls, texture, sx, sy):
+        w, h = scale_dimensions(texture.width, texture.height, sx, sy);
+        source = texture.source.resize((w, h), Image.Resampling.NEAREST);
+        return cls(source);
+    
+    @classmethod
+    def invert(cls, texture):
+        alpha = texture.source;
+        alpha = alpha.getchannel("A");
+        
+        rgb = texture.source;
+        rgb = rgb.convert("RGB");
+        rgb = ImageOps.invert(rgb);
+        
+        rgb.putalpha(alpha);
+        return cls(rgb);
+
+    @property
+    def width(self):
+        return self.source.width;
+    @property
+    def height(self):
+        return self.source.height;
+
+    def refresh(self):
+        if not self.dirty:
+            return;
+        gl.glBindTexture(gl.GL_TEXTURE_2D, self.handle);
+        gl.glTexSubImage2D(gl.GL_TEXTURE_2D, 0, 0, 0, self.width, self.height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, self.source.tobytes());
         self.dirty = False;
 
     def resize(self, width, height):
-       pass; 
-
-    def refresh(self, force=False):
-        if not self.dirty:
-            return;
-        gl.glBindTexture(gl.GL_TEXTURE_2D, self.texture);
-        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, self.width, self.height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, self.image.tobytes());
+        self.source = self.source.crop((0, 0, width, height));
+        self.draw = ImageDraw.Draw(self.source);
+        gl.glBindTexture(gl.GL_TEXTURE_2D, self.handle);
+        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, self.width, self.height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, self.source.tobytes());
         self.dirty = False;
-            
+
     def export(self, path):
-        self.image.save(path);
+        self.source.save(path);
 
     def clear(self, colour):
         self.draw.rectangle((0, 0, self.width, self.height), fill=colour);
@@ -57,6 +105,6 @@ class Surface:
     
     def draw_image(self, point, image, colour=None):
         to_paste = colour if colour != None else image;
-        self.image.paste(to_paste, point, mask=image);
+        self.source.paste(to_paste, point, mask=image);
         self.dirty = True;
 

@@ -20,7 +20,7 @@ def _glyph_image(glyphs, idx, scale):
 	key = (glyphs, idx, scale);
 	image = _glyph_cache.get(key);
 	if image == None:
-		image = glyphs.frame_images[idx];
+		image = glyphs.frames[idx].source;
 		if scale > 1:
 			image = image.resize((image.width*scale, image.height*scale), Image.NEAREST);
 		_glyph_cache[key] = image;
@@ -113,8 +113,8 @@ class Canvas:
 	def draw_text(self, xy, text, scale, c):
 		glyphs = sprites.SpriteBank.search("glyph");
 		scale = max(int(scale), 1);
-		advance = glyphs.frame_width * scale;
-		line_height = (glyphs.frame_height + GLYPH_LEADING) * scale;
+		advance = glyphs.width * scale;
+		line_height = (glyphs.height + GLYPH_LEADING) * scale;
 
 		x0, y = xy;
 		x = x0;

@@ -41,7 +41,7 @@ class AssetExplorer:
 					sprite_name = listings[i] if self.type == "sprite" else (asset["sprite"] if "sprite" in asset else "");
 					sprite = sprites.SpriteBank.search(sprite_name);
 
-					if imgui.image_button(f"##{id(i)}", imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(64, 64)):
+					if imgui.image_button(f"##{id(i)}", imgui.ImTextureRef(sprite.frames[0].handle), imgui.ImVec2(64, 64)):
 						self.result = listings[i];
 					imgui.text(listings[i][:min(10, len(listings[i]))]);
 

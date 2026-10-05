@@ -55,7 +55,7 @@ class FoliageEditor:
 					sprite = SpriteBank.search(prototype["sprite"]);
 					imgui.begin_group();
 					tint = (0.5, 0.5, 0.5, 1) if prototype is self.prototype else (1, 1, 1, 1);
-					if imgui.image_button(f"##{id(prototype)}", imgui.ImTextureRef(sprite.frame_textures[0]), (64, 64), tint_col=tint):
+					if imgui.image_button(f"##{id(prototype)}", imgui.ImTextureRef(sprite.frames[0].handle), (64, 64), tint_col=tint):
 						self.prototype = prototype;
 					imgui.text(prototype["name"][:10]);
 					imgui.end_group();
@@ -144,7 +144,7 @@ class FoliageEditor:
 		sprite = SpriteBank.search(self.prototype["sprite"], safe=False);
 		if sprite != None and not InputManager.is_held(glfw.KEY_LEFT_SHIFT):
 			dx, dy = self.prototype["sprite_offset"];
-			self.parent.canvas.draw_image(x+dx, y+dy, sprite.frame_images[0]);
+			self.parent.canvas.draw_image(x+dx, y+dy, sprite.frames[0].source);
 		ghost = {"prototype": self.prototype["name"], "position": [x, y]};
 		self.parent.canvas.draw_aabb(scenes.entities.get_aabb(ghost), colour);
 

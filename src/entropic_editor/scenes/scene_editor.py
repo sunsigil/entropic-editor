@@ -138,7 +138,7 @@ class TilemapEditor:
 			for c in range(cols):
 				if i < sprite.frame_count:
 					tint = (0.5, 0.5, 0.5, 1) if i == self.selected_frame else (1, 1, 1, 1);
-					if imgui.image_button(f"##{i}", imgui.ImTextureRef(sprite.frame_textures[i]), (64, 64), tint_col=tint):
+					if imgui.image_button(f"##{i}", imgui.ImTextureRef(sprite.frames[i].handle), (64, 64), tint_col=tint):
 						self.selected_frame = i;
 					imgui.same_line();
 				i += 1;
@@ -625,22 +625,22 @@ class DoorEditor:
 						idx = 2;
 					if door.points_to() and door.is_pointed_to():
 						idx = 3;
-					self.parent.canvas.draw_image(x-door_gizmo.frame_width/2, y-door_gizmo.frame_height, door_gizmo.frame_images[idx]);
+					self.parent.canvas.draw_image(x-door_gizmo.width/2, y-door_gizmo.height, door_gizmo.frames[idx].source);
 
 					arrow_gizmo = SpriteBank.search("editor_arrow");
 					orientation = get_script_data(door.entity, "orientation");
-					x_off = -arrow_gizmo.frame_width/2;
-					y_off = -door_gizmo.frame_height/2-arrow_gizmo.frame_height/2;
+					x_off = -arrow_gizmo.width/2;
+					y_off = -door_gizmo.height/2-arrow_gizmo.height/2;
 					match orientation["value"]:
 						case 1:
-							x_off += door_gizmo.frame_width/2+arrow_gizmo.frame_width/2;
+							x_off += door_gizmo.width/2+arrow_gizmo.width/2;
 						case 2:
-							y_off -= door_gizmo.frame_height/2+arrow_gizmo.frame_height/2;
+							y_off -= door_gizmo.height/2+arrow_gizmo.height/2;
 						case 3:
-							x_off -= door_gizmo.frame_width/2+arrow_gizmo.frame_width/2;
+							x_off -= door_gizmo.width/2+arrow_gizmo.width/2;
 						case 4:
-							y_off += door_gizmo.frame_height/2+arrow_gizmo.frame_height/2;
-					self.parent.canvas.draw_image(x+x_off, y+y_off, arrow_gizmo.frame_images[orientation["value"]], c=(255, 128, 0));
+							y_off += door_gizmo.height/2+arrow_gizmo.height/2;
+					self.parent.canvas.draw_image(x+x_off, y+y_off, arrow_gizmo.frames[orientation["value"]].source, c=(255, 128, 0));
 
 class NavlistEditor:
 	# node_idx == None means the whole navlist is selected (as a body), rather
@@ -972,7 +972,7 @@ class SceneViewer:
 
 		if sprite != None:
 			frame_idx = clamp(entity["frame_idx"], 0, sprite.frame_count-1);
-			self.parent.canvas.draw_image(x+dx, y+dy, sprite.frame_images[frame_idx]);
+			self.parent.canvas.draw_image(x+dx, y+dy, sprite.frames[frame_idx].source);
 		else:
 			self.parent.canvas.draw_aabb(get_entity_aabb(entity), (255, 255, 0));
 

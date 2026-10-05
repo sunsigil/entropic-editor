@@ -4,7 +4,7 @@ import glfw;
 from cowtools import *;
 from canvas import Canvas, CanvasGrid, CanvasIO;
 from assets import *;
-from sprites import SpriteBank, EditorSprite;
+from sprites import SpriteBank;
 from input import InputManager;
 from editor_gui import *;
 
@@ -61,9 +61,9 @@ class RecipeEditor:
 					
 					sprite = SpriteBank.search(item["sprite"]);
 					self.canvas.draw_image(
-						x * self.cell_size + (self.cell_size-sprite.frame_width)/2,
-						y * self.cell_size + (self.cell_size-sprite.frame_height)/2,
-						sprite.frame_images[0]
+						x * self.cell_size + (self.cell_size-sprite.width)/2,
+						y * self.cell_size + (self.cell_size-sprite.height)/2,
+						sprite.frames[0].source
 					);
 		
 		if cursor != None:
@@ -84,11 +84,11 @@ class RecipeEditor:
 		item = AssetManager.search("item", item_name);
 		sprite = SpriteBank.search(item["sprite"]) if item != None else SpriteBank.search("null_sprite");
 
-		true_height = sprite.frame_height;
+		true_height = sprite.height;
 		display_height = self.cell_size * self.canvas.scale;
 		scale_factor = display_height / true_height;
-		display_width = sprite.frame_width * scale_factor;
-		imgui.image(imgui.ImTextureRef(sprite.frame_textures[0]), imgui.ImVec2(display_width, display_height));
+		display_width = sprite.width * scale_factor;
+		imgui.image(imgui.ImTextureRef(sprite.frames[0].handle), imgui.ImVec2(display_width, display_height));
 		self.recipe["output"] = input_asset("Output", self.recipe["output"], "item");
 
 		self.recipe["oriented"] = input_bool("Oriented", self.recipe["oriented"]);
