@@ -17,11 +17,12 @@ import traceback;
 
 import glfw;
 from imgui_bundle import imgui;
-import context;
+import window;
+import paths;
 
 from cowtools import *;
 from assets import *;
-from tool_window import Tool, ToolWindowRegistry;
+from panels import Tool, ToolRegistry, PanelManager;
 import asset_types;
 
 from sprites import SpriteBank;
@@ -56,10 +57,8 @@ if __name__ == "__main__":
 	game_path = Path(args.game_path).absolute();
 	typefile_path = args.types;
 	
-	context.set(context.Context(
-		editor_path, game_path,
-		"Entropic Editor", 1920, 1080)
-	);
+	paths.configure(editor_path, game_path);
+	win = window.Window("Entropic Editor", 1920, 1080);
 
 	if typefile_path != None and typefile_path.is_file():
 		asset_types.load_typefile(typefile_path);
@@ -71,7 +70,6 @@ if __name__ == "__main__":
 	HOT_BACKUP_INTERVAL = 5.0;
 	hot_backup_timestamp = glfw.get_time();
 
-	document_editors = [];
 	
 	window_flag_list = [
 		imgui.WindowFlags_.no_saved_settings,
@@ -98,39 +96,32 @@ if __name__ == "__main__":
 		imgui.WindowFlags_.no_collapse,
 	];
 
-	ToolWindowRegistry.register(Tool(FileExplorer, "File Explorer", flags=tool_flags+[imgui.WindowFlags_.menu_bar], hidden=True));
-	ToolWindowRegistry.register(Tool(AssetExplorer, "Asset Explorer", flags=tool_flags, hidden=True));
-	ToolWindowRegistry.register(Tool(TextEditor, "Script Editor", flags=tool_flags, hidden=True, singleton=False));
+	ToolRegistry.register(Tool(FileExplorer, "File Explorer", flags=tool_flags+[imgui.WindowFlags_.menu_bar], hidden=True, picker=True));
+	ToolRegistry.register(Tool(AssetExplorer, "Asset Explorer", flags=tool_flags, hidden=True, picker=True));
+	ToolRegistry.register(Tool(TextEditor, "Script Editor", flags=tool_flags, hidden=True));
 
-	ToolWindowRegistry.register(Tool(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
-	ToolWindowRegistry.register(Tool(SceneEditor, "Scene Editor", size=(1500, 880), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
-	ToolWindowRegistry.register(Tool(DialogueEditor, "Dialogue Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
-	ToolWindowRegistry.register(Tool(RecipeEditor, "Recipe Editor", flags=tool_flags));
-	ToolWindowRegistry.register(Tool(Mesh2DEditor, "Mesh2D Editor", flags=tool_flags));
-	ToolWindowRegistry.register(Tool(PaletteViewer, "Palette Viewer", flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
-	ToolWindowRegistry.register(Tool(EnDeCoder, "EnDeCoder", flags=tool_flags));
-	ToolWindowRegistry.register(Tool(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
-	ToolWindowRegistry.register(Tool(SpriteImporter, "Sprite Importer", flags=tool_flags));
+	ToolRegistry.register(Tool(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
+	ToolRegistry.register(Tool(SceneEditor, "Scene Editor", size=(1500, 880), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
+	ToolRegistry.register(Tool(DialogueEditor, "Dialogue Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
+	ToolRegistry.register(Tool(RecipeEditor, "Recipe Editor", flags=tool_flags));
+	ToolRegistry.register(Tool(Mesh2DEditor, "Mesh2D Editor", flags=tool_flags));
+	ToolRegistry.register(Tool(PaletteViewer, "Palette Viewer", flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
+	ToolRegistry.register(Tool(EnDeCoder, "EnDeCoder", flags=tool_flags));
+	ToolRegistry.register(Tool(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
+	ToolRegistry.register(Tool(SpriteImporter, "Sprite Importer", flags=tool_flags));
 
-	InputManager.initialize(context.get().glfw_handle, context.get().imgui_impl);
+	InputManager.initialize(win.glfw_handle, win.imgui_impl);
 
 	def window_close_callback(handle):
-		for tool in ToolWindowRegistry.all():
-			if tool.is_open():
-				tool.close();
-				glfw.set_window_should_close(handle, False);
-				return;
-		for de in document_editors:
-			if de.open:
-				de.close();
-				glfw.set_window_should_close(handle, False);
-				return;
-		glfw.set_window_should_close(handle, True);
-	glfw.set_window_close_callback(context.get().glfw_handle, window_close_callback);
+		if PanelManager.close_last_focused():
+			glfw.set_window_should_close(handle, False);
+		else:
+			glfw.set_window_should_close(handle, True);
+	glfw.set_window_close_callback(win.glfw_handle, window_close_callback);
 
 	try:
-		while context.get().is_alive():
-			context.get().begin_frame();
+		while win.is_alive():
+			win.begin_frame();
 
 			SpriteBank.refresh();
 			ScriptBank.refresh(AssetManager.get_all("script"));
@@ -153,28 +144,21 @@ if __name__ == "__main__":
 				for document in AssetManager.documents:
 					document.save();
 
-			de_trash = [de for de in document_editors if not de.open];
-			for de in de_trash:
-				document_editors.remove(de);
-			def doc_is_open(doc):
-				return next((x for x in document_editors if x.document.type_name == doc.type_name), None) != None;
-
 			imgui.set_next_window_pos((0, 0));
 			imgui.set_next_window_size(imgui.ImVec2(1920*0.8, 1080*0.8));
-			imgui.begin(context.get().name, flags=window_flags | splash_flags);
+			imgui.begin(win.name, flags=window_flags | splash_flags);
 
 			if imgui.begin_main_menu_bar():
 				if imgui.begin_menu("File"):
 					if imgui.begin_menu("Open"):
 						for document in AssetManager.documents:
-							clicked, _ = imgui.menu_item(document.type_name, "", doc_is_open(document));
+							existing = PanelManager.find(DocumentEditor.key_for(document));
+							clicked, _ = imgui.menu_item(document.type_name, "", existing != None);
 							if clicked:
-								if not doc_is_open(document):
-									document_editors.append(DocumentEditor(document));
+								if existing == None:
+									PanelManager.open(DocumentEditor(document));
 								else:
-									for de in document_editors:
-										if de.document == document:
-											de.focus();
+									existing.focus();
 						imgui.end_menu();
 					
 					if imgui.menu_item_simple("Save all"):
@@ -184,7 +168,7 @@ if __name__ == "__main__":
 					imgui.end_menu();
 				
 				if imgui.begin_menu("Tools"):
-					for tool in ToolWindowRegistry.all():
+					for tool in ToolRegistry.all():
 						if not tool.hidden and imgui.menu_item_simple(tool.title):
 							tool.open();
 					imgui.end_menu();
@@ -195,12 +179,9 @@ if __name__ == "__main__":
 				imgui.image(imgui.ImTextureRef(splash_tex), imgui.ImVec2(splash_img.width, splash_img.height));
 			imgui.end();
 
-			for de in document_editors:
-				de.draw();
-			for tool in ToolWindowRegistry.all():
-				tool.draw();
+			PanelManager.draw_all();
 
-			context.get().end_frame();
+			win.end_frame();
 	except Exception:
 		traceback.print_exc();
 		recovery_dir = game_path/"backups/recovery";
@@ -212,4 +193,4 @@ if __name__ == "__main__":
 			traceback.print_exc();
 		raise;
 	finally:
-		context.get().shutdown();
+		win.shutdown();

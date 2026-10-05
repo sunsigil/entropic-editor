@@ -2,7 +2,6 @@ from imgui_bundle import imgui;
 from canvas import Canvas;
 from assets import AssetManager;
 from collections import OrderedDict;
-import context as context;
 
 class Mesh2DEditor:
 	def __init__(self):
@@ -159,7 +158,7 @@ class Mesh2DEditor:
 			imgui.end_combo();
 
 		canvas_pos = imgui.get_cursor_screen_pos();
-		mouse_pos = context.get().imgui_io.mouse_pos;
+		mouse_pos = imgui.get_io().mouse_pos;
 		brush_pos = mouse_pos - canvas_pos;
 		brush_pos /= self.canvas_scale;
 		in_bounds = self.in_bounds(brush_pos);
@@ -170,7 +169,7 @@ class Mesh2DEditor:
 				self.last_click = vertex;
 			if in_bounds:
 				if imgui.is_mouse_down(0) and not self.was_left_click:
-					if context.get().imgui_io.key_shift:
+					if imgui.get_io().key_shift:
 						tl = imgui.ImVec2(256, 256);
 						br = imgui.ImVec2(-1, -1);
 						for [v0, v1] in self.polyline:

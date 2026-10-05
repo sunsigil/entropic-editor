@@ -1,14 +1,15 @@
 from imgui_bundle import imgui;
 from assets import AssetDocument, AssetManager;
-import types as types;
 import editor_gui as gui;
+from panels import Panel;
 
-class DocumentEditor:
+class DocumentEditor(Panel):
+	def key_for(document):
+		return (DocumentEditor, document.type_name);
+
 	def __init__(self, document):
+		super().__init__(document.type_name, size=(1280, 720), flags=imgui.WindowFlags_.menu_bar, key=DocumentEditor.key_for(document));
 		self.document = document;
-		self.open = True;
-		self.focus_pending = False;
-		self.size = imgui.ImVec2(1280, 720);
 
 		self.show_typetip = False;
 
@@ -19,12 +20,6 @@ class DocumentEditor:
 		self.rename_target = None;
 		self.rename_buffer = "";
 		self.rename_pending = False;
-
-	def close(self):
-		self.open = False;
-
-	def focus(self):
-		self.focus_pending = True;
 
 	def begin_rename(self, instance):
 		self.rename_target = instance;
@@ -82,12 +77,7 @@ class DocumentEditor:
 
 		imgui.end_popup();
 
-	def draw(self):
-		imgui.set_next_window_size(self.size);
-		if self.focus_pending:
-			imgui.set_next_window_focus();
-			self.focus_pending = False;
-		_, self.open = imgui.begin(self.document.type_name, self.open, flags=imgui.WindowFlags_.menu_bar);
+	def body(self):
 
 		if imgui.begin_menu_bar():
 			if imgui.begin_menu("Asset"):
@@ -128,6 +118,3 @@ class DocumentEditor:
 				imgui.end_popup();
 
 		self.draw_rename_modal();
-
-		self.size = imgui.get_window_size();
-		imgui.end();

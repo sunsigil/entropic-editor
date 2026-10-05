@@ -87,8 +87,3 @@ class FileExplorer:
 					self.result = paths.relativize(item);
 	
 
-	def should_close(self):
-		return self.result != None;
-		
-	def get_result(self):
-		return self.result;

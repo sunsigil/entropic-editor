@@ -6,7 +6,6 @@ from cowtools import *;
 import editor_gui as gui;
 from imgui_bundle import imgui;
 from pathlib import Path;
-import context;
 from enum import Enum;
 import math;
 import rendering.images as ee_img;

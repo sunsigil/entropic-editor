@@ -1,12 +1,22 @@
 from pathlib import Path, PurePosixPath;
 
+_editor_root = None;
+_game_root = None;
+
+def configure(editor_root, game_root):
+	global _editor_root, _game_root;
+	_editor_root = Path(editor_root).absolute();
+	_game_root = Path(game_root).absolute();
+
 def editor_root():
-	import context;
-	return Path(context.get().editor_directory);
+	if _editor_root == None:
+		raise RuntimeError("paths.configure() has not been called");
+	return _editor_root;
 
 def game_root():
-	import context;
-	return Path(context.get().game_directory);
+	if _game_root == None:
+		raise RuntimeError("paths.configure() has not been called");
+	return _game_root;
 
 def is_stored(value):
 	if not isinstance(value, str) or len(value) == 0:

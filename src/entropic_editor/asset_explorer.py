@@ -50,8 +50,3 @@ class AssetExplorer:
 				i += 1;
 			imgui.new_line();
 
-	def should_close(self):
-		return self.result != None;
-		
-	def get_result(self):
-		return self.result;

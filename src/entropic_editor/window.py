@@ -6,24 +6,11 @@ import glfw;
 from imgui_bundle import imgui;
 from imgui_bundle.python_backends.glfw_backend import GlfwRenderer;
 
-__context = None;
-
 def glfw_error_callback(error, description):
- 		print(f"[GLFW] {error}: {description}");
+	print(f"[GLFW] {error}: {description}");
 
-def get_clipboard_text(_ctx: imgui.internal.Context) -> str:
-	s = glfw.get_clipboard_string(__context.glfw_handle);
-	if s == None:
-		return "";
-	return s.decode() if isinstance(s, bytes) else str(s);
-def set_clipboard_text(_ctx: imgui.internal.Context, text: str) -> str:
-	glfw.set_clipboard_string(__context.glfw_handle, text);
-
-class Context:
-	def __init__(self, editor_directory, game_directory, name, width, height):
-		self.editor_directory = editor_directory;
-		self.game_directory = game_directory;
-		
+class Window:
+	def __init__(self, name, width, height):
 		self.name = name;
 		self.width = width;
 		self.height = height;
@@ -50,15 +37,24 @@ class Context:
 		imgui.create_context();
 		self.imgui_io = imgui.get_io();
 		self.imgui_io.config_windows_move_from_title_bar_only = True;
-		imgui.style_colors_dark()
+		imgui.style_colors_dark();
 		self.imgui_impl = GlfwRenderer(self.glfw_handle);
 
 		platform_io = imgui.get_platform_io();
-		platform_io.platform_get_clipboard_text_fn = get_clipboard_text;
-		platform_io.platform_set_clipboard_text_fn = set_clipboard_text;
+		platform_io.platform_get_clipboard_text_fn = self._get_clipboard_text;
+		platform_io.platform_set_clipboard_text_fn = self._set_clipboard_text;
 
 		self.time = glfw.get_time();
 		self.delta_time = 0;
+
+	def _get_clipboard_text(self, _ctx):
+		s = glfw.get_clipboard_string(self.glfw_handle);
+		if s == None:
+			return "";
+		return s.decode() if isinstance(s, bytes) else str(s);
+
+	def _set_clipboard_text(self, _ctx, text):
+		glfw.set_clipboard_string(self.glfw_handle, text);
 
 	def shutdown(self):
 		self.imgui_impl.shutdown();
@@ -69,7 +65,7 @@ class Context:
 
 	def is_alive(self):
 		return not glfw.window_should_close(self.glfw_handle);
-	
+
 	def begin_frame(self):
 		time_last = self.time;
 		self.time = glfw.get_time();
@@ -89,10 +85,3 @@ class Context:
 		self.imgui_impl.render(imgui.get_draw_data());
 		imgui.end_frame();
 		glfw.swap_buffers(self.glfw_handle);
-
-def get():
-	global __context;
-	return __context;
-def set(c):
-	global __context;
-	__context = c;

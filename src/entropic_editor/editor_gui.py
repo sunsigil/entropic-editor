@@ -3,14 +3,13 @@ from OpenGL.GL import *;
 from imgui_bundle import imgui;
 from enum import Enum;
 
-import context;
 import sprites;
 import asset_types;
 import cowtools;
 import colours;
 
 from assets import AssetManager;
-from tool_window import ToolWindowRegistry;
+from panels import ToolRegistry, PanelManager;
 import file_explorer;
 import paths;
 import asset_explorer;
@@ -161,14 +160,15 @@ def input_string(gui_id, value, long=False, code=False):
     if long:
         imgui.same_line();
         win_id = imgui.get_id(gui_id);
-        win = ToolWindowRegistry.search(TextEditor).window(win_id);
+        tool = ToolRegistry.search(TextEditor);
+        win = tool.window(win_id);
 
-        hide_id = gui_id.startswith("##");      
+        hide_id = gui_id.startswith("##");
         if edit_button(gui_id if hide_id else f"##{gui_id}") and win == None:
-            win = ToolWindowRegistry.search(TextEditor).open(win_id);
-            win.configure(gui_id, value, language=TextEditor.lua_lang if code else None);
+            win = tool.open(win_id);
+            win.instance.configure(gui_id, value, language=TextEditor.lua_lang if code else None);
         if win != None:
-            value = win.get_text();
+            value = win.instance.get_text();
     
     return value;
 
@@ -218,24 +218,28 @@ def input_flags(gui_id, value, values):
 
 # Special Data
 
+def pick(gui_id, tool_class, trigger, configure):
+    tool = ToolRegistry.search(tool_class);
+    win_id = imgui.get_id(gui_id);
+    win = tool.window(win_id);
+    if win != None:
+        if win.done:
+            PanelManager.remove(win);
+            return win.result;
+        return None;
+    if trigger:
+        configure(tool.open(win_id).instance);
+    return None;
+
 def input_file(gui_id, value, pattern, root=None, asset_type=None):
     value = input_string(gui_id, value);
 
     imgui.same_line();
     browse = imgui.button(f"Browse##{gui_id}");
 
-    win_id = imgui.get_id(gui_id);
-    win = ToolWindowRegistry.search(file_explorer.FileExplorer).window(win_id);
-    if win != None:
-        harvest = win.get_result();
-        value = str(harvest) if harvest != None else value;
-    else:
-        if browse:
-            win = ToolWindowRegistry.search(file_explorer.FileExplorer).open(win_id);
-            directory = paths.resolve(root) if root else paths.game_root();
-            win.configure(directory, pattern, asset_type);
-
-    return value;
+    directory = paths.resolve(root) if root else paths.game_root();
+    harvest = pick(gui_id, file_explorer.FileExplorer, browse, lambda explorer: explorer.configure(directory, pattern, asset_type));
+    return str(harvest) if harvest != None else value;
 
 def input_asset(gui_id, value, asset_type):
     value = input_string(gui_id, value);
@@ -243,17 +247,8 @@ def input_asset(gui_id, value, asset_type):
     imgui.same_line();
     browse = imgui.button(f"Browse##{gui_id}");
 
-    win_id = imgui.get_id(gui_id);
-    win = ToolWindowRegistry.search(asset_explorer.AssetExplorer).window(win_id);
-    if win != None:
-        harvest = win.get_result();
-        value = harvest if harvest != None else value;
-    else:
-        if browse:
-            win = ToolWindowRegistry.search(asset_explorer.AssetExplorer).open(win_id);
-            win.configure(asset_type);
-
-    return value;
+    harvest = pick(gui_id, asset_explorer.AssetExplorer, browse, lambda explorer: explorer.configure(asset_type));
+    return harvest if harvest != None else value;
 
 def input_sprite(gui_id, value, size=(64, 64)):
     sprite = sprites.SpriteBank.search(value);
@@ -261,17 +256,8 @@ def input_sprite(gui_id, value, size=(64, 64)):
 
     clicked = imgui.image_button(gui_id, imgui.ImTextureRef(sprite.frames[0].handle), imgui.ImVec2(w, h));
 
-    win_id = imgui.get_id(gui_id);
-    win = ToolWindowRegistry.search(asset_explorer.AssetExplorer).window(win_id);
-    if win != None:
-        harvest = win.get_result();
-        value = harvest if harvest != None else value;
-    else:
-        if clicked:
-            win = ToolWindowRegistry.search(asset_explorer.AssetExplorer).open(win_id);
-            win.configure("sprite");
-
-    return value;
+    harvest = pick(gui_id, asset_explorer.AssetExplorer, clicked, lambda explorer: explorer.configure("sprite"));
+    return harvest if harvest != None else value;
 
 # Structured Data
 
@@ -363,12 +349,13 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
         if code and value:
             imgui.same_line();
             win_id = imgui.get_id(gui_id);
-            win = ToolWindowRegistry.search(TextEditor).window(win_id);
+            tool = ToolRegistry.search(TextEditor);
+            win = tool.window(win_id);
 
             hide_id = gui_id.startswith("##");
             if edit_button(gui_id if hide_id else f"##{gui_id}") and win == None:
-                win = ToolWindowRegistry.search(TextEditor).open(win_id);
-                win.configure_path(paths.resolve(value), language = TextEditor.lua_lang);
+                win = tool.open(win_id);
+                win.instance.configure_path(paths.resolve(value), language = TextEditor.lua_lang);
 
     if isinstance(T, asset_types.Flags):
         value = input_flags(gui_id, value, T.values);

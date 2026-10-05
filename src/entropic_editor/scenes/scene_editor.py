@@ -18,15 +18,12 @@ import scenes.decorations;
 import scenes.entities;
 import scenes.foliage;
 import scripts;
+from panels import Panel, PanelManager;
 
 #########################################################
 ## HELPERS
 
-# a pasted copy lands this far from the original, stepping further out with
-# each paste so repeats don't stack on one spot
 PASTE_OFFSET = 16;
-
-# zoom multiplier per wheel notch; trackpads deliver fractional notches
 ZOOM_STEP = 1.1;
 
 def index_of(items, item):
@@ -520,14 +517,13 @@ class DoorEditor:
 		def is_pointed_to(self):
 			return len(self.pointers) > 0;
 
-	class Selector:
+	class Selector(Panel):
 		def __init__(self, parent, door):
+			super().__init__("Select door", size=None);
 			self.parent = parent;
 			self.door = door;
-			self.open = True;
 
-		def draw(self):
-			_, self.open = imgui.begin("Select door", self.open);
+		def body(self):
 			for scene in self.parent.door_hierarchy:
 				if imgui.tree_node(f"{scene}##{id(scene)}"):
 					for door in self.parent.door_hierarchy[scene]:
@@ -545,7 +541,6 @@ class DoorEditor:
 								to_scene["value"] = door.scene["name"];
 								to_entity["value"] = door.entity["name"];
 					imgui.tree_pop();
-			imgui.end();
 	
 	def __init__(self, parent):
 		self.parent = parent;
@@ -594,17 +589,16 @@ class DoorEditor:
 						
 						imgui.same_line();
 						if imgui.button("Browse"):
-							self.selector = DoorEditor.Selector(self, door);
+							if self.selector == None or not self.selector.open:
+								self.selector = PanelManager.open(DoorEditor.Selector(self, door));
+							else:
+								self.selector.focus();
 						
 						orientation = get_script_data(door.entity, "orientation");
 						orientation["value"] = input_orientation("Orientation", orientation["value"]);
 						
 						imgui.tree_pop();		
 
-		if self.selector != None:
-			self.selector.draw();
-			if not self.selector.open:
-				self.selector = None;
 
 	def draw(self):
 		for scene in self.door_hierarchy:
@@ -910,10 +904,6 @@ class NavlistEditor:
 			self.parent.canvas.draw_aabb(scenes.navlists.get_aabb(selected_navlist), (255, 255, 255));
 
 class SceneViewer:
-	# Every toggleable thing the viewer draws, in menu order.
-	# (key, menu label, shown by default, menu group)
-	# Tool cursors (tilemap/foliage) are deliberately not here: they are
-	# feedback for the active tool, not scene overlays.
 	LAYERS = [
 		("tiles",       "Tiles",                 True,  "Content"),
 		("entities",    "Entities",              True,  "Content"),
@@ -1061,31 +1051,28 @@ class SceneViewer:
 			self.parent.foliage_editor.draw_canvas();
 
 class SceneEditor:
-	class SpawnPopup:
-		def __init__(self, parent):
+	class SpawnPopup(Panel):
+		def __init__(self, parent, position):
+			super().__init__("Spawn", size=None);
 			self.parent = parent;
-			self.is_open = False;
+			self.position = position;
 			self.prototype = "";
-			self.position = None;
-		
-		def open(self):
-			self.is_open = True;
-			if self.parent.canvas_io.is_cursor_in_bounds():
-				self.position = list(self.parent.canvas_io.get_cursor());
-			else:
-				self.position = [0, 0];
 
-		def draw(self):
-			if self.is_open:
-				_, self.is_open = imgui.begin("Spawn", self.is_open);
-				self.prototype = input_asset("##prototype", self.prototype, "prototype");
-				if imgui.button("Spawn"):
-					scenes.entities.spawn(self.parent.scene, self.prototype, self.position);
-					self.is_open = False;
-				imgui.same_line();
-				if imgui.button("Cancel"):
-					self.is_open = False;
-				imgui.end();
+		def body(self):
+			self.prototype = input_asset("##prototype", self.prototype, "prototype");
+			if imgui.button("Spawn"):
+				scenes.entities.spawn(self.parent.scene, self.prototype, self.position);
+				self.close();
+			imgui.same_line();
+			if imgui.button("Cancel"):
+				self.close();
+
+	def open_spawn_popup(self):
+		if self.spawn_popup != None and self.spawn_popup.open:
+			self.spawn_popup.focus();
+			return;
+		position = list(self.canvas_io.get_cursor()) if self.canvas_io.is_cursor_in_bounds() else [0, 0];
+		self.spawn_popup = PanelManager.open(SceneEditor.SpawnPopup(self, position));
 	
 	def _load_scene(self, scene):		
 		self.scene = scene;
@@ -1149,7 +1136,7 @@ class SceneEditor:
 		self.foliage_editor = scenes.foliage.FoliageEditor(self);
 		self.scene_viewer = SceneViewer(self);
 
-		self.spawn_popup = SceneEditor.SpawnPopup(self);
+		self.spawn_popup = None;
 
 		self._load_scene(AssetManager.get_first("scene"));
 
@@ -1401,13 +1388,12 @@ class SceneEditor:
 				self.paste_entities();
 			
 			if InputManager.is_command(glfw.KEY_A):
-				self.spawn_popup.open();
+				self.open_spawn_popup();
 			if InputManager.is_command(glfw.KEY_D):
 				selection = self.selection_context.get_selection(single=True);
 				if selection != None:
 					self.trash.trash_item(self.scene["entities"], selection);
 			
-			self.spawn_popup.draw();
 			self.draw_rename_modal();
 
 			self.canvas_manip.tick();

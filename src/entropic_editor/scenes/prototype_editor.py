@@ -11,22 +11,19 @@ from editor_gui import *;
 from geometry import *;
 import scenes.walls;
 import scripts;
+from panels import Panel, PanelManager;
 
 # The game's fixed tick rate, so a preview's animation period reads the same
 # as it will on device
 GAME_TICK_RATE = 30;
 
-class PrototypeSpawner:
+class PrototypeSpawner(Panel):
 	def __init__(self):
-		self.size = (512, 256);
+		super().__init__("Create prototype", size=(512, 256));
 		self.sprite = "";
 		self.static = True;
-		self.finished = False;
 
-	def draw(self):
-		imgui.set_next_window_size(self.size);
-		_, open = imgui.begin("Create prototype", not self.finished);
-
+	def body(self):
 		self.sprite = input_asset("Sprite", self.sprite, "sprite");
 		self.static = input_bool("Static", self.static);
 
@@ -46,20 +43,11 @@ class PrototypeSpawner:
 				else:
 					prototype["has_blocker"] = True;
 					prototype["blocker"] = [-sprite.width//2, -8, sprite.width//2, 0];
-				self.finished = True;
+				self.close();
 			imgui.same_line();
-		
-		if imgui.button("Cancel"):
-			self.finished = True;
-		
-		self.size = imgui.get_window_size();
-		imgui.end();
-		
-		if not open:
-			self.finished = True;
 
-	def is_finished(self):
-		return self.finished;
+		if imgui.button("Cancel"):
+			self.close();
 
 class PrototypeEditor:
 	def _load_prototype(self, prototype):
@@ -263,7 +251,10 @@ class PrototypeEditor:
 				if imgui.menu_item_simple("New"):
 					AssetManager.get_document("prototype").spawn_entry();
 				if imgui.menu_item_simple("New from sprite"):
-					self.prototype_spawner = PrototypeSpawner();
+					if self.prototype_spawner == None or not self.prototype_spawner.open:
+						self.prototype_spawner = PanelManager.open(PrototypeSpawner());
+					else:
+						self.prototype_spawner.focus();
 				imgui.end_menu();
 			
 			if imgui.begin_menu("View"):
@@ -274,10 +265,6 @@ class PrototypeEditor:
 				imgui.end_menu();
 			imgui.end_menu_bar();
 		
-		if self.prototype_spawner != None:
-			self.prototype_spawner.draw();
-			if self.prototype_spawner.is_finished():
-				self.prototype_spawner = None;
 
 		begin_column("left-panel", imgui.get_content_region_avail().x * 0.15);
 		self.gui_draw_selector();
