@@ -10,6 +10,13 @@ def make_texture(buffer, width, height):
     gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, buffer);
     return texture;
 
+_dead_handles = [];
+
+def flush_dead_textures():
+    if len(_dead_handles) > 0:
+        gl.glDeleteTextures(len(_dead_handles), _dead_handles);
+        _dead_handles.clear();
+
 def scale_dimensions(width, height, sx, sy):
     return max(round(width * sx), 1), max(round(height * sy), 1)
 
@@ -24,13 +31,11 @@ class Texture:
         self.dirty = False;
 
     def __del__(self):
+        # Deferred: a texture dropped mid-frame may still be in this frame's
+        # draw list, so the GL handle is freed at the start of the next frame.
         handle = getattr(self, "_handle", None);
-        if handle is None:
-            return;
-        try:
-            gl.glDeleteTextures(1, [handle]);
-        except Exception:
-            pass;
+        if handle is not None:
+            _dead_handles.append(handle);
 
     @property
     def handle(self):

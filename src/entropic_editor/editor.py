@@ -17,7 +17,7 @@ import traceback;
 
 import glfw;
 from imgui_bundle import imgui;
-from rendering.images import Texture;
+import rendering.images as ee_img;
 import window;
 import paths;
 
@@ -84,7 +84,7 @@ if __name__ == "__main__":
 	];
 	window_flags = foldl(lambda a, b : a | b, 0, window_flag_list);
 
-	splash = Texture.load(editor_path/"resources/splash.png");
+	splash = ee_img.Texture.load(editor_path/"resources/splash.png");
 	splash_flag_list = [
 		imgui.WindowFlags_.no_scrollbar,
 		imgui.WindowFlags_.no_scroll_with_mouse
@@ -123,6 +123,7 @@ if __name__ == "__main__":
 		while win.is_alive():
 			win.begin_frame();
 
+			ee_img.flush_dead_textures();
 			SpriteBank.refresh();
 			ScriptBank.refresh(AssetManager.get_all("script"));
 			InputManager.tick();

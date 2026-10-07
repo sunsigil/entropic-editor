@@ -448,7 +448,7 @@ class DialogueEditor:
 			else:
 				if imnodes.is_background_clicked():
 					self.canvas_focused = True;
-				if self.canvas_focused and InputManager.is_command(glfw.KEY_A):
+				if self.canvas_focused and InputManager.is_command(glfw.KEY_N):
 					self.place_node(spawn_anonymous());
 				if self.canvas_focused and InputManager.is_command(glfw.KEY_V):
 					for node in self.clipboard.contents:
@@ -466,11 +466,21 @@ class DialogueEditor:
 	
 			if imnodes.query_new_link(out_id, in_id):
 				if out_id and in_id:
-					if imnodes.accept_new_item():
-						out_node = registry.search_by_pin_id(out_id);
-						out_edge_idx = out_node.out_ids.index(out_id);
-						in_node = registry.search_by_pin_id(in_id);
-						out_node.asset["edges"][out_edge_idx]["node"] = in_node.asset["name"];			
+					# Pins arrive in drag order, so a link drawn from an input
+					# to an output has to be flipped before it is accepted.
+					out_node = registry.search_by_pin_id(out_id);
+					in_node = registry.search_by_pin_id(in_id);
+					def is_input(node, pin):
+						return node != None and pin.id() == node.in_id.id();
+					if is_input(out_node, out_id) and not is_input(in_node, in_id):
+						out_id, in_id = in_id, out_id;
+						out_node, in_node = in_node, out_node;
+					valid = out_node != None and in_node != None and not is_input(out_node, out_id) and is_input(in_node, in_id);
+					if not valid:
+						imnodes.reject_new_item();
+					elif imnodes.accept_new_item():
+						out_edge_idx = next(i for i, p in enumerate(out_node.out_ids) if p.id() == out_id.id());
+						out_node.asset["edges"][out_edge_idx]["node"] = in_node.asset["name"];
 			imnodes.end_create();
 		
 		if imnodes.begin_delete():
