@@ -17,10 +17,11 @@ def get_aabb(entity):
 			dx, dy = prototype["sprite_offset"];
 			return [x+dx, y+dy, x+dx+sprite.width, y+dy+sprite.height];
 	
-		if prototype["has_blocker"]:
-			x0, y0, x1, y1 = prototype["blocker"];
-			return [x+x0, y+y0, x+x1, y+y1];
-		elif prototype["has_trigger"]:
+		for blocker in prototype["blockers"]:
+			if blocker["type"] == "aabb":
+				x0, y0, x1, y1 = blocker["aabb"];
+				return [x+x0, y+y0, x+x1, y+y1];
+		if prototype["has_trigger"]:
 			x0, y0, x1, y1 = prototype["trigger"];
 			return [x+x0, y+y0, x+x1, y+y1];
 

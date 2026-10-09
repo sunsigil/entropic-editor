@@ -975,9 +975,8 @@ class SceneViewer:
 			x, y = entity["position"];
 
 			if prototype != None and self.shows("boxes"):
-				if prototype["has_blocker"]:
-					x0, y0, x1, y1 = prototype["blocker"];
-					canvas.draw_aabb((x0+x, y0+y, x1+x, y1+y), (255, 0, 0));
+				for blocker in prototype["blockers"]:
+					scenes.walls.canvas_draw(canvas, scenes.walls.translate(blocker, x, y), (255, 0, 0));
 				if prototype["has_trigger"]:
 					x0, y0, x1, y1 = prototype["trigger"];
 					canvas.draw_aabb((x0+x, y0+y, x1+x, y1+y), (0, 255, 0));

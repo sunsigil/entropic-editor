@@ -14,6 +14,16 @@ def gui_draw(wall):
 			wall["segment"][0] = gui.input_vec2("A", wall["segment"][0]);
 			wall["segment"][1] = gui.input_vec2("B", wall["segment"][1]);
 
+def translate(wall, dx, dy):
+	match wall["type"]:
+		case "aabb":
+			x0, y0, x1, y1 = wall["aabb"];
+			return {"type": "aabb", "aabb": [x0+dx, y0+dy, x1+dx, y1+dy]};
+		case "segment":
+			(x0, y0), (x1, y1) = wall["segment"];
+			return {"type": "segment", "segment": [[x0+dx, y0+dy], [x1+dx, y1+dy]]};
+	return wall;
+
 def canvas_draw(canvas: canvas.Canvas, wall, colour):
 	match wall["type"]:
 		case "aabb":

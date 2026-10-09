@@ -18,355 +18,338 @@ from panels import Panel, PanelManager;
 GAME_TICK_RATE = 30;
 
 class PrototypeSpawner(Panel):
-	def __init__(self):
-		super().__init__("Create prototype", size=(512, 256));
-		self.sprite = "";
-		self.static = True;
+    def __init__(self):
+        super().__init__("Create prototype", size=(512, 256));
+        self.sprite = "";
 
-	def body(self):
-		self.sprite = input_asset("Sprite", self.sprite, "sprite");
-		self.static = input_bool("Static", self.static);
+    def body(self):
+        self.sprite = input_asset("Sprite", self.sprite, "sprite");
 
-		if AssetManager.search("sprite", self.sprite) != None:
-			if imgui.button("Create"):
-				prototype = AssetManager.get_document("prototype").spawn_entry();
-				prototype["name"] = self.sprite;
-				prototype["sprite"] = self.sprite;
-				sprite = SpriteBank.search(self.sprite);
-				prototype["sprite_offset"] = [-sprite.width//2, -sprite.height];
+        if AssetManager.search("sprite", self.sprite) != None:
+            if imgui.button("Create"):
+                prototype = AssetManager.get_document("prototype").spawn_entry();
+                prototype["name"] = self.sprite;
+                prototype["sprite"] = self.sprite;
+                sprite = SpriteBank.search(self.sprite);
+                prototype["sprite_offset"] = [-sprite.width//2, -sprite.height];
+                prototype["blockers"].append({
+                    "type": "aabb",
+                    "aabb": [-sprite.width//2, -8, sprite.width//2, 0]
+                });
+                self.close();
+            imgui.same_line();
 
-				if self.static:
-					prototype["walls"].append({
-						"type": "aabb",
-						"aabb": [-sprite.width//2, -8, sprite.width//2, 0]
-					});
-				else:
-					prototype["has_blocker"] = True;
-					prototype["blocker"] = [-sprite.width//2, -8, sprite.width//2, 0];
-				self.close();
-			imgui.same_line();
-
-		if imgui.button("Cancel"):
-			self.close();
+        if imgui.button("Cancel"):
+            self.close();
 
 class PrototypeEditor:
-	def _load_prototype(self, prototype):
-		self.prototype = prototype;
-		if prototype != None:
-			self.canvas.origin = (128, 128);
-			self.canvas_manip.clear();
-			self.manip_registry = CanvasManipRegistry();
-			self.selection_context.clear();
-	
-	def __init__(self):
-		self.canvas_size = (256, 256);
+    def _load_prototype(self, prototype):
+        self.prototype = prototype;
+        if prototype != None:
+            self.canvas.origin = (128, 128);
+            self.canvas_manip.clear();
+            self.manip_registry = CanvasManipRegistry();
+            self.selection_context.clear();
+    
+    def __init__(self):
+        self.canvas_size = (256, 256);
 
-		self.canvas = Canvas(self.canvas_size[0], self.canvas_size[1], scale=2, origin=(128, 128));
-		self.canvas_io = CanvasIO(self.canvas);
-		self.canvas_grid = CanvasGrid(
-			self.canvas,
-			4
-		);
+        self.canvas = Canvas(self.canvas_size[0], self.canvas_size[1], scale=2, origin=(128, 128));
+        self.canvas_io = CanvasIO(self.canvas);
+        self.canvas_grid = CanvasGrid(
+            self.canvas,
+            4
+        );
 
-		self.event_queue = [];
-		self.canvas_manip = CanvasManipulator(self.canvas_io, self.event_queue);
-		self.manip_registry = CanvasManipRegistry();
-		self.selection_context = SelectionContext();
+        self.event_queue = [];
+        self.canvas_manip = CanvasManipulator(self.canvas_io, self.event_queue);
+        self.manip_registry = CanvasManipRegistry();
+        self.selection_context = SelectionContext();
 
-		self.prototype_spawner = None;
-		self.draw_grid = True;
-		self.draw_outlines = False;
-		
-		self.tabs = ["sprite", "boxes", "anchors", "walls"];
-		self.tab = self.tabs[0];
+        self.prototype_spawner = None;
+        self.draw_grid = True;
+        self.draw_outlines = False;
+        
+        self.tabs = ["sprite", "boxes", "anchors"];
+        self.tab = self.tabs[0];
 
-		self._load_prototype(AssetManager.get_first("prototype"));
-	
-	def gui_draw_selector(self):
-		prototype = asset_selector("prototype-selector", self.prototype, "prototype");
-		if prototype is not self.prototype:
-			self._load_prototype(prototype);
-	
-	# Every prototype ticks to the same clock, so previews stay in step
-	def preview_frame(self, sprite):
-		if not self.prototype["animated"] or sprite.frame_count <= 1:
-			return 0;
-		period = max(self.prototype["animation_period"], 1);
-		return int(imgui.get_time() * GAME_TICK_RATE / period) % sprite.frame_count;
+        self._load_prototype(AssetManager.get_first("prototype"));
+    
+    def gui_draw_selector(self):
+        prototype = asset_selector("prototype-selector", self.prototype, "prototype");
+        if prototype is not self.prototype:
+            self._load_prototype(prototype);
+    
+    # Every prototype ticks to the same clock, so previews stay in step
+    def preview_frame(self, sprite):
+        if not self.prototype["animated"] or sprite.frame_count <= 1:
+            return 0;
+        period = max(self.prototype["animation_period"], 1);
+        return int(imgui.get_time() * GAME_TICK_RATE / period) % sprite.frame_count;
 
-	def get_selected_wall_index(self):
-		path = self.selection_context.get_selection(True);
-		if not isinstance(path, str) or not path.startswith("walls/"):
-			return None;
-		idx = int(path.split("/")[1]);
-		if idx >= len(self.prototype["walls"]):
-			return None;
-		return idx;
+    def get_selected_blocker_index(self):
+        path = self.selection_context.get_selection(True);
+        if not isinstance(path, str) or not path.startswith("blockers/"):
+            return None;
+        idx = int(path.split("/")[1]);
+        if idx >= len(self.prototype["blockers"]):
+            return None;
+        return idx;
 
-	def delete_selected_wall(self):
-		idx = self.get_selected_wall_index();
-		if idx != None:
-			del self.prototype["walls"][idx];
-			self.selection_context.clear();
+    def delete_selected_blocker(self):
+        idx = self.get_selected_blocker_index();
+        if idx != None:
+            del self.prototype["blockers"][idx];
+            self.selection_context.clear();
 
-	def gui_draw_boxes(self):
-		self.prototype["has_blocker"] = input_bool("Has blocker", self.prototype["has_blocker"]);
-		if self.prototype["has_blocker"]:
-			self.prototype["blocker"] = input_aabb("Blocker", self.prototype["blocker"]);
-		self.prototype["has_trigger"] = input_bool("Has trigger", self.prototype["has_trigger"]);
-		if self.prototype["has_trigger"]:
-			self.prototype["trigger"] = input_aabb("Trigger", self.prototype["trigger"]);
-			self.prototype["trigger_orientation"] = input_enum("Trigger orientation", self.prototype["trigger_orientation"], ["none", "east", "north", "west", "south"]);
-			if self.prototype["has_blocker"] and imgui.button("Conform to blocker"):
-				self.prototype["trigger"] = list(self.prototype["blocker"]);
-	
-	def gui_draw_scripts(self):	
-		scripts_open = imgui.tree_node("Scripts");
-		if imgui.begin_popup_context_item():
-			if imgui.menu_item_simple("New script"):
-				self.prototype["scripts"].append("");
-			imgui.end_popup();
-		
-		if scripts_open:
-			trash = [];
-			for i in range(len(self.prototype["scripts"])):
-				script = self.prototype["scripts"][i];
+    def is_trigger_selected(self):
+        path = self.selection_context.get_selection(True);
+        return path == "trigger";
 
-				self.prototype["scripts"][i] = input_asset(f"##script {i}", self.prototype["scripts"][i], "script");
-				if ContextMenu.begin(f"##script {i}"):
-					if imgui.menu_item_simple("Delete"):
-						trash.append(i);
-					imgui.end_popup();
-			
-			while len(trash) > 0:
-				i = trash.pop();
-				del self.prototype["scripts"][i];
-			imgui.tree_pop();
+    def gui_draw_boxes(self):
+        self.prototype["has_trigger"] = input_bool("Has trigger", self.prototype["has_trigger"]);
+        if self.prototype["has_trigger"]:
+            self.prototype["trigger"] = input_aabb("Trigger", self.prototype["trigger"]);
+            self.prototype["trigger_orientation"] = input_enum("Trigger orientation", self.prototype["trigger_orientation"], ["none", "east", "north", "west", "south"]);
+    
+    def gui_draw_scripts(self): 
+        scripts_open = imgui.tree_node("Scripts");
+        if imgui.begin_popup_context_item():
+            if imgui.menu_item_simple("New script"):
+                self.prototype["scripts"].append("");
+            imgui.end_popup();
+        
+        if scripts_open:
+            trash = [];
+            for i in range(len(self.prototype["scripts"])):
+                script = self.prototype["scripts"][i];
 
-		if imgui.tree_node("Script Data"):
-			self.prototype["script_data"] = scripts.rectify_all_script_data(self.prototype["scripts"], self.prototype["script_data"]);
+                self.prototype["scripts"][i] = input_asset(f"##script {i}", self.prototype["scripts"][i], "script");
+                if ContextMenu.begin(f"##script {i}"):
+                    if imgui.menu_item_simple("Delete"):
+                        trash.append(i);
+                    imgui.end_popup();
+            
+            while len(trash) > 0:
+                i = trash.pop();
+                del self.prototype["scripts"][i];
+            imgui.tree_pop();
 
-			for entry in self.prototype["script_data"]:
-				if imgui.tree_node(entry["script"]):
-					for data in entry["data"]:
-						sig = data["signature"];
-						datum = scripts.ScriptDatum(sig["key"], sig["type"]);
-						label = f"{sig["key"]} ({sig["type"]})";
-						data["value"] = typed_input(label, datum.type, data["value"]);
-					imgui.tree_pop();
-			
-			imgui.tree_pop();
-	
-	def canvas_draw_boxes(self):
-		if self.prototype["has_blocker"]:
-			self.canvas.draw_aabb(self.prototype["blocker"], (255, 128, 0));
-		if self.prototype["has_trigger"]:
-			self.canvas.draw_aabb(self.prototype["trigger"], (0, 255, 0));
-			x0, y0, x1, y1 = self.prototype["trigger"];
-			mx, my = (x0+x1)/2, (y0+y1)/2;
-			match self.prototype["trigger_orientation"]:
-				case "north":
-					self.canvas.draw_line(mx, y0, mx, y0-16, (0, 255, 0));
-				case "east":
-					self.canvas.draw_line(x1, my, x1+16, my, (0, 255, 0));
-				case "south":
-					self.canvas.draw_line(mx, y1, mx, y1+16, (0, 255, 0));
-				case "west":
-					self.canvas.draw_line(x0, my, x0-16, my, (0, 255, 0));			
-	
-	def gui_draw_canvas(self):
-		self.canvas.clear((128, 128, 128));
-		if self.draw_grid:
-			self.canvas_grid.draw_lines((64, 64, 64));
-			self.canvas.draw_guides((192, 192, 192));
+        if imgui.tree_node("Script Data"):
+            self.prototype["script_data"] = scripts.rectify_all_script_data(self.prototype["scripts"], self.prototype["script_data"]);
 
-		if self.prototype != None:
-			sprite = SpriteBank.search(self.prototype["sprite"], safe=False);
-			if sprite != None:
-				x, y = self.prototype["sprite_offset"];
+            for entry in self.prototype["script_data"]:
+                if imgui.tree_node(entry["script"]):
+                    for data in entry["data"]:
+                        sig = data["signature"];
+                        datum = scripts.ScriptDatum(sig["key"], sig["type"]);
+                        label = f"{sig["key"]} ({sig["type"]})";
+                        data["value"] = typed_input(label, datum.type, data["value"]);
+                    imgui.tree_pop();
+            
+            imgui.tree_pop();
+    
+    def gui_draw_canvas(self):
+        self.canvas.clear((128, 128, 128));
+        if self.draw_grid:
+            self.canvas_grid.draw_lines((64, 64, 64));
+            self.canvas.draw_guides((192, 192, 192));
 
-				self.canvas.draw_image(x, y, sprite.frames[self.preview_frame(sprite)].source);
-				if self.draw_outlines:
-					self.canvas.draw_aabb((x, y, x+sprite.width, y+sprite.height), (255, 255, 255));
+        if self.prototype != None:
+            sprite = SpriteBank.search(self.prototype["sprite"], safe=False);
+            if sprite != None:
+                x, y = self.prototype["sprite_offset"];
 
-				y = self.prototype["sprite_offset"][1] + sprite.height + self.prototype["y_sort_offset"];
-				w = self.canvas.width;
-				self.canvas.draw_line(-w, y, w, y, (255, 255, 0));
+                self.canvas.draw_image(x, y, sprite.frames[self.preview_frame(sprite)].source);
+                if self.draw_outlines:
+                    self.canvas.draw_aabb((x, y, x+sprite.width, y+sprite.height), (255, 255, 255));
 
-			if self.prototype["override_prompt_position"]:
-				x, y = self.prototype["prompt_position"];
-				self.canvas.draw_line(x-4, y, x+4, y, (255, 255, 0));
-				self.canvas.draw_line(x, y-4, x, y+4, (255, 255, 0));
-			
-			selected_wall = self.get_selected_wall_index();
-			for idx, wall in enumerate(self.prototype["walls"]):
-				colour = (255, 255, 0) if idx == selected_wall else (255, 0, 0);
-				scenes.walls.canvas_draw(self.canvas, wall, colour);
+                y = self.prototype["sprite_offset"][1] + sprite.height + self.prototype["y_sort_offset"];
+                w = self.canvas.width;
+                self.canvas.draw_line(-w, y, w, y, (255, 255, 0));
 
-			self.canvas_draw_boxes();
-	
-		self.canvas.render();
-		ContextMenu.ping("prototype-canvas");
+            if self.prototype["override_prompt_position"]:
+                x, y = self.prototype["prompt_position"];
+                self.canvas.draw_line(x-4, y, x+4, y, (255, 255, 0));
+                self.canvas.draw_line(x, y-4, x, y+4, (255, 255, 0));
+            
+            selected_blocker = self.get_selected_blocker_index();
+            for idx, blocker in enumerate(self.prototype["blockers"]):
+                colour = (255, 255, 0) if idx == selected_blocker else (255, 128, 0);
+                scenes.walls.canvas_draw(self.canvas, blocker, colour);
 
-		self.canvas_io.tick();
-		self.canvas_manip.tick();
-	
-	def synchronize_manip(self):
-		paths = [];
-		shapes = [];
+            if self.prototype["has_trigger"]:
+                colour = (255, 255, 0) if self.is_trigger_selected() else (0, 255, 0);
+                self.canvas.draw_aabb(self.prototype["trigger"], colour);
+                x0, y0, x1, y1 = self.prototype["trigger"];
+                mx, my = (x0+x1)/2, (y0+y1)/2;
+                match self.prototype["trigger_orientation"]:
+                    case "north":
+                        self.canvas.draw_line(mx, y0, mx, y0-16, colour);
+                    case "east":
+                        self.canvas.draw_line(x1, my, x1+16, my, colour);
+                    case "south":
+                        self.canvas.draw_line(mx, y1, mx, y1+16, colour);
+                    case "west":
+                        self.canvas.draw_line(x0, my, x0-16, my, colour);          
+    
+        self.canvas.render();
+        ContextMenu.ping("prototype-canvas");
 
-		match self.tab:
-			case "sprite":
-				sprite = SpriteBank.search(self.prototype["sprite"]);
-				if sprite != None:
-					paths.append("sprite");
-					x0, y0 = self.prototype["sprite_offset"];
-					x1, y1 = x0+sprite.width, y0+sprite.height;
-					shapes.append(CanvasManipRect([x0, y0, x1, y1]));
-			case "boxes":
-				if self.prototype["has_blocker"]:
-					paths.append("blocker");
-					shapes.append(CanvasManipRect(self.prototype["blocker"]));
-				if self.prototype["has_trigger"]:
-					paths.append("trigger");
-					shapes.append(CanvasManipRect(self.prototype["trigger"]));
-			case "anchors":
-				if self.prototype["override_prompt_position"]:
-					paths.append("prompt_position");
-					shapes.append(CanvasManipPoint(self.prototype["prompt_position"]));
-			case "walls":
-				for idx,wall in enumerate(self.prototype["walls"]):
-					paths.append(f"walls/{idx}");
-					if wall["type"] == "aabb":
-						shapes.append(CanvasManipRect(wall["aabb"]));
-					if wall["type"] == "segment":
-						shapes.append(CanvasManipSegment(wall["segment"]));
-		
-		self.manip_registry.update(paths, shapes);
-		self.canvas_manip.synchronize(self.manip_registry);
-	
-	def draw(self):
-		if imgui.begin_menu_bar():
-			if imgui.begin_menu("Asset"):
-				if imgui.menu_item_simple("New"):
-					AssetManager.get_document("prototype").spawn_entry();
-				if imgui.menu_item_simple("New from sprite"):
-					if self.prototype_spawner == None or not self.prototype_spawner.open:
-						self.prototype_spawner = PanelManager.open(PrototypeSpawner());
-					else:
-						self.prototype_spawner.focus();
-				imgui.end_menu();
-			
-			if imgui.begin_menu("View"):
-				_, self.draw_grid = imgui.menu_item("Show grid", "", self.draw_grid);
-				imgui.set_next_item_width(64);
-				self.canvas_grid.size = input_int("Grid size", self.canvas_grid.size, style=EEGUIIntStyle.SLIDER, low_bound=2, high_bound=16);
-				_, self.draw_outlines = imgui.menu_item("Show outlines", "", self.draw_outlines);
-				imgui.end_menu();
-			imgui.end_menu_bar();
-		
+        self.canvas_io.tick();
+        self.canvas_manip.tick();
+    
+    def synchronize_manip(self):
+        paths = [];
+        shapes = [];
 
-		begin_column("left-panel", imgui.get_content_region_avail().x * 0.15);
-		self.gui_draw_selector();
-		end_column();
+        match self.tab:
+            case "sprite":
+                sprite = SpriteBank.search(self.prototype["sprite"]);
+                if sprite != None:
+                    paths.append("sprite");
+                    x0, y0 = self.prototype["sprite_offset"];
+                    x1, y1 = x0+sprite.width, y0+sprite.height;
+                    shapes.append(CanvasManipRect([x0, y0, x1, y1]));
+            case "boxes":
+                for idx,blocker in enumerate(self.prototype["blockers"]):
+                    paths.append(f"blockers/{idx}");
+                    if blocker["type"] == "aabb":
+                        shapes.append(CanvasManipRect(blocker["aabb"]));
+                    if blocker["type"] == "segment":
+                        shapes.append(CanvasManipSegment(blocker["segment"]));
+                if self.prototype["has_trigger"]:
+                    paths.append("trigger");
+                    shapes.append(CanvasManipRect(self.prototype["trigger"]));
+            case "anchors":
+                if self.prototype["override_prompt_position"]:
+                    paths.append("prompt_position");
+                    shapes.append(CanvasManipPoint(self.prototype["prompt_position"]));
+        
+        self.manip_registry.update(paths, shapes);
+        self.canvas_manip.synchronize(self.manip_registry);
+    
+    def draw(self):
+        if imgui.begin_menu_bar():
+            if imgui.begin_menu("Asset"):
+                if imgui.menu_item_simple("New"):
+                    AssetManager.get_document("prototype").spawn_entry();
+                if imgui.menu_item_simple("New from sprite"):
+                    if self.prototype_spawner == None or not self.prototype_spawner.open:
+                        self.prototype_spawner = PanelManager.open(PrototypeSpawner());
+                    else:
+                        self.prototype_spawner.focus();
+                imgui.end_menu();
+            
+            if imgui.begin_menu("View"):
+                _, self.draw_grid = imgui.menu_item("Show grid", "", self.draw_grid);
+                imgui.set_next_item_width(64);
+                self.canvas_grid.size = input_int("Grid size", self.canvas_grid.size, style=EEGUIIntStyle.SLIDER, low_bound=2, high_bound=16);
+                _, self.draw_outlines = imgui.menu_item("Show outlines", "", self.draw_outlines);
+                imgui.end_menu();
+            imgui.end_menu_bar();
+        
 
-		begin_column("main-panel");
+        begin_column("left-panel", imgui.get_content_region_avail().x * 0.15);
+        self.gui_draw_selector();
+        end_column();
 
-		self.prototype["name"] = input_string("Name", self.prototype["name"]);
+        begin_column("main-panel");
 
-		if imgui.begin_tab_bar("edit-mode"):
-			for value in self.tabs:
-				tab_visible, tab_open = imgui.begin_tab_item(value);
-				if tab_visible:
-					self.tab = value;
-					imgui.end_tab_item();
-			imgui.end_tab_bar();
+        self.prototype["name"] = input_string("Name", self.prototype["name"]);
 
-		self.gui_draw_canvas();
-		if self.tab == "walls":
-			if ContextMenu.begin("prototype-canvas"):
-				if imgui.begin_menu("New wall"):
-					if imgui.menu_item_simple("AABB"):
-						self.prototype["walls"].append(scenes.walls.canvas_place(self.canvas_io.get_cursor(), "aabb", self.canvas_grid));
-					if imgui.menu_item_simple("Segment"):
-						self.prototype["walls"].append(scenes.walls.canvas_place(self.canvas_io.get_cursor(), "segment", self.canvas_grid));
-					imgui.end_menu();
-				if self.get_selected_wall_index() != None and imgui.menu_item_simple("Delete wall"):
-					self.delete_selected_wall();
-				imgui.end_popup();
-			if InputManager.is_command(glfw.KEY_D):
-				self.delete_selected_wall();
+        if imgui.begin_tab_bar("edit-mode"):
+            for value in self.tabs:
+                tab_visible, tab_open = imgui.begin_tab_item(value);
+                if tab_visible:
+                    self.tab = value;
+                    imgui.end_tab_item();
+            imgui.end_tab_bar();
 
-		self.prototype["sprite"] = input_asset("Sprite", self.prototype["sprite"], "sprite");
-		self.prototype["sprite_offset"] = input_vec2("Sprite offset", self.prototype["sprite_offset"]);
-		self.prototype["y_sort_offset"] = input_int("Y-sort offset", self.prototype["y_sort_offset"]);
-		self.prototype["override_prompt_position"] = input_bool("Override prompt position", self.prototype["override_prompt_position"]);
-		if self.prototype["override_prompt_position"]:
-			imgui.same_line();
-			self.prototype["prompt_position"] = input_vec2("Prompt positon", self.prototype["prompt_position"]);
-		
-		self.prototype["mobile"] = input_bool("Mobile", self.prototype["mobile"]);
-		imgui.same_line();
-		self.prototype["animated"] = input_bool("Animated", self.prototype["animated"]);
-		if self.prototype["animated"]:
-			imgui.same_line();
-			imgui.set_next_item_width(96);
-			self.prototype["animation_period"] = input_int("Period (ticks/frame)", self.prototype["animation_period"], low_bound=1);
-		
-		self.gui_draw_boxes();
-		self.gui_draw_scripts();
-		
-		end_column();
+        self.gui_draw_canvas();
+        if self.tab == "boxes":
+            if ContextMenu.begin("prototype-canvas"):
+                if imgui.begin_menu("New blocker"):
+                    if imgui.menu_item_simple("AABB"):
+                        self.prototype["blockers"].append(scenes.walls.canvas_place(self.canvas_io.get_cursor(), "aabb", self.canvas_grid));
+                    if imgui.menu_item_simple("Segment"):
+                        self.prototype["blockers"].append(scenes.walls.canvas_place(self.canvas_io.get_cursor(), "segment", self.canvas_grid));
+                    imgui.end_menu();
+                if self.get_selected_blocker_index() != None and imgui.menu_item_simple("Delete blocker"):
+                    self.delete_selected_blocker();
+                imgui.end_popup();
+            if InputManager.is_command(glfw.KEY_D):
+                self.delete_selected_blocker();
 
-		self.synchronize_manip();
+        self.prototype["sprite"] = input_asset("Sprite", self.prototype["sprite"], "sprite");
+        self.prototype["sprite_offset"] = input_vec2("Sprite offset", self.prototype["sprite_offset"]);
+        self.prototype["y_sort_offset"] = input_int("Y-sort offset", self.prototype["y_sort_offset"]);
+        self.prototype["override_prompt_position"] = input_bool("Override prompt position", self.prototype["override_prompt_position"]);
+        if self.prototype["override_prompt_position"]:
+            imgui.same_line();
+            self.prototype["prompt_position"] = input_vec2("Prompt positon", self.prototype["prompt_position"]);
+        
+        self.prototype["mobile"] = input_bool("Mobile", self.prototype["mobile"]);
+        imgui.same_line();
+        self.prototype["animated"] = input_bool("Animated", self.prototype["animated"]);
+        if self.prototype["animated"]:
+            imgui.same_line();
+            imgui.set_next_item_width(96);
+            self.prototype["animation_period"] = input_int("Period (ticks/frame)", self.prototype["animation_period"], low_bound=1);
+        
+        self.gui_draw_boxes();
+        self.gui_draw_scripts();
+        
+        end_column();
 
-		while len(self.event_queue) > 0:
-			event = self.event_queue.pop(0);
-			
-			if isinstance(event, CanvasManipClick):
-				if event.eeid == None:
-					self.selection_context.clear();
-				else:
-					self.selection_context.select(self.manip_registry.search(event.eeid));
-			
-			if isinstance(event, CanvasManipDrag):
-				# a drag from empty canvas means nothing here; right-drag pans
-				if event.eeid == None:
-					continue;
-			
-				shape = self.canvas_manip.search(event.eeid);
-				path = self.manip_registry.search(event.eeid);
-			
-				match event.signal:
-					case CanvasManipDrag.Signal.TICK:
-						if path == "sprite":
-							x, y = event.point;
-							dx, dy = event.delta;
-							x, y = self.canvas_grid.snap_point((x+dx, y+dy));
-							self.prototype["sprite_offset"] = x, y;
-						
-						elif path == "blocker" or path == "trigger":
-							box = get_by_path(self.prototype, path);
-							edge = aabb_closest_edge(event.geometry, event.start);
-							if event.inside:
-								point = np.array(event.point) + np.array(event.delta);
-								point = self.canvas_grid.snap_point(point);
-								set_by_path(self.prototype, path, relocate_aabb(box, point));
-							else:
-								point = self.canvas_grid.snap_point(event.point);
-								set_by_path(self.prototype, path, shape_aabb(box, edge, point));
-						
-						elif path == "prompt_position":
-							point = get_by_path(self.prototype, self.manip_registry.search(event.eeid));
-							point[0] = event.point[0];
-							point[1] = event.point[1];
-						
-						elif "walls" in path:
-							wall = get_by_path(self.prototype, path);
-							scenes.walls.canvas_drag(wall, event, self.canvas_grid);
-					
-					case CanvasManipDrag.Signal.END:
-						self.selection_context.clear();
+        self.synchronize_manip();
 
-			if isinstance(event, CanvasManipViewDrag):
-				CanvasManipulator.default_view_drag_handler(self.canvas, event);
+        while len(self.event_queue) > 0:
+            event = self.event_queue.pop(0);
+            
+            if isinstance(event, CanvasManipClick):
+                if event.eeid == None:
+                    self.selection_context.clear();
+                else:
+                    self.selection_context.select(self.manip_registry.search(event.eeid));
+            
+            if isinstance(event, CanvasManipDrag):
+                if event.eeid == None:
+                    continue;
+            
+                shape = self.canvas_manip.search(event.eeid);
+                path = self.manip_registry.search(event.eeid);
+            
+                match event.signal:
+                    case CanvasManipDrag.Signal.TICK:
+                        if path == "sprite":
+                            x, y = event.point;
+                            dx, dy = event.delta;
+                            x, y = self.canvas_grid.snap_point((x+dx, y+dy));
+                            self.prototype["sprite_offset"] = x, y;
+                        
+                        elif path == "trigger":
+                            box = get_by_path(self.prototype, path);
+                            edge = aabb_closest_edge(event.geometry, event.start);
+                            if event.inside:
+                                point = np.array(event.point) + np.array(event.delta);
+                                point = self.canvas_grid.snap_point(point);
+                                set_by_path(self.prototype, path, relocate_aabb(box, point));
+                            else:
+                                point = self.canvas_grid.snap_point(event.point);
+                                set_by_path(self.prototype, path, shape_aabb(box, edge, point));
+                        
+                        elif path == "prompt_position":
+                            point = get_by_path(self.prototype, self.manip_registry.search(event.eeid));
+                            point[0] = event.point[0];
+                            point[1] = event.point[1];
+                        
+                        elif "blockers" in path:
+                            blocker = get_by_path(self.prototype, path);
+                            scenes.walls.canvas_drag(blocker, event, self.canvas_grid);
+                    
+                    case CanvasManipDrag.Signal.END:
+                        self.selection_context.clear();
+
+            if isinstance(event, CanvasManipViewDrag):
+                CanvasManipulator.default_view_drag_handler(self.canvas, event);
