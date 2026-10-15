@@ -118,12 +118,16 @@ class AssetDocument:
 		file.truncate();
 		file.write(json.dumps(self.data, indent=4));
 		file.close();
+	
+	def search(self, name):
+		return next((x for x in self.instances if x["name"] == name), None);
 
 class AssetManager:
 	document_map = {};
 	documents = [];
 
-	def load_document(path):
+	@classmethod
+	def load_document(cls, path):
 		try:
 			document = AssetDocument(path);
 			AssetManager.documents.append(document);
@@ -133,31 +137,37 @@ class AssetManager:
 			print(f"[AssetManager] Failed to load {path}!\n\t({e})");
 			raise(e);			
 
-	def get_document(asset_type) -> AssetDocument:
+	@classmethod
+	def get_document(cls, asset_type) -> AssetDocument:
 		if asset_type not in AssetManager.document_map:
 			return None;
 		return AssetManager.document_map[asset_type];
 
-	def get_tree(asset_type) -> asset_types.Type:
+	@classmethod
+	def get_tree(cls, asset_type) -> asset_types.Type:
 		if asset_type not in AssetManager.document_map:
 			return None;
 		return AssetManager.document_map[asset_type].type_tree;
 
-	def get_all(asset_type):
+	@classmethod
+	def get_all(cls, asset_type):
 		if asset_type not in AssetManager.document_map:
 			return None;
 		return AssetManager.document_map[asset_type].instances;
 
-	def get_first(asset_type):
+	@classmethod
+	def get_first(cls, asset_type):
 		assets = AssetManager.get_all(asset_type);
 		if assets == None or len(assets) == 0:
 			return None;
 		return assets[0];
 
-	def search(asset_type, asset_name):
+	@classmethod
+	def search(cls, asset_type, asset_name):
 		return next((x for x in AssetManager.get_all(asset_type) if x["name"] == asset_name), None);
-
-	def rename(asset_type, asset_name, new_name):
+	
+	@classmethod
+	def rename(cls, asset_type, asset_name, new_name):
 		asset = AssetManager.search(asset_type, asset_name);
 		if asset == None:
 			return;

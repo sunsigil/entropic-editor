@@ -324,11 +324,16 @@ class CanvasManipRegistry:
 	def update(self, objects, shapes, keys=None):
 		for i in range(len(objects)):
 			self.register(objects[i], shapes[i], key=keys[i] if keys != None else None);
+
 		trash = [];
 		for i in range(len(self.records)):
 			if not self.records[i].object in objects:
 				trash.append(i);
-		process_trash(self.records, trash, True);
+
+		trash.sort();
+		while len(trash) > 0:
+			t = trash.pop();
+			del self.records[t];
 	
 	def search(self, eeid):
 		for record in self.records:

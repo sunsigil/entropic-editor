@@ -4,6 +4,7 @@ from imgui_bundle import imgui;
 from enum import Enum;
 
 import sprites;
+import resources;
 import asset_types;
 import cowtools;
 import colours;
@@ -41,11 +42,6 @@ class ContextMenu:
     def _make_id(gui_id):
         return f"##context-menu-{gui_id}";
 
-    # ping() only records that the last item was right-clicked. The popup is
-    # opened and drawn in begin(), so open_popup and begin_popup always run
-    # under the same ID stack. Opening it here would fail whenever the item
-    # is an expanded tree node, since tree_node pushes an ID until tree_pop
-    # and begin() is usually called after that.
     def ping(gui_id):
         if imgui.is_item_hovered(imgui.HoveredFlags_.allow_when_blocked_by_popup) and imgui.is_mouse_released(imgui.MouseButton_.right):
             ContextMenu.gui_id = gui_id;
@@ -55,7 +51,6 @@ class ContextMenu:
         if ContextMenu.gui_id != gui_id:
             return False;
         window_id = ContextMenu._make_id(gui_id);
-        # A ping with no matching begin() would otherwise stay pending forever.
         if imgui.get_frame_count() - ContextMenu.pending_frame <= 1:
             imgui.open_popup(window_id);
             ContextMenu.pending_frame = -1;
@@ -79,9 +74,6 @@ def combo(gui_id, value, values, fmt=lambda x: x):
 class AssetSelector:
     searches = {};
 
-    # Lists every asset of a type as a menu item, filtered by a search bar
-    # and an optional predicate, and returns the clicked asset or the value
-    # passed in
     def draw(gui_id, value, asset_type, filter=None):
         search = AssetSelector.searches.get(gui_id, "");
         imgui.set_next_item_width(-1);
@@ -101,10 +93,16 @@ class AssetSelector:
 def asset_selector(gui_id, value, asset_type, filter=None):
     return AssetSelector.draw(gui_id, value, asset_type, filter);
 
+def tooltip_warning(text):
+	if imgui.is_item_hovered():
+		imgui.begin_tooltip();
+		imgui.text_colored(imgui.ImVec4(1.0, 0.0, 0.0, 1.0), text);
+		imgui.end_tooltip();
+
 # Custom Widgets
 
 def edit_button(gui_id, size=(16,16)):
-    edit = sprites.SpriteBank.search("editor_edit");
+    edit = resources.sprite("edit");
     return imgui.image_button(f"##{gui_id}", imgui.ImTextureRef(edit.frames[0].handle), size);
 
 def texture(gui_id, texture, size=None):
@@ -449,7 +447,7 @@ def input_aabb(gui_id, value, mode="xyxy"):
     return value;
 
 def input_orientation(gui_id, value):
-    arrow = sprites.SpriteBank.search("editor_arrow");
+    arrow = resources.sprite("arrow");
     orientations = [
         -1, 2, -1,
         3, 0, 1,
@@ -544,3 +542,81 @@ def end_column():
     imgui.end_child();
     imgui.same_line();
     
+
+# Shared rename popup. Call begin() from a context menu and draw() once per
+# frame at window level, since popup IDs hash against the ID stack.
+
+class RenameModal:
+    """Shared rename popup. Call begin() from a context menu and draw() once per
+    frame at window level, since popup IDs hash against the ID stack.
+    is_taken(name) reports whether a name is already in use; apply(target, name)
+    performs the rename once it has been validated."""
+
+    def __init__(self, title, is_taken, apply):
+        self.title = title;
+        self.is_taken = is_taken;
+        self.apply = apply;
+        self.target = None;
+        self.buffer = "";
+        self.pending = False;
+
+    @classmethod
+    def for_assets(cls, asset_type, title="Rename asset"):
+        return cls(
+            title,
+            lambda name: AssetManager.search(asset_type, name) != None,
+            lambda target, name: AssetManager.rename(asset_type, target["name"], name),
+        );
+
+    def begin(self, target):
+        self.target = target;
+        self.buffer = target["name"];
+        self.pending = True;
+
+    def draw(self):
+        if self.pending:
+            imgui.open_popup(self.title);
+            self.pending = False;
+
+        if self.target == None:
+            return;
+
+        visible, _ = imgui.begin_popup_modal(self.title, None, imgui.WindowFlags_.always_auto_resize);
+        if not visible:
+            self.target = None;
+            return;
+
+        old_name = self.target["name"];
+
+        if imgui.is_window_appearing():
+            imgui.set_keyboard_focus_here();
+        imgui.set_next_item_width(256);
+        submitted, self.buffer = imgui.input_text(
+            "##rename", self.buffer, imgui.InputTextFlags_.enter_returns_true
+        );
+
+        new_name = self.buffer.strip();
+        collision = new_name != old_name and self.is_taken(new_name);
+        valid = len(new_name) > 0 and not collision;
+
+        if collision:
+            imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), "Name already in use");
+        elif len(new_name) == 0:
+            imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), "Name cannot be empty");
+
+        imgui.begin_disabled(not valid);
+        commit = imgui.button("Rename") or (submitted and valid);
+        imgui.end_disabled();
+        imgui.same_line();
+        cancel = imgui.button("Cancel") or imgui.is_key_pressed(imgui.Key.escape);
+
+        if commit:
+            if new_name != old_name:
+                self.apply(self.target, new_name);
+            self.target = None;
+            imgui.close_current_popup();
+        elif cancel:
+            self.target = None;
+            imgui.close_current_popup();
+
+        imgui.end_popup();

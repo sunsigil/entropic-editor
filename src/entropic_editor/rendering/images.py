@@ -31,8 +31,6 @@ class Texture:
         self.dirty = False;
 
     def __del__(self):
-        # Deferred: a texture dropped mid-frame may still be in this frame's
-        # draw list, so the GL handle is freed at the start of the next frame.
         handle = getattr(self, "_handle", None);
         if handle is not None:
             _dead_handles.append(handle);

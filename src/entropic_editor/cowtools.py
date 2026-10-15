@@ -23,32 +23,8 @@ def foldl(f, acc, xs):
 		h, t = xs[0], xs[1:];
 		return foldl(f, f(acc, h), t);
 
-def foldr(f, acc, xs):
-	if len(xs) == 0:
-		return acc;
-	else:
-		h, t = xs[0], xs[1:];
-		return f(h, foldr(f, acc, t));
-
-def dedup(l):
-	l_prime = [];
-	for x in l:
-		if not x in l_prime:
-			l_prime.append(x);
-	return l_prime;
-
 def clamp(v, a, b):
 	return min(max(v, a), b);
-
-def align(x, n, mapping=round):
-	return int(mapping(x/n) * n);
-
-def enforce_length(l, n, default=None):
-	if len(l) > n:
-		del l[n:];
-	else:
-		dl = n-len(l);
-		l.extend([default for i in range(dl)]);
 
 def get_by_path(structure, path):
 	if isinstance(path, str):
@@ -86,36 +62,18 @@ def set_by_path(structure, path, value):
 		else:
 			set_by_path(structure[part], path, value);
 
-def process_trash(collection, trash, indices=False):
-	if len(collection) == 0 or len(trash) == 0:
-		return;
-	if indices:
-		trash.sort();
-	while len(trash) > 0:
-		t = trash.pop();
-		if indices:
-			del collection[t];
-		else:
-			collection.remove(t);
-
 class SelectionContext:
 	def __init__(self):
 		self.selections = [];
-		self.env = {};
 
 	def clear(self):
 		self.selections = [];
-		self.env = {};
 	
 	def select(self, item, exclusive=False):
 		if exclusive:
 			self.selections = [];
 		self.selections.append(item);
 
-	def deselect(self, item):
-		if item in self.selections:
-			self.selections.remove(item);
-	
 	def is_selected(self, item):
 		return item in self.selections;
 
@@ -127,24 +85,13 @@ class SelectionContext:
 	def is_empty(self):
 		return len(self.selections) == 0;
 	
-	def env_set(self, key, value):
-		self.env[key] = value;
-
-	def env_get(self, key):
-		if not key in self.env:
-			return None;
-		return self.env[key];
-
 class Clipboard:
 	class CopyMode(Enum):
 		NONE = 0
-		SHALLOW = 1
-		DEEP = 2
+		DEEP = 1
 	
 	def __init__(self):
 		self.contents = [];
-		# how many times the current contents have been pasted, so a caller can
-		# step each paste away from the last instead of stacking them all up
 		self.paste_count = 0;
 
 	def clear(self):
@@ -152,7 +99,6 @@ class Clipboard:
 		self.paste_count = 0;
 
 	def copy(self, value, copy_mode=CopyMode.NONE, exclusive=False):
-		# copying nothing leaves the clipboard alone rather than filling it with None
 		if value == None:
 			return;
 		if exclusive:
@@ -161,16 +107,12 @@ class Clipboard:
 		match copy_mode:
 			case Clipboard.CopyMode.NONE:
 				self.contents.append(value);
-			case Clipboard.CopyMode.SHALLOW:
-				self.contents.append(copy.copy(value));
 			case Clipboard.CopyMode.DEEP:
 				self.contents.append(copy.deepcopy(value));
 
 	def paste(self, destination):
 		pasted = [];
 		for entry in self.contents:
-			# a copy per paste, or pasting twice puts one object in the
-			# destination twice and editing either moves both
 			pasted.append(copy.deepcopy(entry));
 			destination.append(pasted[-1]);
 		if len(pasted) > 0:
@@ -181,6 +123,9 @@ class Clipboard:
 		return len(self.contents) == 0;
 
 class Trash:
+	"""Deferred deletes. Requests queue up while a collection is being drawn
+	and are applied together by flush(), so a list isn't changed under the
+	loop iterating it. Index deletes are applied highest first."""
 	class DeleteItemRequest:
 		def __init__(self, source, item):
 			self.source = source;
@@ -189,50 +134,23 @@ class Trash:
 		def __init__(self, source, index):
 			self.source = source;
 			self.index = index;
-	class Record:
-		def __init__(self, source, item):
-			self.source = source;
-			self.item = copy.deepcopy(item);
-	
-	def __init__(self, deferred):
-		self.deferred = deferred;
+
+	def __init__(self):
 		self.buffer = [];
-		self.contents = [];
-	
+
 	def flush(self):
-		self.buffer = sorted(self.buffer, reverse=True, key = lambda x: x.index if isinstance(x, Trash.DeleteIndexRequest) else 0);
-		while len(self.buffer) > 0:
-			request = self.buffer.pop(0);
+		self.buffer.sort(reverse=True, key=lambda x: x.index if isinstance(x, Trash.DeleteIndexRequest) else 0);
+		for request in self.buffer:
 			if isinstance(request, Trash.DeleteItemRequest):
-				if not request.item in request.source:
-					continue;
-				try:
-					self.contents.append(Trash.Record(request.source, request.item));
-				except:
-					print("[Trash] failed to non-destructively trash one item");
-				request.source.remove(request.item);
+				if request.item in request.source:
+					request.source.remove(request.item);
 			elif isinstance(request, Trash.DeleteIndexRequest):
-				if request.index < -len(request.source) or request.index >= len(request.source):
-					continue;
-				self.contents.append(Trash.Record(request.source, request.source[request.index]));
-				del request.source[request.index];
-	
-	def clear(self):
-		self.contents.clear();
+				if -len(request.source) <= request.index < len(request.source):
+					del request.source[request.index];
+		self.buffer = [];
 
 	def trash_item(self, source, item):
 		self.buffer.append(Trash.DeleteItemRequest(source, item));
-		if not self.deferred:
-			self.flush();
+
 	def trash_index(self, source, index):
 		self.buffer.append(Trash.DeleteIndexRequest(source, index));
-		if not self.deferred:
-			self.flush();
-
-	def restore(self):
-		if len(self.contents) > 0:
-			record = self.contents.pop();
-			record.source.append(record.item);
-	def restore_all(self):
-		while len(self.contents) > 0:
-			self.restore();

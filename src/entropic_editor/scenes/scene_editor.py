@@ -18,6 +18,7 @@ import scenes.decorations;
 import scenes.entities;
 import scenes.foliage;
 import scripts;
+import resources;
 from panels import Panel, PanelManager;
 from rendering.images import Texture;
 
@@ -308,7 +309,7 @@ class WallEditor:
 		self.canvas_manip = CanvasManipulator(self.parent.canvas_io, self.event_queue);
 		self.manip_registry = CanvasManipRegistry();
 		self.selection_context = SelectionContext();
-		self.trash = Trash(deferred=True);
+		self.trash = Trash();
 
 		self.place_mode = "none";
 
@@ -317,7 +318,6 @@ class WallEditor:
 		self.canvas_manip.clear();
 		self.manip_registry.clear();
 		self.selection_context.clear();
-		self.trash.clear();
 	
 	def draw_gui(self):
 		if self.walls == None:
@@ -401,7 +401,7 @@ class DecorationEditor:
 		self.manip_registry = CanvasManipRegistry();
 		self.selection_context = SelectionContext();
 		self.clipboard = Clipboard();
-		self.trash = Trash(deferred=True);
+		self.trash = Trash();
 
 		self.place_mode = "none";
 
@@ -410,7 +410,6 @@ class DecorationEditor:
 		self.canvas_manip.clear();
 		self.manip_registry.clear();
 		self.selection_context.clear();
-		self.trash.clear();
 
 	def draw_gui(self):
 		if self.decorations == None:
@@ -605,7 +604,7 @@ class DoorEditor:
 		for scene in self.door_hierarchy:
 			if scene == self.parent.scene["name"]:
 				for door in self.door_hierarchy[scene]:
-					door_gizmo = SpriteBank.search("editor_door");
+					door_gizmo = resources.sprite("door");
 					x, y = door.entity["position"];
 
 					prototype = AssetManager.search("prototype", door.entity["prototype"]);
@@ -624,7 +623,7 @@ class DoorEditor:
 						idx = 3;
 					self.parent.canvas.draw_image(x-door_gizmo.width/2, y-door_gizmo.height, door_gizmo.frames[idx].source);
 
-					arrow_gizmo = SpriteBank.search("editor_arrow");
+					arrow_gizmo = resources.sprite("arrow");
 					orientation = get_script_data(door.entity, "orientation");
 					x_off = -arrow_gizmo.width/2;
 					y_off = -door_gizmo.height/2-arrow_gizmo.height/2;
@@ -672,7 +671,7 @@ class NavlistEditor:
 		self.selection_context = SelectionContext();
 		self.clipboard = Clipboard();
 		self.clipboard_kind = None;
-		self.trash = Trash(deferred=True);
+		self.trash = Trash();
 
 		self.place_mode = False;
 
@@ -681,7 +680,6 @@ class NavlistEditor:
 		self.canvas_manip.clear();
 		self.manip_registry.clear();
 		self.selection_context.clear();
-		self.trash.clear();
 
 	# Entities address navlists by position in this list, so a deletion has to
 	# repoint everything above it.
@@ -1182,15 +1180,19 @@ class SceneEditor:
 
 		self.selection_context = SelectionContext();
 		self.clipboard = Clipboard();
-		self.trash = Trash(deferred=True);
+		self.trash = Trash();
 
 		self.edit_mode = EditMode.ENTITIES;
 		self.snap = True;
 		self.entity_search = "";
 
-		self.rename_target = None;
-		self.rename_buffer = "";
-		self.rename_pending = False;
+		# Entity names are scoped to the scene, so collisions are checked against
+		# the current scene rather than an asset document.
+		self.rename = RenameModal(
+			"Rename entity",
+			lambda name: any(entity["name"] == name for entity in self.scene["entities"]),
+			lambda entity, name: entity.update(name=name),
+		);
 
 		self.tilemap_editor = TilemapEditor(self);
 		self.wall_editor = WallEditor(self);
@@ -1266,61 +1268,6 @@ class SceneEditor:
 			entity["position"] = [int(position[0]), int(position[1])];
 			self.selection_context.select(entity);
 
-	def begin_rename(self, entity):
-		self.rename_target = entity;
-		self.rename_buffer = entity["name"];
-		# Popup IDs hash against the ID stack, so the popup must be opened
-		# from window level rather than from inside the context menu.
-		self.rename_pending = True;
-
-	def draw_rename_modal(self):
-		modal_id = "Rename entity";
-		if self.rename_pending:
-			imgui.open_popup(modal_id);
-			self.rename_pending = False;
-
-		if self.rename_target == None:
-			return;
-
-		visible, _ = imgui.begin_popup_modal(modal_id, None, imgui.WindowFlags_.always_auto_resize);
-		if not visible:
-			self.rename_target = None;
-			return;
-
-		old_name = self.rename_target["name"];
-
-		if imgui.is_window_appearing():
-			imgui.set_keyboard_focus_here();
-		imgui.set_next_item_width(256);
-		submitted, self.rename_buffer = imgui.input_text(
-			"##rename", self.rename_buffer, imgui.InputTextFlags_.enter_returns_true
-		);
-
-		new_name = self.rename_buffer.strip();
-		collision = new_name != old_name and any(e["name"] == new_name for e in self.scene["entities"]);
-		valid = len(new_name) > 0 and not collision;
-
-		if collision:
-			imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), "Name already in use");
-		elif len(new_name) == 0:
-			imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), "Name cannot be empty");
-
-		imgui.begin_disabled(not valid);
-		commit = imgui.button("Rename") or (submitted and valid);
-		imgui.end_disabled();
-		imgui.same_line();
-		cancel = imgui.button("Cancel") or imgui.is_key_pressed(imgui.Key.escape);
-
-		if commit:
-			self.rename_target["name"] = new_name;
-			self.rename_target = None;
-			imgui.close_current_popup();
-		elif cancel:
-			self.rename_target = None;
-			imgui.close_current_popup();
-
-		imgui.end_popup();
-
 	def draw_menu_bar(self):
 		if imgui.begin_menu_bar():
 
@@ -1370,7 +1317,7 @@ class SceneEditor:
 
 			if imgui.begin_popup_context_item():
 				if imgui.menu_item_simple("Rename"):
-					self.begin_rename(entity);
+					self.rename.begin(entity);
 					imgui.close_current_popup();
 				if imgui.menu_item_simple("Delete"):
 					self.trash.trash_item(self.scene["entities"], entity);
@@ -1463,7 +1410,7 @@ class SceneEditor:
 				if selection != None:
 					self.trash.trash_item(self.scene["entities"], selection);
 			
-			self.draw_rename_modal();
+			self.rename.draw();
 
 			self.canvas_manip.tick();
 			self.handle_events();

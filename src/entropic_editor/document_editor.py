@@ -17,65 +17,7 @@ class DocumentEditor(Panel):
 		self.search_cache = [];
 		self.search_generation = document.generation;
 
-		self.rename_target = None;
-		self.rename_buffer = "";
-		self.rename_pending = False;
-
-	def begin_rename(self, instance):
-		self.rename_target = instance;
-		self.rename_buffer = instance["name"];
-		# Popup IDs hash against the ID stack, so the popup must be opened
-		# from window level rather than from inside the context menu.
-		self.rename_pending = True;
-	
-	def draw_rename_modal(self):
-		modal_id = "Rename asset";
-		if self.rename_pending:
-			imgui.open_popup(modal_id);
-			self.rename_pending = False;
-
-		if self.rename_target == None:
-			return;
-
-		visible, _ = imgui.begin_popup_modal(modal_id, None, imgui.WindowFlags_.always_auto_resize);
-		if not visible:
-			self.rename_target = None;
-			return;
-
-		old_name = self.rename_target["name"];
-
-		if imgui.is_window_appearing():
-			imgui.set_keyboard_focus_here();
-		imgui.set_next_item_width(256);
-		submitted, self.rename_buffer = imgui.input_text(
-			"##rename", self.rename_buffer, imgui.InputTextFlags_.enter_returns_true
-		);
-
-		new_name = self.rename_buffer.strip();
-		collision = new_name != old_name and AssetManager.search(self.document.type_name, new_name) != None;
-		valid = len(new_name) > 0 and not collision;
-
-		if collision:
-			imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), "Name already in use");
-		elif len(new_name) == 0:
-			imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), "Name cannot be empty");
-
-		imgui.begin_disabled(not valid);
-		commit = imgui.button("Rename") or (submitted and valid);
-		imgui.end_disabled();
-		imgui.same_line();
-		cancel = imgui.button("Cancel") or imgui.is_key_pressed(imgui.Key.escape);
-
-		if commit:
-			if new_name != old_name:
-				AssetManager.rename(self.document.type_name, old_name, new_name);
-			self.rename_target = None;
-			imgui.close_current_popup();
-		elif cancel:
-			self.rename_target = None;
-			imgui.close_current_popup();
-
-		imgui.end_popup();
+		self.rename = gui.RenameModal.for_assets(document.type_name);
 
 	def body(self):
 
@@ -110,11 +52,11 @@ class DocumentEditor(Panel):
 			);
 			if gui.ContextMenu.begin(gui_id):
 				if "name" in instance and imgui.menu_item_simple("Rename"):
-					self.begin_rename(instance);
+					self.rename.begin(instance);
 				if imgui.menu_item_simple("Delete"):
 					self.document.delete_entry(instance);
 				if imgui.menu_item_simple("Duplicate"):
 					self.document.spawn_entry(instance);
 				imgui.end_popup();
 
-		self.draw_rename_modal();
+		self.rename.draw();

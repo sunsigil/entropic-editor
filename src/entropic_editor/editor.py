@@ -18,6 +18,7 @@ import traceback;
 import glfw;
 from imgui_bundle import imgui;
 import rendering.images as ee_img;
+import resources;
 import window;
 import paths;
 
@@ -84,7 +85,7 @@ if __name__ == "__main__":
 	];
 	window_flags = foldl(lambda a, b : a | b, 0, window_flag_list);
 
-	splash = ee_img.Texture.load(editor_path/"resources/splash.png");
+	splash = resources.image("splash");
 	splash_flag_list = [
 		imgui.WindowFlags_.no_scrollbar,
 		imgui.WindowFlags_.no_scroll_with_mouse
