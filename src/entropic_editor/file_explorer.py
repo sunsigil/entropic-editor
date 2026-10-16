@@ -4,7 +4,7 @@ import os;
 from assets import AssetManager;
 import copy;
 import sprites;
-import paths;
+import project;
 
 class FileExplorer:
 	last = None;
@@ -55,7 +55,7 @@ class FileExplorer:
 			imgui.end_menu_bar();
 
 		listings = [];
-		if self.current.absolute() != paths.game_root():
+		if self.current.absolute() != project.game_root():
 			listings.append(self.current.parent.absolute());
 		for entry in self.current.iterdir():
 			hidden = entry.name.startswith(".") or entry.name.startswith("__");
@@ -84,6 +84,6 @@ class FileExplorer:
 					self.current = item;
 					self.search = "";
 				else:
-					self.result = paths.relativize(item);
+					self.result = project.relativize(item);
 	
 

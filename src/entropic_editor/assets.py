@@ -37,7 +37,6 @@ class AssetDocument:
 		self.type_tree = asset_types.construct_type(type_expr["type"]);
 		if isinstance(self.type_tree, asset_types.Object) and "name" in self.type_tree.elements:
 			self.type_tree.elements["name"].read_only = True;
-		self.type_helper = asset_types.TypeHelper(self.type_tree);
 		self.instances = self.data["instances"];
 	
 		self.id_set = set();
@@ -95,6 +94,9 @@ class AssetDocument:
 		"""Edited since the last history commit."""
 		return self.instances != self.committed;
 
+	def bind(self, instance):
+		return asset_types.Binding(None, self.type_tree, instance);
+
 	def refresh(self, changed_only=False):
 		"""Rectify every instance against the type tree. Editors rely on this to
 		fill in the keys a freshly placed object is missing before its variant is
@@ -108,7 +110,7 @@ class AssetDocument:
 		for i, instance in enumerate(self.instances):
 			if committed != None and i < len(committed) and instance == committed[i]:
 				continue;
-			self.type_helper.rectify(instance);
+			self.bind(instance).rectify();
 	
 	def save(self, path=None):
 		if path == None:
@@ -144,40 +146,17 @@ class AssetManager:
 		return AssetManager.document_map[asset_type];
 
 	@classmethod
-	def get_tree(cls, asset_type) -> asset_types.Type:
-		if asset_type not in AssetManager.document_map:
-			return None;
-		return AssetManager.document_map[asset_type].type_tree;
-
-	@classmethod
-	def get_all(cls, asset_type):
-		if asset_type not in AssetManager.document_map:
-			return None;
-		return AssetManager.document_map[asset_type].instances;
-
-	@classmethod
-	def get_first(cls, asset_type):
-		assets = AssetManager.get_all(asset_type);
-		if assets == None or len(assets) == 0:
-			return None;
-		return assets[0];
-
-	@classmethod
-	def search(cls, asset_type, asset_name):
-		return next((x for x in AssetManager.get_all(asset_type) if x["name"] == asset_name), None);
-	
-	@classmethod
 	def rename(cls, asset_type, asset_name, new_name):
-		asset = AssetManager.search(asset_type, asset_name);
+		asset = AssetManager.get_document(asset_type).search(asset_name);
 		if asset == None:
 			return;
 
 		asset["name"] = new_name;
 
 		for doc in AssetManager.documents:
-			assets = AssetManager.get_all(doc.type_name);
+			assets = AssetManager.get_document(doc.type_name).instances;
 			for asset in assets:
-				nodes = doc.type_helper.flatten(asset);
+				nodes = doc.bind(asset).flatten();
 				for node in nodes:
 					if node.I == None:
 						continue;
@@ -192,7 +171,7 @@ class AssetManager:
 								node.I[key] = new_name;
 
 def rectify_entity_script_data(entity):
-	prototype = AssetManager.search("prototype", entity["prototype"]);
+	prototype = AssetManager.get_document("prototype").search(entity["prototype"]);
 	if prototype == None:
 		return;
 	prototype["script_data"] = scripts.rectify_all_script_data(prototype["scripts"], prototype["script_data"]);

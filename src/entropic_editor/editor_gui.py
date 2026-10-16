@@ -12,7 +12,7 @@ import colours;
 from assets import AssetManager;
 from panels import ToolRegistry, PanelManager;
 import file_explorer;
-import paths;
+import project;
 import asset_explorer;
 from text_editor import TextEditor;
 
@@ -80,7 +80,7 @@ class AssetSelector:
         _, search = imgui.input_text_with_hint(f"##search-{gui_id}", "Search", search);
         AssetSelector.searches[gui_id] = search;
 
-        assets = sorted(AssetManager.get_all(asset_type), key=lambda x: x["name"]);
+        assets = sorted(AssetManager.get_document(asset_type).instances, key=lambda x: x["name"]);
         for asset in assets:
             if not search in asset["name"]:
                 continue;
@@ -235,7 +235,7 @@ def input_file(gui_id, value, pattern, root=None, asset_type=None):
     imgui.same_line();
     browse = imgui.button(f"Browse##{gui_id}");
 
-    directory = paths.resolve(root) if root else paths.game_root();
+    directory = project.resolve(root) if root else project.game_root();
     harvest = pick(gui_id, file_explorer.FileExplorer, browse, lambda explorer: explorer.configure(directory, pattern, asset_type));
     return str(harvest) if harvest != None else value;
 
@@ -353,7 +353,7 @@ def typed_input(gui_id, T, value, previews=False, tooltip=False):
             hide_id = gui_id.startswith("##");
             if edit_button(gui_id if hide_id else f"##{gui_id}") and win == None:
                 win = tool.open(win_id);
-                win.instance.configure_path(paths.resolve(value), language = TextEditor.lua_lang);
+                win.instance.configure_path(project.resolve(value), language = TextEditor.lua_lang);
 
     if isinstance(T, asset_types.Flags):
         value = input_flags(gui_id, value, T.values);
@@ -497,7 +497,7 @@ def swatch_grid(gui_id, palette, size=20, cols=8):
 
 def input_colour(gui_id, value, palette=None):
     gui_id = str(gui_id);
-    palette = AssetManager.search("palette", palette) if isinstance(palette, str) else palette;
+    palette = AssetManager.get_document("palette").search(palette) if isinstance(palette, str) else palette;
 
     r, g, b = value;
     # the built-in picker can't be handed a palette, so it makes way for one
@@ -564,7 +564,7 @@ class RenameModal:
     def for_assets(cls, asset_type, title="Rename asset"):
         return cls(
             title,
-            lambda name: AssetManager.search(asset_type, name) != None,
+            lambda name: AssetManager.get_document(asset_type).search(name) != None,
             lambda target, name: AssetManager.rename(asset_type, target["name"], name),
         );
 

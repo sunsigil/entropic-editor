@@ -357,13 +357,14 @@ def construct_type(expr, attributes={}) -> Type:
 
 	return Asset(expr, attributes=attributes);
 
-class MapNode:	
-	def __init__(self, parent: "MapNode", T: Type, I):
+class Binding:
+	def __init__(self, parent: "Binding", T: Type, I):
 		self.parent = parent;
 		self.update(T, I);
+
 	def __repr__(self):
 		return repr(self.T);
-	
+
 	def update(self, T: Type, I):
 		self.T = T;
 		self.I = I;
@@ -371,7 +372,7 @@ class MapNode:
 		if isinstance(T, Object):
 			self.children = {};
 			for key in T.elements:
-				self.children[key] = MapNode(
+				self.children[key] = Binding(
 					self,
 					T.elements[key],
 					I[key] if I != None and key in I else None
@@ -380,7 +381,7 @@ class MapNode:
 			self.children = [];
 			if I != None:
 				for child in self.I:
-					self.children.append(MapNode(
+					self.children.append(Binding(
 						self,
 						T.T,
 						child
@@ -410,77 +411,67 @@ class MapNode:
 				return self.children[part].search(path);
 			if isinstance(self.children, list) and int(part) >= 0 and int(part) < len(self.children):
 				return self.children[int(part)].search(path);
-		
+
 		return None;
 
-class TypeHelper:
-	def __init__(self, T):
-		self.root = T;
-	
-	def search(self, path):
-		return self.root.search(path);
-
-	def _evaluate_conditions(self, map_node) -> bool:
-		if not hasattr(map_node.T, "conditions"):
+	def _evaluate_conditions(self) -> bool:
+		if not hasattr(self.T, "conditions"):
 			return True;
-		conditions = map_node.T.conditions;
+		conditions = self.T.conditions;
 		evaluation = True;
 		for condition in conditions:
-			crux = map_node.search(condition["key"]);
+			crux = self.search(condition["key"]);
 			if crux == None or crux.I != condition["value"]:
 				evaluation = False;
 				break;
 		return evaluation;
-	
-	def _rectify(self, map_node):
-		if not hasattr(map_node, "children"):
+
+	def rectify(self):
+		if not hasattr(self, "children"):
 			return;
 
-		if isinstance(map_node.T, List):
-			for child in map_node.children:
-				self._rectify(child);
-		
-		if isinstance(map_node.T, Object):
+		if isinstance(self.T, List):
+			for child in self.children:
+				child.rectify();
+
+		if isinstance(self.T, Object):
 			# Exclusion pass
-			canon_keys = [key for key in map_node.children];
+			canon_keys = [key for key in self.children];
 			violations = [];
-			for key in map_node.I:
+			for key in self.I:
 				if not key in canon_keys:
 					violations.append(key);
 			for key in violations:
-				del map_node.I[key];
+				del self.I[key];
 
 			# Requirement pass
-			for key,child in map_node.children.items():
+			for key,child in self.children.items():
 				if child.I == None:
 					child.update(child.T, child.T.prototype());
-					map_node.I[key] = child.I;
+					self.I[key] = child.I;
 
 			# Propagation pass
-			for key,child in map_node.children.items():
-				self._rectify(child);
-		
+			for key,child in self.children.items():
+				child.rectify();
+
 			# Conditions pass
 			violations = [];
-			for key,child in map_node.children.items():
-				if not self._evaluate_conditions(child):
+			for key,child in self.children.items():
+				if not child._evaluate_conditions():
 					violations.append(key);
 			for key in violations:
-				del map_node.children[key];
-				del map_node.I[key];
+				del self.children[key];
+				del self.I[key];
 
-	def rectify(self, instance):
-		self._rectify(MapNode(None, self.root, instance));
-
-	def _flatten(self, node: MapNode, acc):
-		acc.append(node);
-		if isinstance(node.T, List):
-			for child in node.children:
-				self._flatten(child, acc);
-		if isinstance(node.T, Object):
-			for key in node.children:
-				self._flatten(node.children[key], acc);
-	def flatten(self, instance):
+	def _flatten(self, acc):
+		acc.append(self);
+		if isinstance(self.T, List):
+			for child in self.children:
+				child._flatten(acc);
+		if isinstance(self.T, Object):
+			for key in self.children:
+				self.children[key]._flatten(acc);
+	def flatten(self):
 		acc = [];
-		self._flatten(MapNode(None, self.root, instance), acc);
+		self._flatten(acc);
 		return acc;

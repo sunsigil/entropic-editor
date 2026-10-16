@@ -35,12 +35,12 @@ class FoliageEditor:
 	def validate(self):
 		# the scene's list can be swapped out under us by an undo
 		self.entities = self.parent.scene["entities"];
-		if self.prototype != None and self.prototype not in AssetManager.get_all("prototype"):
+		if self.prototype != None and self.prototype not in AssetManager.get_document("prototype").instances:
 			self.prototype = None;
 
 	def draw_palette(self):
 		_, self.search = imgui.input_text("Search", self.search);
-		prototypes = sorted(AssetManager.get_all("prototype"), key=lambda x: x["name"]);
+		prototypes = sorted(AssetManager.get_document("prototype").instances, key=lambda x: x["name"]);
 		prototypes = [x for x in prototypes if self.search in x["name"]];
 
 		wdw_w = imgui.get_content_region_avail().x;
@@ -108,7 +108,7 @@ class FoliageEditor:
 			if InputManager.is_pressed(glfw.MOUSE_BUTTON_LEFT):
 				entity = self.find_entity(self.cursor);
 				if entity != None:
-					self.prototype = AssetManager.search("prototype", entity["prototype"]);
+					self.prototype = AssetManager.get_document("prototype").search(entity["prototype"]);
 			return;
 
 		if self.prototype == None:

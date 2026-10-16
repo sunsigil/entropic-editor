@@ -25,7 +25,7 @@ class PrototypeSpawner(Panel):
     def body(self):
         self.sprite = input_asset("Sprite", self.sprite, "sprite");
 
-        if AssetManager.search("sprite", self.sprite) != None:
+        if AssetManager.get_document("sprite").search(self.sprite) != None:
             if imgui.button("Create"):
                 prototype = AssetManager.get_document("prototype").spawn_entry();
                 prototype["name"] = self.sprite;
@@ -73,7 +73,7 @@ class PrototypeEditor:
         self.tabs = ["sprite", "boxes", "anchors"];
         self.tab = self.tabs[0];
 
-        self._load_prototype(AssetManager.get_first("prototype"));
+        self._load_prototype(next(iter(AssetManager.get_document("prototype").instances), None));
     
     def gui_draw_selector(self):
         prototype = asset_selector("prototype-selector", self.prototype, "prototype");

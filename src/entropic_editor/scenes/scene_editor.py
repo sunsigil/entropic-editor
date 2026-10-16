@@ -11,7 +11,7 @@ from input import InputManager;
 from editor_gui import *;
 from geometry import *;
 import scenes.walls;
-import paths;
+import project;
 import scenes.tilemaps;
 import scenes.navlists;
 import scenes.decorations;
@@ -89,7 +89,7 @@ class TilemapEditor:
 			self.paint_last = None;
 
 	def create_tilemap(self):
-		tilemap = AssetManager.get_tree("scene").search("tilemaps").inmost.prototype();
+		tilemap = AssetManager.get_document("scene").type_tree.search("tilemaps").inmost.prototype();
 		self.tilemaps.append(tilemap);
 		self.tilemap = tilemap;
 
@@ -197,7 +197,7 @@ class TilemapEditor:
 		self.draw_palette();
 
 		self.tilemap["csv"] = input_file("CSV", self.tilemap["csv"], "*.csv", root="assets/scenes/tilemaps");
-		csv_path = paths.resolve(self.tilemap["csv"]) if self.tilemap["csv"] else None;
+		csv_path = project.resolve(self.tilemap["csv"]) if self.tilemap["csv"] else None;
 		if imgui.button("Import"):
 			scenes.tilemaps.import_tilemap(self.tilemap, csv_path);
 		imgui.same_line();
@@ -552,10 +552,10 @@ class DoorEditor:
 	def poll_all_doors(self):
 		self.door_pool = [];
 		self.door_hierarchy = {};
-		for scene in AssetManager.get_all("scene"):
+		for scene in AssetManager.get_document("scene").instances:
 			self.door_hierarchy[scene["name"]] = [];
 			for entity in scene["entities"]:
-				prototype = AssetManager.search("prototype", entity["prototype"]);
+				prototype = AssetManager.get_document("prototype").search(entity["prototype"]);
 				if prototype == None:
 					continue;
 				if "door" in prototype["scripts"]:
@@ -575,9 +575,9 @@ class DoorEditor:
 					if imgui.tree_node(door.entity["name"]+"##"+str(id(door.entity))):
 						to_scene = get_script_data(door.entity, "to_scene");
 						to_entity = get_script_data(door.entity, "to_entity");
-						if AssetManager.search("scene", to_scene["value"]) == None:
+						if AssetManager.get_document("scene").search(to_scene["value"]) == None:
 							to_scene["value"] = "";
-						elif next((x for x in AssetManager.search("scene", to_scene["value"])["entities"] if x["name"] == to_entity["value"]), None) == None:
+						elif next((x for x in AssetManager.get_document("scene").search(to_scene["value"])["entities"] if x["name"] == to_entity["value"]), None) == None:
 							to_entity["value"] = "";
 						
 						if to_scene["value"] == "":
@@ -607,7 +607,7 @@ class DoorEditor:
 					door_gizmo = resources.sprite("door");
 					x, y = door.entity["position"];
 
-					prototype = AssetManager.search("prototype", door.entity["prototype"]);
+					prototype = AssetManager.get_document("prototype").search(door.entity["prototype"]);
 					if prototype["has_trigger"]:
 						x0, y0, x1, y1 = prototype["trigger"];
 						w, h = x1-x0, y1-y0;
@@ -955,7 +955,7 @@ class SceneViewer:
 				scenes.tilemaps.canvas_draw(canvas, tilemap);
 
 	def draw_entity(self, canvas, entity):
-		prototype = AssetManager.search("prototype", entity["prototype"]);
+		prototype = AssetManager.get_document("prototype").search(entity["prototype"]);
 		sprite = SpriteBank.search(prototype["sprite"], safe=False) if prototype != None else None;
 
 		x, y = entity["position"];
@@ -969,7 +969,7 @@ class SceneViewer:
 
 	def draw_entity_overlays(self, canvas):
 		for entity in self.parent.scene["entities"]:
-			prototype = AssetManager.search("prototype", entity["prototype"]);
+			prototype = AssetManager.get_document("prototype").search(entity["prototype"]);
 			x, y = entity["position"];
 
 			if prototype != None and self.shows("boxes"):
@@ -1087,7 +1087,7 @@ class SceneEditor:
 			imgui.set_next_item_width(96);
 			self.scale = input_int("Scale", self.scale, low_bound=1, high_bound=8);
 
-			valid = paths.is_stored(self.path) and self.path.lower().endswith(".png");
+			valid = project.is_stored(self.path) and self.path.lower().endswith(".png");
 			if not valid:
 				imgui.text_colored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), "Path must be a .png relative to the game directory");
 
@@ -1125,7 +1125,7 @@ class SceneEditor:
 		return target.texture;
 
 	def export_render(self, stored_path, scale=1):
-		path = paths.resolve(stored_path);
+		path = project.resolve(stored_path);
 		path.parent.mkdir(parents=True, exist_ok=True);
 		self.render_scene(scale).export(path);
 
@@ -1158,7 +1158,7 @@ class SceneEditor:
 		self.foliage_editor.on_load_scene();
 
 	def _is_scene_loaded(self):
-		return self.scene in AssetManager.get_all("scene");
+		return self.scene in AssetManager.get_document("scene").instances;
 
 	def __init__(self):
 		self.canvas_size = (1000, 720);
@@ -1205,7 +1205,7 @@ class SceneEditor:
 
 		self.spawn_popup = None;
 
-		self._load_scene(AssetManager.get_first("scene"));
+		self._load_scene(next(iter(AssetManager.get_document("scene").instances), None));
 
 	def handle_events(self):
 		while len(self.event_queue) > 0:
@@ -1241,7 +1241,7 @@ class SceneEditor:
 				CanvasManipulator.default_view_drag_handler(self.canvas, event);
 	
 	def get_entity_sprite(self, entity):
-		prototype = AssetManager.search("prototype", entity["prototype"]);
+		prototype = AssetManager.get_document("prototype").search(entity["prototype"]);
 		return SpriteBank.search(prototype["sprite"] if prototype != None else "null");
 	
 	def synchronize_manip(self):
@@ -1273,7 +1273,7 @@ class SceneEditor:
 
 			if imgui.begin_menu("Scene"):
 				if imgui.begin_menu("Open"):
-					scenes = AssetManager.get_all("scene");
+					scenes = AssetManager.get_document("scene").instances;
 					scene_last = self.scene;
 					for scene in scenes:
 						if imgui.menu_item_simple(scene["name"]):

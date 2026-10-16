@@ -12,11 +12,11 @@ class AssetExplorer:
 		self.type = type;
 	
 	def _is_private(self, x):
-		asset = AssetManager.search(self.type, x);
+		asset = AssetManager.get_document(self.type).search(x);
 		return asset.get("anonymous", False);
 
 	def draw(self):
-		listings = [s["name"] for s in AssetManager.get_all(self.type)];
+		listings = [s["name"] for s in AssetManager.get_document(self.type).instances];
 
 		_, self.search = imgui.input_text("Search", self.search);
 		if len(self.search) > 0:
@@ -37,7 +37,7 @@ class AssetExplorer:
 				if i < len(listings):
 					imgui.begin_group();
 
-					asset = AssetManager.search(self.type, listings[i]);
+					asset = AssetManager.get_document(self.type).search(listings[i]);
 					sprite_name = listings[i] if self.type == "sprite" else (asset["sprite"] if "sprite" in asset else "");
 					sprite = sprites.SpriteBank.search(sprite_name);
 

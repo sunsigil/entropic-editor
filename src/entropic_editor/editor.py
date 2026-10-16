@@ -20,12 +20,11 @@ from imgui_bundle import imgui;
 import rendering.images as ee_img;
 import resources;
 import window;
-import paths;
+import project;
 
 from cowtools import *;
 from assets import *;
 from panels import Tool, ToolRegistry, PanelManager;
-import asset_types;
 
 from sprites import SpriteBank;
 from scripts import ScriptBank;
@@ -37,7 +36,6 @@ from dialogue_editor import DialogueEditor;
 from recipe_editor import RecipeEditor;
 from coder import EnDeCoder;
 from file_explorer import FileExplorer;
-from mesh_editor import Mesh2DEditor;
 from document_editor import DocumentEditor;
 from palette_viewer import PaletteViewer;
 from asset_explorer import AssetExplorer;
@@ -52,22 +50,13 @@ if __name__ == "__main__":
 		description="Interactive editor for game content"
 	);
 	parser.add_argument("game_path", type=Path);
-	parser.add_argument("--types", type=Path);
 	args = parser.parse_args(sys.argv[1:]);
 
-	editor_path = Path(__file__).parent.absolute();
 	game_path = Path(args.game_path).absolute();
-	typefile_path = args.types;
-	
-	paths.configure(editor_path, game_path);
+
 	win = window.Window("Entropic Editor", 1920, 1080);
 
-	if typefile_path != None and typefile_path.is_file():
-		asset_types.load_typefile(typefile_path);
-	
-	for path in (game_path/"assets").rglob("*.json"):
-		if AssetDocument.is_file_asset_document(path):
-			AssetManager.load_document(path);
+	project.load(game_path);
 	make_backups(game_path/"backups/cold", cold=True);
 	HOT_BACKUP_INTERVAL = 5.0;
 	hot_backup_timestamp = glfw.get_time();
@@ -105,7 +94,6 @@ if __name__ == "__main__":
 	ToolRegistry.register(Tool(SceneEditor, "Scene Editor", size=(1500, 880), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolRegistry.register(Tool(DialogueEditor, "Dialogue Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolRegistry.register(Tool(RecipeEditor, "Recipe Editor", flags=tool_flags));
-	ToolRegistry.register(Tool(Mesh2DEditor, "Mesh2D Editor", flags=tool_flags));
 	ToolRegistry.register(Tool(PaletteViewer, "Palette Viewer", flags=tool_flags+[imgui.WindowFlags_.menu_bar]));
 	ToolRegistry.register(Tool(EnDeCoder, "EnDeCoder", flags=tool_flags));
 	ToolRegistry.register(Tool(GlyphExplorer, "Glyph Explorer", flags=tool_flags));
@@ -126,7 +114,7 @@ if __name__ == "__main__":
 
 			ee_img.flush_dead_textures();
 			SpriteBank.refresh();
-			ScriptBank.refresh(AssetManager.get_all("script"));
+			ScriptBank.refresh(AssetManager.get_document("script").instances);
 			InputManager.tick();
 
 			for document in AssetManager.documents:

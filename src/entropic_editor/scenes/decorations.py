@@ -75,7 +75,7 @@ def make_manip(decoration):
 def get_colour_palette():
 	"""The colour field names its palette in the scene schema. Type.search only
 	walks objects, so the list of decorations is stepped over by hand."""
-	tree = AssetManager.get_tree("scene");
+	tree = AssetManager.get_document("scene").type_tree;
 	decorations = tree.search("decorations") if tree != None else None;
 	colour = decorations.inmost.search("colour") if decorations != None else None;
 	return getattr(colour, "palette", None);

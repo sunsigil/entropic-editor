@@ -105,9 +105,9 @@ class ScriptBank:
                     record.timestamp = timestamp;
     
     def refresh(script_assets):
-        import paths;
+        import project;
         for asset in script_assets:
-            ScriptBank.update(asset["name"], paths.resolve(asset["path"]));
+            ScriptBank.update(asset["name"], project.resolve(asset["path"]));
     
     def search(name):
         return ScriptBank.by_name[name].script if name in ScriptBank.by_name else None;

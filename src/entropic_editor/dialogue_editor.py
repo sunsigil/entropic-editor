@@ -221,7 +221,7 @@ class DialogueEditor:
 		self.layout_pending = never_laid_out(self.graph.get_nodes());
 
 	def place(self, node, position=None):
-		if position == None:
+		if position is None:
 			w, h = imnodes.get_screen_size();
 			position = imnodes.screen_to_canvas(imgui.ImVec2(w/2, h/2));
 		set_position(node, position.x, position.y);

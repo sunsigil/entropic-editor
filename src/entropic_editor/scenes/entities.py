@@ -2,7 +2,7 @@ from assets import AssetManager;
 from sprites import SpriteBank;
 
 def get_sprite(entity):
-	prototype = AssetManager.search("prototype", entity["prototype"]);
+	prototype = AssetManager.get_document("prototype").search(entity["prototype"]);
 	if prototype == None:
 		return None;
 	return SpriteBank.search(prototype["sprite"], safe=False);
@@ -10,7 +10,7 @@ def get_sprite(entity):
 def get_aabb(entity):
 	x, y = entity["position"];
 
-	prototype = AssetManager.search("prototype", entity["prototype"]);
+	prototype = AssetManager.get_document("prototype").search(entity["prototype"]);
 	if prototype != None:
 		sprite = SpriteBank.search(prototype["sprite"], safe=False);
 		if sprite != None:
@@ -31,12 +31,12 @@ def get_body_key(entity):
 	return (0, 0, get_depth(entity));
 
 def get_depth(entity):
-	prototype = AssetManager.search("prototype", entity["prototype"]);
+	prototype = AssetManager.get_document("prototype").search(entity["prototype"]);
 	y_offset = prototype["y_sort_offset"] if prototype != None else 0;
 	return get_aabb(entity)[3] + y_offset;
 
 def spawn(scene, prototype_name, position):
-	entity = AssetManager.get_tree("scene").search("entities").inmost.prototype();
+	entity = AssetManager.get_document("scene").type_tree.search("entities").inmost.prototype();
 	entity["name"] = "";
 	entity["position"] = [int(position[0]), int(position[1])];
 	entity["prototype"] = prototype_name;

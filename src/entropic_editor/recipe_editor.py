@@ -55,7 +55,7 @@ class RecipeEditor:
 				for x in range(3):
 					idx = y * 3 + x;
 					item_name = self.recipe["inputs"][idx];
-					item = AssetManager.search("item", item_name);
+					item = AssetManager.get_document("item").search(item_name);
 					if item == None:
 						continue;
 					
@@ -81,7 +81,7 @@ class RecipeEditor:
 			return;
 
 		item_name = self.recipe["output"];
-		item = AssetManager.search("item", item_name);
+		item = AssetManager.get_document("item").search(item_name);
 		sprite = SpriteBank.search(item["sprite"]) if item != None else SpriteBank.search("null_sprite");
 
 		true_height = sprite.height;
