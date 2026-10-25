@@ -123,9 +123,6 @@ class Clipboard:
 		return len(self.contents) == 0;
 
 class Trash:
-	"""Deferred deletes. Requests queue up while a collection is being drawn
-	and are applied together by flush(), so a list isn't changed under the
-	loop iterating it. Index deletes are applied highest first."""
 	class DeleteItemRequest:
 		def __init__(self, source, item):
 			self.source = source;

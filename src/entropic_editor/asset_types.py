@@ -297,9 +297,6 @@ def load_typefile(path):
 	file.close();
 
 	for name,expr in data.items():
-		# The entry's attributes belong to the type it defines. Dropping them
-		# here cost every named type its fixed_length, so vec2/aabb/colour all
-		# defaulted to an empty list and the first editor to index one crashed.
 		attributes = expr["attributes"] if "attributes" in expr else {};
 		T = construct_type(expr["type"], attributes=attributes);
 		TypeRegistry.register(name, T);
@@ -308,7 +305,8 @@ def load_typefile(path):
 
 def construct_type(expr, attributes={}) -> Type:
 	if isinstance(expr, list):
-		return List(construct_type(expr[0]), attributes=attributes);
+		has_inner_attributes = len(expr) > 1 and isinstance(expr[1], dict);
+		return List(construct_type(expr[0], expr[1] if has_inner_attributes else {}), attributes=attributes);
 
 	if isinstance(expr, dict):
 		elements = {};
@@ -343,13 +341,6 @@ def construct_type(expr, attributes={}) -> Type:
 	if registered != None:
 		if len(attributes) == 0:
 			return registered;
-		# A field referencing a named type may still attribute it -- a colour
-		# with its own default_value, say. The registered type is shared by
-		# every field that names it, so the attributes go onto a copy, layered
-		# over whatever the type declared for itself. The copy is shallow on
-		# purpose: it shares the substructure and only the top-level attributes
-		# differ. Nothing compares types by identity, and Type.__eq__ is
-		# structural, so a copy still matches its original.
 		clone = copy.copy(registered);
 		for key in attributes:
 			setattr(clone, key, attributes[key]);

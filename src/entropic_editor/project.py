@@ -4,7 +4,7 @@
 from pathlib import Path, PurePosixPath;
 
 import asset_types;
-from assets import AssetDocument, AssetManager;
+from assets import AssetManager, is_asset_document;
 
 _editor_root = None;
 _game_root = None;
@@ -46,7 +46,7 @@ def load(root):
 		asset_types.load_typefile(typefile);
 
 	for path in sorted((root / "assets").rglob("*.json")):
-		if AssetDocument.is_file_asset_document(path):
+		if is_asset_document(path):
 			AssetManager.load_document(path);
 
 	return AssetManager;

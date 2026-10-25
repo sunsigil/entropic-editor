@@ -118,8 +118,12 @@ def draw_line(node, idx, edits):
 
 	_list_controls(node, "lines", idx, edits);
 
-def draw_edge(node, idx, edits):
+def draw_edge(node, idx, edits, doc):
 	edge = node["edges"][idx];
+	edge_type = doc.type_tree.search("edges").inmost;
+	gate_types = edge_type.elements["gate_type"].values;
+	check_type = edge_type.search("gate/flags").T;
+	flag_ops = check_type.elements["op"].values;
 	text_width = max(64, len(edge["text"]) * 8 + 32);
 	def right_align():
 		imgui.dummy((NODE_WIDTH-text_width, 0));
@@ -139,7 +143,28 @@ def draw_edge(node, idx, edits):
 	imnodes.end_pin();
 
 	right_align();
-	edge["condition"] = gui.input_string("Condition", edge["condition"], True, True);
+	edge["gate_type"] = gui.input_enum("Gate", edge["gate_type"], gate_types);
+
+	gate = edge["gate"];
+	if edge["gate_type"] == "script":
+		right_align();
+		gate["script"] = gui.input_string("Script", gate["script"], True, True);
+	elif edge["gate_type"] == "flags":
+		checks = gate["flags"];
+		for i, check in enumerate(checks):
+			imgui.push_id(str(i));
+			right_align();
+			check["flag"] = gui.input_string("##flag", check["flag"]);
+			imgui.same_line();
+			imgui.set_next_item_width(96);
+			check["op"] = gui.input_enum("##op", check["op"], flag_ops);
+			imgui.same_line();
+			if imgui.button("-"):
+				edits.append(lambda i=i: checks.pop(i));
+			imgui.pop_id();
+		right_align();
+		if imgui.button("New flag"):
+			checks.append(check_type.prototype());
 
 	if node["random"]:
 		right_align();
@@ -183,7 +208,7 @@ def draw_node(node, doc):
 
 	imgui.begin_group();
 	for idx in range(len(node["edges"])):
-		draw_edge(node, idx, edits);
+		draw_edge(node, idx, edits, doc);
 	if imgui.button("New edge"):
 		node["edges"].append(doc.type_tree.search("edges").inmost.prototype());
 	imgui.end_group();

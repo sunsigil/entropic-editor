@@ -8,112 +8,135 @@ import shutil;
 #########################################################
 ## DOCUMENT MODEL
 
+keywords = [
+	"instances",
+	"metadata"
+];
+
+def is_asset_type_definition(key: str, value: dict):
+	# An asset type may not be named by an asset document keyword
+	if key in keywords:
+		return False;
+	# An asset type may not be an array type, and so can only be a dict
+	if not isinstance(value, dict):
+		return False;
+	# An asset type must be an Object 
+	if not "type" in value or not isinstance(value["type"], dict):
+		return False;
+	# We introspect no further
+	# At this point, if the type expr is malformed,
+	# it can at least be considered a malformed *type* expr
+	return True;
+
+def find_asset_type_definition(data: dict):
+	if not isinstance(data, dict) or not "instances" in data:
+		return None;
+	for key in data:
+		if is_asset_type_definition(key, data[key]):
+			return key, data[key];
+	return None;
+
+def is_asset_document(path):
+	with open(path, "r") as file:
+		return find_asset_type_definition(json.load(file)) != None;
+
 class AssetDocument:
-	def is_file_asset_document(path):
-		path = Path(path);
-		file = open(path, "r");
+	class IDPool:
+		def __init__(self, document: "AssetDocument"):
+			self.can_free = document.metadata.get("free_ids", False);
+			self.allocated = set();
+			self.max = -1;
+			for instance in document.instances:
+				if "id" in instance:
+					self.allocate(instance["id"]);
+		
+		def allocate(self, i):
+			self.allocated.add(i);
+			self.max = max(self.max, i);
+			return i;
+
+		def free(self, i):
+			if self.can_free:
+				self.allocated.remove(i);
+				self.max = max(self.allocated) if len(self.allocated) > 0 else -1;
+
+		def allocate_free(self):
+			limit = self.max+1;
+			if self.can_free:
+				for i in range(limit):
+					if not i in self.allocated:
+						return self.allocate(i);
+			return self.allocate(limit);
+
+	def __init__(self, path):
+		self.path = Path(path);
+		file = open(self.path, "r");
 		data = json.load(file);
 		file.close();
 
-		if not isinstance(data, dict):
-			return False;
-		type_name = next(k for k in data.keys());
-		if not isinstance(data[type_name], dict):
-			return False;
-		if not "type" in data[type_name]:
-			return False;
-		if not "instances" in data:
-			return False;
-		return True;
-	
-	def __init__(self, path):
-		self.path = Path(path);
-		self.directory = self.path.parent;
-		file = open(path, "r");
-		self.data = json.load(file);
-		file.close();
-		
-		self.type_name, type_expr = next((k,v) for (k,v) in self.data.items() if k != "instances");
-		self.type_tree = asset_types.construct_type(type_expr["type"]);
-		if isinstance(self.type_tree, asset_types.Object) and "name" in self.type_tree.elements:
-			self.type_tree.elements["name"].read_only = True;
-		self.instances = self.data["instances"];
-	
-		self.id_set = set();
-		if self.type_tree.search("id") != None:
-			for entry in self.instances:
-				if not "id" in entry:
-					entry["id"] = self.take_free_id();
-				if entry["id"] in self.id_set:
-					print(f"[{self.type_name.upper()}] ID {entry["id"]} collides with existing ID set!");
-				self.id_set.add(entry["id"]);
-	
+		type_def = find_asset_type_definition(data);
+		if type_def == None:
+			raise ValueError(f"{self.path} is not an asset document");
+
+		self.data = data;
+		self.instances = data.setdefault("instances", []);
+		self.metadata = data.setdefault("metadata", {});
+
+		self.type_name, type_data = type_def;
+		type_tree = asset_types.construct_type(type_data["type"], type_data.get("attributes", {}));
+		if not isinstance(type_tree, asset_types.Object):
+			raise ValueError(f"{self.path}: asset type '{self.type_name}' is not an object type");
+		self.type_tree = type_tree;
+
+		if not "name" in self.type_tree.elements:
+			self.type_tree.elements["name"] = asset_types.String();
+		self.type_tree.elements["name"].read_only = True;
+
+		self.id_pool = AssetDocument.IDPool(self);
+
 		self.refresh();
 
 		self.committed = copy.deepcopy(self.instances);
 		self.generation = 0;
 
-	def rebuild_id_set(self):
-		self.id_set = set();
-		if self.type_tree.search("id") != None:
-			for entry in self.instances:
-				if "id" in entry:
-					self.id_set.add(entry["id"]);
-
-	def on_restored(self):
-		self.rebuild_id_set();
-		self.generation += 1;
 	
-	def take_free_id(self):
-		M = max(self.id_set) if len(self.id_set) > 0 else 0;
-		i = 0;
-		while i <= M:
-			if not i in self.id_set:
-				self.id_set.add(i);
-				return i;
-			i += 1;
-		self.id_set.add(M+1);
-		return M+1;
+	def search(self, name):
+		return next((x for x in self.instances if x["name"] == name), None);
 	
 	def spawn_entry(self, source=None, name=None):
 		new = copy.deepcopy(source) if source != None else self.type_tree.prototype();
 
 		new["name"] = f"new_{self.type_name}" if name == None else name;
 		if "id" in new:
-			new["id"] = self.take_free_id();
+			new["id"] = self.id_pool.allocate_free();
 
 		self.instances.append(new);
 		return new;
 	
 	def delete_entry(self, entry):
 		if "id" in entry:
-			self.id_set.remove(entry["id"]);
+			self.id_pool.free(entry["id"]);
 		self.instances.remove(entry);
-	
-	def is_dirty(self):
-		"""Edited since the last history commit."""
-		return self.instances != self.committed;
 
 	def bind(self, instance):
 		return asset_types.Binding(None, self.type_tree, instance);
+	
+	def is_dirty(self):
+		return self.instances != self.committed;
 
 	def refresh(self, changed_only=False):
-		"""Rectify every instance against the type tree. Editors rely on this to
-		fill in the keys a freshly placed object is missing before its variant is
-		switched, so it has to run on every frame an instance could have changed
-		-- but rectifying every instance of every document each frame was the
-		editor's single biggest per-frame cost, and on a clean instance it does
-		nothing: whatever was committed to history was rectified first. So a
-		caller may ask for only the instances that differ from their committed
-		copy, which is a cheap comparison on the common no-edit frame."""
 		committed = self.committed if changed_only else None;
 		for i, instance in enumerate(self.instances):
 			if committed != None and i < len(committed) and instance == committed[i]:
 				continue;
 			self.bind(instance).rectify();
 	
+	def on_restored(self):
+		self.id_pool = AssetDocument.IDPool(self);
+		self.generation += 1;
+	
 	def save(self, path=None):
-		if path == None:
+		if path == None: 
 			path = self.path;
 		file = open(path, "w");
 		file.seek(0);
@@ -121,8 +144,6 @@ class AssetDocument:
 		file.write(json.dumps(self.data, indent=4));
 		file.close();
 	
-	def search(self, name):
-		return next((x for x in self.instances if x["name"] == name), None);
 
 class AssetManager:
 	document_map = {};
