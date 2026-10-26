@@ -6,6 +6,15 @@
 # 0, and the first call that stores per-context state (glVertexAttribPointer,
 # from imgui's backend) dies with "Attempt to retrieve context when no valid
 # context". Keep this above every other import.
+#
+# On Linux, PyOpenGL and pyGLFW each guess between X11 and Wayland on their
+# own, and pyGLFW may load a system GLFW that prefers Wayland regardless. Pin
+# both to X11 so the context GLFW makes is the one PyOpenGL looks for.
+import os;
+import sys;
+if sys.platform.startswith("linux"):
+	os.environ.setdefault("PYOPENGL_PLATFORM", "x11");
+	os.environ.setdefault("PYGLFW_LIBRARY_VARIANT", "x11");
 import OpenGL.GL;
 
 from pathlib import Path;

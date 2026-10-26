@@ -1,3 +1,5 @@
+import sys;
+
 import OpenGL;
 from OpenGL.GL import *;
 
@@ -14,6 +16,8 @@ class Window:
 		self.name = name;
 
 		glfw.set_error_callback(glfw_error_callback);
+		if sys.platform.startswith("linux"):
+			glfw.init_hint(glfw.PLATFORM, glfw.PLATFORM_X11);
 		if not glfw.init():
 			print("Failed to initialize GLFW. Exiting");
 			exit();
