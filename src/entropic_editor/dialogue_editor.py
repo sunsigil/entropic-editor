@@ -91,89 +91,120 @@ def _swap(items, a, b):
 def _newline(width=NODE_WIDTH):
 	imgui.dummy((width, 8));
 
-def _list_controls(node, key, idx, edits):
-	items = node[key];
-	imgui.same_line();
-	if imgui.button(f"-##{key}_{idx}"):
-		edits.append(lambda: items.pop(idx));
-	imgui.same_line();
-	imgui.begin_group();
-	if imgui.arrow_button(f"up##{key}_{idx}", imgui.Dir.up) and idx > 0:
-		edits.append(lambda: _swap(items, idx, idx-1));
-	if imgui.arrow_button(f"down##{key}_{idx}", imgui.Dir.down) and idx < len(items)-1:
-		edits.append(lambda: _swap(items, idx, idx+1));
-	imgui.end_group();
+# Popups need the canvas suspended, so the open row menu is drawn after the nodes
+row_registry = {};
+
+def _register_row(row_id, items, idx):
+	row_registry[row_id] = (items, idx);
+
+def draw_row_menu():
+	row = row_registry.get(gui.ContextMenu.gui_id);
+	if row == None:
+		return;
+	items, idx = row;
+	imnodes.suspend();
+	if gui.ContextMenu.begin(gui.ContextMenu.gui_id):
+		if imgui.menu_item_simple("Move up", enabled=idx > 0):
+			_swap(items, idx, idx-1);
+		if imgui.menu_item_simple("Move down", enabled=idx < len(items)-1):
+			_swap(items, idx, idx+1);
+		if imgui.menu_item_simple("Delete"):
+			items.pop(idx);
+		imgui.end_popup();
+	imnodes.resume();
+
+def _marker(shown):
+	if shown:
+		imgui.same_line();
+		imgui.text_disabled("*");
+
+def _disclosure():
+	storage = imgui.get_state_storage();
+	key = imgui.get_id("##details");
+	shown = storage.get_bool(key);
+	if imgui.arrow_button("##details", imgui.Dir.down if shown else imgui.Dir.right):
+		shown = not shown;
+		storage.set_bool(key, shown);
+	return shown;
 
 def draw_line(node, idx, edits):
-	line = node["lines"][idx];
+	lines = node["lines"];
+	line = lines[idx];
+	row_id = f"##line{id(line)}";
 
-	imgui.begin_group();
 	imgui.push_id(str(id(line)));
-	imgui.set_next_item_width(NODE_WIDTH);
-	line["text"] = gui.input_string("Text", line["text"], True);
-	imgui.set_next_item_width(NODE_WIDTH);
-	line["script"] = gui.input_string("Script", line["script"], True, True);
-	imgui.pop_id();
-	imgui.end_group();
 
-	_list_controls(node, "lines", idx, edits);
+	details = _disclosure();
+	gui.ContextMenu.ping(row_id);
+	imgui.same_line();
+	imgui.set_next_item_width(NODE_WIDTH);
+	line["text"] = gui.input_string(row_id, line["text"], True);
+	_register_row(row_id, lines, idx);
+	_marker(len(line["script"]) > 0);
+
+	if details:
+		imgui.indent();
+		imgui.set_next_item_width(NODE_WIDTH);
+		line["script"] = gui.input_string("Script", line["script"], True, True);
+		imgui.unindent();
+
+	imgui.pop_id();
 
 def draw_edge(node, idx, edits, doc):
-	edge = node["edges"][idx];
+	edges = node["edges"];
+	edge = edges[idx];
 	edge_type = doc.type_tree.search("edges").inmost;
 	gate_types = edge_type.elements["gate_type"].values;
 	check_type = edge_type.search("gate/flags").T;
 	flag_ops = check_type.elements["op"].values;
-	text_width = max(64, len(edge["text"]) * 8 + 32);
-	def right_align():
-		imgui.dummy((NODE_WIDTH-text_width, 0));
-		imgui.same_line();
-		imgui.set_next_item_width(text_width);
+	row_id = f"##edge{id(edge)}";
 
-	imgui.begin_group();
 	imgui.push_id(str(id(edge)));
 
-	right_align();
+	details = _disclosure();
+	gui.ContextMenu.ping(row_id);
+	imgui.same_line();
+	imgui.set_next_item_width(NODE_WIDTH);
 	imgui.begin_disabled(node["random"]);
-	edge["text"] = gui.input_string("##text", edge["text"]);
+	edge["text"] = gui.input_string(row_id, edge["text"]);
 	imgui.end_disabled();
+	_register_row(row_id, edges, idx);
 	imgui.same_line();
 	imnodes.begin_pin(make_out_pin_id(node, idx), imnodes.PinKind.output);
 	imgui.text("(Out)");
 	imnodes.end_pin();
+	_marker(edge["gate_type"] != "none");
 
-	right_align();
-	edge["gate_type"] = gui.input_enum("Gate", edge["gate_type"], gate_types);
+	if details:
+		imgui.indent();
+		edge["gate_type"] = gui.input_enum("Gate", edge["gate_type"], gate_types, gui.EEGUIEnumStyle.RADIO_BUTTONS);
 
-	gate = edge["gate"];
-	if edge["gate_type"] == "script":
-		right_align();
-		gate["script"] = gui.input_string("Script", gate["script"], True, True);
-	elif edge["gate_type"] == "flags":
-		checks = gate["flags"];
-		for i, check in enumerate(checks):
-			imgui.push_id(str(i));
-			right_align();
-			check["flag"] = gui.input_string("##flag", check["flag"]);
-			imgui.same_line();
-			imgui.set_next_item_width(96);
-			check["op"] = gui.input_enum("##op", check["op"], flag_ops);
-			imgui.same_line();
-			if imgui.button("-"):
-				edits.append(lambda i=i: checks.pop(i));
-			imgui.pop_id();
-		right_align();
-		if imgui.button("New flag"):
-			checks.append(check_type.prototype());
+		gate = edge["gate"];
+		if edge["gate_type"] == "script":
+			imgui.set_next_item_width(NODE_WIDTH);
+			gate["script"] = gui.input_string("Script", gate["script"], True, True);
+		elif edge["gate_type"] == "flags":
+			checks = gate["flags"];
+			for i, check in enumerate(checks):
+				imgui.push_id(str(i));
+				if imgui.button("-"):
+					edits.append(lambda i=i: checks.pop(i));
+				imgui.same_line();
+				imgui.set_next_item_width(NODE_WIDTH / 2);
+				check["flag"] = gui.input_string("##flag", check["flag"]);
+				imgui.same_line();
+				check["op"] = gui.input_enum("##op", check["op"], flag_ops, gui.EEGUIEnumStyle.RADIO_BUTTONS);
+				imgui.pop_id();
+			if imgui.button("New flag"):
+				checks.append(check_type.prototype());
 
-	if node["random"]:
-		right_align();
-		edge["weight"] = gui.input_int("Weight", edge["weight"], low_bound=0, high_bound=255);
+		if node["random"]:
+			imgui.set_next_item_width(NODE_WIDTH);
+			edge["weight"] = gui.input_int("Weight", edge["weight"], low_bound=0, high_bound=255);
+
+		imgui.unindent();
 
 	imgui.pop_id();
-	imgui.end_group();
-
-	_list_controls(node, "edges", idx, edits);
 
 def draw_node(node, doc):
 	edits = [];
@@ -369,6 +400,7 @@ class DialogueEditor:
 		by_name = {node["name"]: node for node in nodes};
 
 		imnodes.begin("graph", imgui.ImVec2(0, 0));
+		row_registry.clear();
 
 		selected = [by_base[nid.id()] for nid in imnodes.get_selected_nodes() if nid.id() in by_base];
 		self.handle_shortcuts(selected);
@@ -386,6 +418,7 @@ class DialogueEditor:
 		self.handle_link_create(by_base);
 		self.handle_link_delete(by_base);
 		self.node_context_menu(by_base);
+		draw_row_menu();
 
 		imnodes.end();
 
