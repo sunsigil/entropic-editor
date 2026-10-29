@@ -45,8 +45,11 @@ class InputManager:
 	def is_released(key):
 		return InputManager._glfw_io[key][1] and not InputManager._glfw_io[key][0];
 
+	def is_command_held():
+		return any(InputManager.is_held(modifier) for modifier in COMMAND_KEYS);
+
 	def is_command(keys):
-		if not any(InputManager.is_held(modifier) for modifier in COMMAND_KEYS):
+		if not InputManager.is_command_held():
 			return False;
 		if not isinstance(keys, list):
 			keys = [keys];

@@ -191,7 +191,7 @@ def draw_edge(node, idx, edits, doc):
 					edits.append(lambda i=i: checks.pop(i));
 				imgui.same_line();
 				imgui.set_next_item_width(NODE_WIDTH / 2);
-				check["flag"] = gui.input_string("##flag", check["flag"]);
+				check["flag"] = gui.input_asset("##flag", check["flag"], "flag");
 				imgui.same_line();
 				check["op"] = gui.input_enum("##op", check["op"], flag_ops, gui.EEGUIEnumStyle.RADIO_BUTTONS);
 				imgui.pop_id();

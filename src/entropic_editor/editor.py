@@ -44,10 +44,9 @@ from scenes.prototype_editor import PrototypeEditor;
 from dialogue_editor import DialogueEditor;
 from recipe_editor import RecipeEditor;
 from coder import EnDeCoder;
-from file_explorer import FileExplorer;
+from explorer import Explorer;
 from document_editor import DocumentEditor;
 from palette_viewer import PaletteViewer;
-from asset_explorer import AssetExplorer;
 from glyph_viewer import GlyphExplorer;
 from text_editor import TextEditor;
 
@@ -95,8 +94,7 @@ if __name__ == "__main__":
 		imgui.WindowFlags_.no_collapse,
 	];
 
-	ToolRegistry.register(Tool(FileExplorer, "File Explorer", flags=tool_flags+[imgui.WindowFlags_.menu_bar], hidden=True, picker=True));
-	ToolRegistry.register(Tool(AssetExplorer, "Asset Explorer", flags=tool_flags, hidden=True, picker=True));
+	ToolRegistry.register(Tool(Explorer, "Explorer", flags=tool_flags+[imgui.WindowFlags_.menu_bar], hidden=True, picker=True));
 	ToolRegistry.register(Tool(TextEditor, "Script Editor", flags=tool_flags, hidden=True));
 
 	ToolRegistry.register(Tool(PrototypeEditor, "Prototype Editor", size=(1280, 720), flags=tool_flags+[imgui.WindowFlags_.menu_bar]));

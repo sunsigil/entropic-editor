@@ -11,9 +11,8 @@ import colours;
 
 from assets import AssetManager;
 from panels import ToolRegistry, PanelManager;
-import file_explorer;
+import explorer;
 import project;
-import asset_explorer;
 from text_editor import TextEditor;
 
 # Not Actually GUI
@@ -236,7 +235,7 @@ def input_file(gui_id, value, pattern, root=None, asset_type=None):
     browse = imgui.button(f"Browse##{gui_id}");
 
     directory = project.resolve(root) if root else project.game_root();
-    harvest = pick(gui_id, file_explorer.FileExplorer, browse, lambda explorer: explorer.configure(directory, pattern, asset_type));
+    harvest = pick(gui_id, explorer.Explorer, browse, lambda window: window.configure(explorer.FileSource(directory, pattern, asset_type)));
     return str(harvest) if harvest != None else value;
 
 def input_asset(gui_id, value, asset_type):
@@ -245,7 +244,7 @@ def input_asset(gui_id, value, asset_type):
     imgui.same_line();
     browse = imgui.button(f"Browse##{gui_id}");
 
-    harvest = pick(gui_id, asset_explorer.AssetExplorer, browse, lambda explorer: explorer.configure(asset_type));
+    harvest = pick(gui_id, explorer.Explorer, browse, lambda window: window.configure(explorer.DocumentSource(asset_type)));
     return harvest if harvest != None else value;
 
 def input_sprite(gui_id, value, size=(64, 64)):
@@ -254,7 +253,7 @@ def input_sprite(gui_id, value, size=(64, 64)):
 
     clicked = imgui.image_button(gui_id, imgui.ImTextureRef(sprite.frames[0].handle), imgui.ImVec2(w, h));
 
-    harvest = pick(gui_id, asset_explorer.AssetExplorer, clicked, lambda explorer: explorer.configure("sprite"));
+    harvest = pick(gui_id, explorer.Explorer, clicked, lambda window: window.configure(explorer.DocumentSource("sprite")));
     return harvest if harvest != None else value;
 
 # Structured Data
