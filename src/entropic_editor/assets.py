@@ -49,6 +49,9 @@ class AssetDocument:
 			for instance in document.instances:
 				if "id" in instance:
 					self.allocate(instance["id"]);
+			if not self.can_free:
+				for i in document.metadata.get("retired", {}).values():
+					self.max = max(self.max, i);
 		
 		def allocate(self, i):
 			self.allocated.add(i);
@@ -115,7 +118,10 @@ class AssetDocument:
 	
 	def delete_entry(self, entry):
 		if "id" in entry:
-			self.id_pool.free(entry["id"]);
+			if self.id_pool.can_free:
+				self.id_pool.free(entry["id"]);
+			else:
+				self.metadata.setdefault("retired", {})[entry["name"]] = entry["id"];
 		self.instances.remove(entry);
 
 	def bind(self, instance):
@@ -143,7 +149,6 @@ class AssetDocument:
 		file.truncate();
 		file.write(json.dumps(self.data, indent=4));
 		file.close();
-	
 
 class AssetManager:
 	document_map = {};
@@ -231,6 +236,41 @@ def follow_prototype_defaults():
 						count += 1;
 				if count > 0:
 					print(f"[Prototype] {prototype["name"]}.{block["script"]}.{key}: {count} entities followed {before["value"]} -> {datum["value"]}");
+
+#########################################################
+## NAMESPACE TREE
+
+class NamespaceTree:
+	def __init__(self, name):
+		self.name = name;
+		self.children = {};
+		self.asset = None;
+	
+	def search(self, path, create=False):
+		if len(path) == 0:
+			return self;
+		name = path[0];
+		child = self.children.get(name);
+		if child == None:
+			if create == True:
+				child = NamespaceTree(name);
+				self.children[name] = child;
+			else:
+				return None;
+		return child.search(path[1:], create);
+
+	def insert(self, asset, path):
+		node = self.search(path, create=True);
+		if node != None:
+			node.asset = asset;
+
+def make_namespace(asset_list):
+	asset_list = sorted(asset_list, key=lambda x: x["name"]);
+	tree = NamespaceTree(".");
+	for asset in asset_list:
+		path = asset["name"].split(".");
+		tree.insert(asset, path);
+	return tree;	
 
 #########################################################
 ## HISTORY

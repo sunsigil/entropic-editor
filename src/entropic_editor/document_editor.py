@@ -1,5 +1,5 @@
 from imgui_bundle import imgui;
-from assets import AssetDocument, AssetManager;
+from assets import AssetDocument, AssetManager, make_namespace;
 import editor_gui as gui;
 from panels import Panel;
 
@@ -42,21 +42,47 @@ class DocumentEditor(Panel):
 				if "name" in instance and self.search_term in instance["name"]:
 					self.search_cache.append(instance);
 		
-		working_list = self.search_cache if len(self.search_cache) > 0 else self.document.instances;
-		for instance in working_list:
-			gui_id = f"{instance["name"]}####{id(instance)}" if "name" in instance else id(instance);
-			gui.typed_input(
-				gui_id,
-				self.document.type_tree, instance,
-				previews=True, tooltip=self.show_typetip
-			);
-			if gui.ContextMenu.begin(gui_id):
-				if "name" in instance and imgui.menu_item_simple("Rename"):
-					self.rename.begin(instance);
-				if imgui.menu_item_simple("Delete"):
-					self.document.delete_entry(instance);
-				if imgui.menu_item_simple("Duplicate"):
-					self.document.spawn_entry(instance);
-				imgui.end_popup();
+		# A search flattens the tree; otherwise instances group by dotted name
+		if len(self.search_cache) > 0:
+			for instance in self.search_cache:
+				self.draw_instance(instance, instance["name"]);
+		else:
+			self.draw_group(make_namespace(self.document.instances), "");
 
 		self.rename.draw();
+
+	def draw_instance(self, instance, label):
+		gui_id = f"{label}####{id(instance)}";
+		gui.typed_input(
+			gui_id,
+			self.document.type_tree, instance,
+			previews=True, tooltip=self.show_typetip
+		);
+		if gui.ContextMenu.begin(gui_id):
+			if imgui.menu_item_simple("Rename"):
+				self.rename.begin(instance);
+			if imgui.menu_item_simple("Delete"):
+				self.document.delete_entry(instance);
+			if imgui.menu_item_simple("Duplicate"):
+				self.document.spawn_entry(instance);
+			imgui.end_popup();
+
+	def draw_group(self, node, prefix):
+		for name, child in node.children.items():
+			path = f"{prefix}{name}";
+			if len(child.children) == 0:
+				self.draw_instance(child.asset, name);
+				continue;
+
+			gui_id = f"{name}####group-{path}";
+			node_open = imgui.tree_node(gui_id);
+			gui.ContextMenu.ping(gui_id);
+			if gui.ContextMenu.begin(gui_id):
+				if imgui.menu_item_simple("New"):
+					self.document.spawn_entry(name=f"{path}.new_{self.document.type_name}");
+				imgui.end_popup();
+			if node_open:
+				if child.asset != None:
+					self.draw_instance(child.asset, name);
+				self.draw_group(child, f"{path}.");
+				imgui.tree_pop();
